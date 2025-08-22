@@ -1,0 +1,1029 @@
+/* Header styles */
+.main-header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 16px 24px;
+    background: white; /* Changed from transparent to white */
+    border-bottom: 1px solid #eee;
+    margin-bottom: 20px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+}
+
+.header-logo {
+    height: 54px; /* Reduced by 25% from 72px */
+    width: auto;
+}
+
+.header-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.header-right {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+/* Dashboard selector styles */
+#dashboard-selector-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#dashboard-selector-current {
+    background: #f8f9fa;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    min-width: 120px;
+    text-align: center;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+#dashboard-selector-current.has-dropdown {
+    cursor: pointer;
+    padding-right: 32px;
+}
+
+#dashboard-selector-current.has-dropdown::after {
+    content: '▼';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10px;
+    color: #666;
+    transition: transform 0.2s ease;
+}
+
+#dashboard-selector-current.active::after {
+    transform: translateY(-50%) rotate(180deg);
+}
+
+#dashboard-selector-current:hover {
+    background: #f1f3f4;
+    border-color: #c0c4c7;
+}
+
+#dashboard-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    display: none;
+    flex-direction: column;
+    z-index: 1001;
+    margin-top: 4px;
+    min-width: 200px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Simple scrollbar styling for better visibility */
+#dashboard-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+#dashboard-dropdown::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#dashboard-dropdown::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+#dashboard-dropdown::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+#dashboard-dropdown.active {
+    display: flex;
+}
+
+.dashboard-tab {
+    border: none;
+    background: none;
+    padding: 12px 16px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.2s ease;
+    border-radius: 0;
+}
+
+.dashboard-tab:hover {
+    background: #f8f9fa;
+    color: #333;
+}
+
+.dashboard-tab.active {
+    background: #e8f0fe;
+    color: #1a73e8;
+    font-weight: 500;
+}
+
+.dashboard-tab:first-child {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.dashboard-tab:last-child {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+/* Dashboard actions menu styles */
+.dashboard-actions {
+    position: relative;
+}
+
+.dashboard-menu-trigger {
+    background: none;
+    border: none;
+    font-size: 18px;
+    color: #666;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.dashboard-menu-trigger:hover {
+    background: #f0f0f0;
+}
+
+.dashboard-menu-trigger.active {
+    background: #e0e0e0;
+}
+
+.dashboard-actions-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    display: none;
+    flex-direction: column;
+    z-index: 1001;
+    margin-top: 4px;
+    min-width: 180px;
+}
+
+.dashboard-actions-menu.active {
+    display: flex;
+}
+
+.dashboard-action {
+    border: none;
+    background: none;
+    padding: 12px 16px;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.2s ease;
+}
+
+.dashboard-action:hover {
+    background: #f8f9fa;
+}
+
+.dashboard-action:first-child {
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+.dashboard-action:last-child {
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+
+/* Project header and menu styles */
+.project-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 10px;
+    padding: 8px 32px; /* Added horizontal padding to make room for menu and drag handle */
+}
+
+.project-drag-handle {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: grab;
+    opacity: 0;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.project-drag-handle:hover {
+    background: rgba(200, 200, 200, 0.5);
+}
+
+.project-drag-handle:active {
+    cursor: grabbing;
+}
+
+.project-drag-handle:before {
+    content: "";
+    display: block;
+    width: 8px; /* Reduced width for 2 columns */
+    height: 12px; /* Height for 3 rows */
+    background-image: radial-gradient(circle, #666 2px, transparent 2px);
+    background-size: 4px 4px;
+    background-position: 0 0, 4px 4px;
+    background-repeat: repeat;
+}
+
+.project-header:hover .project-drag-handle {
+    opacity: 1;
+}
+
+.project-menu-trigger {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: none;
+    color: #5f6368;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0;
+    visibility: hidden;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+.project-menu-trigger:hover {
+    background-color: #f0f0f0;
+}
+
+.project-header:hover .project-menu-trigger {
+    opacity: 1;
+    visibility: visible;
+    transition-delay: 200ms;
+    display: flex;
+}
+
+.project-menu {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: none;
+    background-color: white;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
+    z-index: 1000;
+    min-width: 120px;
+}
+
+.project-menu-trigger.active + .project-menu {
+    display: flex;
+    flex-direction: column;
+}
+
+.project-menu button {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    margin: 0;
+    width: 100%;
+    text-align: left;
+}
+
+.project-menu button:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+/* Projects container layout */
+#projects-container {
+    margin-top: 132px; /* Account for fixed header */
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    position: relative;
+    max-width: 90vw;
+    margin-left: auto;
+    margin-right: auto;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* Keep new project button full width and properly positioned */
+.new-project {
+    padding: 10px 24px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 1px 2px rgba(60,64,67,0.3);
+    width: auto;
+    display: block !important;
+    margin: 0 auto 24px;
+    position: relative;
+    z-index: 100;
+}
+
+/* Grid layout for multiple projects */
+#projects-container:has(.project + .project) {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+    max-width: 90vw;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Default for container with a single project - stay with flex column layout */
+#projects-container:has(.project:only-child) {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Allow container to be wider at larger breakpoints, but don't force 3 columns */
+/* Base styles for projects container */
+#projects-container {
+    max-width: min(90vw, 1200px);
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@media screen and (min-width: 1900px) {
+    #projects-container {
+        max-width: min(90vw, 1200px);
+    }
+}
+
+
+
+/* Ensure new project button spans full width in grid layout */
+#projects-container:has(.project) .new-project {
+    grid-column: 1 / -1;
+    order: -1; /* Force button to top */
+    margin-bottom: 24px;
+}
+
+.project {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Tile menu styles */
+.tile-menu-trigger {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: none;
+    color: #5f6368;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0;
+    visibility: hidden;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    z-index: 1001;
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out, background-color 0.2s ease-in-out;
+}
+
+.tile-menu-trigger:hover {
+    background-color: rgba(200, 200, 200, 0.8);
+}
+
+.tile:hover .tile-menu-trigger {
+    opacity: 1;
+    visibility: visible;
+    display: flex;
+}
+
+.tile-menu {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: none;
+    background-color: white;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
+    z-index: 1002;
+    min-width: 120px;
+}
+
+.tile-menu-trigger.active + .tile-menu {
+    display: flex;
+    flex-direction: column;
+}
+
+.tile-menu button {
+    padding: 8px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    margin: 0;
+    width: 100%;
+    text-align: left;
+}
+
+.tile-menu button:hover {
+    background-color: #f0f0f0;
+    color: #333;
+}
+
+.tile-thumbnail {
+    width: 64px;
+    height: 64px;
+    background-size: 48px;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-radius: 4px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    margin: 0 auto;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    -webkit-font-smoothing: antialiased;
+}
+
+.tile-thumbnail:not([style*="background-image"]) {
+    background-color: #f0f0f0;
+}
+
+.tile-initials {
+    font-size: 20px; /* Changed back from 14px */
+    font-weight: bold;
+    color: white;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tile-name {
+    font-size: 14px;
+    margin-top: 8px;
+    text-align: center;
+    padding: 0 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    max-width: 100%;
+    width: 100%;
+    line-height: 1.2;
+    max-height: 50px; /* Approx height for 3 lines */
+}
+
+.add-tile-button {
+    width: 120px;
+    height: 120px;
+    border: 2px dashed #ccc;
+    background-color: transparent;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+body.dragging .add-tile-button {
+    pointer-events: none !important;
+    border-color: #ccc !important;
+    color: #666 !important;
+    background-color: transparent !important;
+    transition: none !important;
+}
+
+.add-tile-button:hover:not(.dragging-disabled),
+.add-tile-button.hover:not(.dragging-disabled) {
+    border-color: #007bff;
+    color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    width: 220px;
+    text-align: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    margin: 5% auto;
+    border: 1px solid #888;
+}
+
+h2 {
+    margin-bottom: 20px;
+}
+
+input {
+    width: calc(100% - 24px);
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: space-between;
+}
+
+button {
+    padding: 10px 20px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover {
+    background-color: #007bff;
+    color: white;
+}
+
+button:disabled {
+    background-color: #ccc;
+    cursor: default;
+}
+
+.cancel-button {
+    background-color: white;
+    border: 1px solid #007bff;
+    color: #007bff;
+    font-size: 14px;
+}
+
+.cancel-button:hover {
+    background-color: #f0f8ff;
+}
+
+.done-button {
+    background-color: lightgray;
+    color: white;
+    font-size: 14px;
+}
+
+.done-button.enabled {
+    background-color: #4CAF50;
+    cursor: pointer;
+}
+
+.done-button.enabled:hover {
+    background-color: #45a049;
+}
+
+.tiles-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 140px));
+    gap: 16px;
+    align-items: start;
+    justify-content: center;
+}
+
+.tile, .add-tile-button {
+    width: 100%;
+    max-width: 120px;
+    justify-self: center;
+}
+
+.tile {
+    width: 120px;
+    height: 150px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+    position: relative;
+    padding: 32px 8px 8px 8px;
+    /* Improve tooltip behavior */
+    z-index: 10;
+}
+
+.project-title {
+    font-size: 28px; /* Increased base size */
+    font-weight: 600; /* Added medium-bold weight */
+    margin: 0;
+    color: #333;
+    line-height: 1.2; /* Better spacing */
+    text-align: center;
+    max-width: 85%; /* Prevent text from extending too close to menu buttons */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Responsive breakpoints */
+@media screen and (max-width: 768px) {
+    .project-title {
+        font-size: 24px;
+    }
+}
+
+@media screen and (max-width: 480px) {
+    .project-title {
+        font-size: 20px;
+    }
+}
+
+/* Settings Modal Styles */
+.settings-option {
+    display: flex;
+    align-items: center;
+    margin: 20px 0;
+    padding: 10px;
+    gap: 15px;
+}
+
+.settings-label {
+    font-size: 14px;
+    color: #333;
+}
+
+/* Toggle Switch Styles */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #4CAF50;
+}
+
+.toggle-switch input:checked + .toggle-slider:before {
+    transform: translateX(26px);
+}
+
+/* Settings icon in menu */
+.settings-icon {
+    margin-right: 8px;
+    font-size: 16px;
+}
+
+/* Manage Dashboards Modal Styles */
+.manage-dashboards-list {
+    max-height: 400px;
+    overflow-y: auto;
+    margin: 20px 0;
+    padding: 0;
+}
+
+.manage-dashboard-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: white;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.manage-dashboard-item.selected {
+    background: #e8f0fe;
+    border-color: #1a73e8;
+}
+
+.dashboard-checkbox {
+    margin-right: 12px;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.bulk-actions-bar {
+    display: none;
+    padding: 12px 16px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.bulk-actions-bar.active {
+    display: flex;
+}
+
+.bulk-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.bulk-actions-right {
+    display: flex;
+    gap: 8px;
+}
+
+.selected-count {
+    font-size: 14px;
+    color: #333;
+    font-weight: 500;
+}
+
+.bulk-action-btn {
+    padding: 6px 12px;
+    border: 1px solid #dc3545;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #dc3545;
+    transition: all 0.2s ease;
+}
+
+.bulk-action-btn:hover {
+    background: #fff5f5;
+}
+
+.bulk-action-btn.primary {
+    background: #dc3545;
+    color: white;
+}
+
+.bulk-action-btn.primary:hover {
+    background: #c82333;
+}
+
+.select-controls {
+    display: flex;
+    gap: 8px;
+}
+
+.select-control-btn {
+    background: none;
+    border: none;
+    color: #1a73e8;
+    cursor: pointer;
+    font-size: 12px;
+    text-decoration: underline;
+}
+
+.select-control-btn:hover {
+    color: #1557b0;
+}
+
+.manage-dashboard-item:hover {
+    background: #f8f9fa;
+    border-color: #d0d0d0;
+}
+
+.manage-dashboard-item.editing {
+    border-color: #1a73e8;
+    background: #f8f9ff;
+}
+
+.dashboard-drag-handle {
+    cursor: grab;
+    color: #666;
+    margin-right: 12px;
+    font-size: 16px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+.dashboard-drag-handle:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-drag-handle:active {
+    cursor: grabbing;
+}
+
+.manage-dashboard-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.manage-dashboard-name {
+    font-weight: 500;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.manage-dashboard-item.editing .manage-dashboard-name {
+    display: none;
+}
+
+.manage-dashboard-name-input {
+    display: none;
+    width: 100%;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.manage-dashboard-item.editing .manage-dashboard-name-input {
+    display: block;
+}
+
+.manage-dashboard-projects {
+    font-size: 12px;
+    color: #666;
+}
+
+.manage-dashboard-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: 12px;
+}
+
+.manage-action-btn {
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    color: #333;
+}
+
+.manage-action-btn:hover {
+    background: #f0f0f0;
+    border-color: #ccc;
+}
+
+.manage-action-btn.edit-btn {
+    color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+.manage-action-btn.edit-btn:hover {
+    background: #f0f8ff;
+}
+
+.manage-action-btn.delete-btn {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.manage-action-btn.delete-btn:hover {
+    background: #fff5f5;
+}
+
+.manage-action-btn.save-btn {
+    background: #4CAF50;
+    color: white;
+    border-color: #4CAF50;
+}
+
+.manage-action-btn.save-btn:hover {
+    background: #45a049;
+}
+
+.manage-action-btn.cancel-btn {
+    background: #6c757d;
+    color: white;
+    border-color: #6c757d;
+}
+
+.manage-action-btn.cancel-btn:hover {
+    background: #5a6268;
+}
+
+.manage-dashboard-item .edit-actions {
+    display: none;
+}
+
+.manage-dashboard-item.editing .edit-actions {
+    display: flex;
+}
+
+.manage-dashboard-item.editing .normal-actions {
+    display: none;
+}
+
+.manage-dashboards-sortable-ghost {
+    opacity: 0.6;
+    background-color: #f0f0f0;
+    border: 2px dashed #ccc;
+}
