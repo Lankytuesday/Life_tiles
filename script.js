@@ -1849,7 +1849,7 @@ function createDashboardTabs(dashboards, activeId) {
             e.stopPropagation();
             menuTrigger.classList.remove('active'); // Close the menu
 
-            // Always get the CURRENT container and project ID at the time of clicking edit
+ // Always get the CURRENT container and project ID at the time of clicking edit
             // This ensures we're editing the tile in its current location, not its original one
             const currentContainer = tile.closest('.tiles-container');
             const currentProject = tile.closest('.project');
@@ -1858,10 +1858,14 @@ function createDashboardTabs(dashboards, activeId) {
             currentProjectContainer = currentContainer;
             currentProjectId = currentProject.dataset.projectId;
 
+            // Fetch the latest data before populating the modal
+            const freshTile = await getTileById(tileData.id);
+            if (!freshTile) return;
+
             tileModal.style.display = "flex";
             tileModal.querySelector('h2').textContent = "Edit Tile";
-            tileNameInput.value = tileData.name;
-            tileUrlInput.value = tileData.url;
+            tileNameInput.value = freshTile.name;
+            tileUrlInput.value = freshTile.url;
             validateTileInputs();
 
             // Create a new button to avoid event listener buildup
@@ -2394,5 +2398,16 @@ async function migrateFromChromeStorage() {
             if (bulkActionsBar) {
                 bulkActionsBar.remove();
             }
+        });
+    }
+    async function getTileById(id) {
+        const db = await initDB();
+        const tx = db.transaction('tiles', 'readonly');
+        const store = tx.objectStore('tiles');
+    
+        return new Promise((resolve, reject) => {
+            const request = store.get(id);
+            request.onsuccess = () => resolve(request.result || null);
+            request.onerror = () => reject(request.error);
         });
     }
