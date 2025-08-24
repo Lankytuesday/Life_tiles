@@ -47,7 +47,7 @@ if (typeof chrome === 'undefined' || !chrome.storage) {
         window.indexedDB = window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
     }
 }
-
+/*
 async function migrateFromChromeStorage() {
     try {
         // Get all data from chrome.storage.sync
@@ -151,7 +151,7 @@ window.chrome = {
             }
         }
     };
-
+*/
 document.addEventListener("DOMContentLoaded", async function () {
 
     // Initialize IndexedDB
@@ -684,157 +684,180 @@ function createDashboardTabs(dashboards, activeId) {
         const menu = document.createElement("div");
         menu.className = "project-menu";
 
+            // Project edit button (refactored with fresh DB fetch)
         const editButton = document.createElement("button");
         editButton.textContent = "Edit";
-        editButton.onclick = (e) => {
-            e.stopPropagation();
-            closeAllMenus(); // Close any open menus first
-            projectModal.style.display = "flex";
-            projectModal.querySelector('h2').textContent = "Edit Project";
-            projectNameInput.value = projectData.name;
-            submitProjectBtn.disabled = false;
-            submitProjectBtn.classList.add('enabled');
+        editButton.onclick = async (e) => {
+        e.stopPropagation();
+        closeAllMenus();
 
-            const newSubmitBtn = submitProjectBtn.cloneNode(true);
-            submitProjectBtn.parentNode.replaceChild(newSubmitBtn, submitProjectBtn);
-            submitProjectBtn = newSubmitBtn;
+        const currentProjectEl = editButton.closest('.project');
+        if (!currentProjectEl) return;
 
-            submitProjectBtn.addEventListener('click', async function editProjectHandler() {
-                const newName = projectNameInput.value.trim();
-                if (newName) {
-                    const db = await initDB();
-                    const tx = db.transaction(['projects'], 'readwrite');
-                    const store = tx.objectStore('projects');
-                    const request = store.get(projectData.id);
-                    request.onsuccess = async () => {
-                        const updatedProject = request.result;
-                        updatedProject.name = newName;
-                        const updateRequest = store.put(updatedProject);
-                        updateRequest.onsuccess = () => {
-                            projectTitle.textContent = newName;
-                            closeProjectModalHandler();
-                            const oldBtn = submitProjectBtn;
-                            submitProjectBtn = oldBtn.cloneNode(true);
-                            oldBtn.parentNode.replaceChild(submitProjectBtn, oldBtn);
-                            submitProjectBtn.addEventListener('click', createNewProject);
-                        };
-                    };
-                }
-            });
-        };
+        const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
+        if (!freshProject) return;
 
-        const copyButton = document.createElement("button");
-        copyButton.textContent = "Copy to Dashboard";
-        copyButton.onclick = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            closeAllMenus();
+        projectModal.style.display = "flex";
+        projectModal.querySelector('h2').textContent = "Edit Project";
+        projectNameInput.value = freshProject.name;
+        validateProjectInput();
+
+        // Reset submit button to avoid stacked listeners
+        const newSubmitBtn = submitProjectBtn.cloneNode(true);
+        submitProjectBtn.parentNode.replaceChild(newSubmitBtn, submitProjectBtn);
+        submitProjectBtn = newSubmitBtn;
+
+        submitProjectBtn.addEventListener('click', async () => {
+            const newName = projectNameInput.value.trim();
+            if (!newName) return;
 
             const db = await initDB();
-            let tx = db.transaction(['dashboards'], 'readonly'); //Only need dashboards for selection
-            const dashboardStore = tx.objectStore('dashboards');
+            const tx = db.transaction(['projects'], 'readwrite');
+            const store = tx.objectStore('projects');
+            const req = store.get(freshProject.id);
 
-            // Get all dashboards
-            let dashboards = await new Promise((resolve, reject) => {
-                const request = dashboardStore.getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
+            req.onsuccess = () => {
+                const updated = req.result;
+                if (!updated) return;
 
-            // Sort dashboards by order property
-            if (dashboards && dashboards.length > 0) {
-                dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
-            }
+                updated.name = newName;
+                store.put(updated).onsuccess = () => {
+                    const titleEl = currentProjectEl.querySelector('.project-title');
+                    if (titleEl) titleEl.textContent = newName;
 
-            // Create dashboard selection modal
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'flex';
+                    closeProjectModalHandler();
 
-            const content = document.createElement('div');
-            content.className = 'modal-content';
-            content.style.width = '280px';
-
-            const title = document.createElement('h2');
-            title.textContent = 'Select Dashboard';
-
-            const select = document.createElement('select');
-            select.style.cssText = `
-                width: 100%;
-                margin-bottom: 20px;
-                padding: 8px;
-                font-size: 14px;
-            `;
-
-            dashboards.forEach(dashboard => {
-                if (dashboard.id !== currentDashboardId) {
-                    const option = document.createElement('option');
-                    option.value = dashboard.id;
-                    option.textContent = dashboard.name;
-                    select.appendChild(option);
-                }
-            });
-
-            const buttons = document.createElement('div');
-            buttons.className = 'modal-buttons';
-
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'cancel-button';
-            cancelBtn.textContent = 'Cancel';
-            cancelBtn.onclick = () => modal.remove();
-
-            const copyBtn = document.createElement('button');
-            copyBtn.className = 'done-button enabled';
-            copyBtn.textContent = 'Copy';
-            copyBtn.onclick = async () => {
-                const selectedDashboardId = select.value;
-                if (selectedDashboardId) {
-                    const db = await initDB();
-                    const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-                    const projectStore = tx.objectStore('projects');
-                    const tileStore = tx.objectStore('tiles');
-
-                    // Get all tiles for this project
-                    const tiles = await new Promise((resolve) => {
-                        const request = tileStore.index('projectId').getAll(projectData.id);
-                        request.onsuccess = () => resolve(request.result || []);
-                    });
-
-                    // Create new project with copied data
-                    const newProjectData = {
-                        ...projectData,
-                        id: Date.now().toString(),
-                        dashboardId: selectedDashboardId
-                    };
-
-                    // Add new project
-                    await projectStore.add(newProjectData);
-
-                    // Copy all tiles with new IDs and project reference
-                    for (const tile of tiles) {
-                        const newTile = {
-                            ...tile,
-                            id: Date.now().toString() + Math.random(),
-                            projectId: newProjectData.id,
-                            dashboardId: selectedDashboardId
-                        };
-                        await tileStore.add(newTile);
-                    }
-
-                    modal.remove();
-                }
+                    // Reset the submit button back to "create" mode
+                    const oldBtn = submitProjectBtn;
+                    submitProjectBtn = oldBtn.cloneNode(true);
+                    oldBtn.parentNode.replaceChild(submitProjectBtn, oldBtn);
+                    submitProjectBtn.addEventListener('click', createNewProject);
+                };
             };
+        });
+    };
 
-            buttons.appendChild(cancelBtn);
-            buttons.appendChild(copyBtn);
-
-            content.appendChild(title);
-            content.appendChild(select);
-            content.appendChild(buttons);
-            modal.appendChild(content);
-            document.body.appendChild(modal);
+        
+    const copyButton = document.createElement("button");
+    copyButton.textContent = "Copy to Dashboard";
+    copyButton.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeAllMenus();
+    
+        const db = await initDB();
+        let tx = db.transaction(['dashboards'], 'readonly'); // Only need dashboards for selection
+        const dashboardStore = tx.objectStore('dashboards');
+    
+        // Get all dashboards
+        let dashboards = await new Promise((resolve, reject) => {
+            const request = dashboardStore.getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+        });
+    
+        // Sort dashboards by order property
+        if (dashboards.length > 0) {
+            dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+        }
+    
+        // Create dashboard selection modal
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+    
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+        content.style.width = '280px';
+    
+        const title = document.createElement('h2');
+        title.textContent = 'Select Dashboard';
+    
+        const select = document.createElement('select');
+        select.style.cssText = `
+            width: 100%;
+            margin-bottom: 20px;
+            padding: 8px;
+            font-size: 14px;
+        `;
+    
+        dashboards.forEach(dashboard => {
+            if (dashboard.id !== currentDashboardId) {
+                const option = document.createElement('option');
+                option.value = dashboard.id;
+                option.textContent = dashboard.name;
+                select.appendChild(option);
+            }
+        });
+    
+        const buttons = document.createElement('div');
+        buttons.className = 'modal-buttons';
+    
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-button';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = () => modal.remove();
+    
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'done-button enabled';
+        copyBtn.textContent = 'Copy';
+        copyBtn.onclick = async () => {
+            const selectedDashboardId = select.value;
+            if (!selectedDashboardId) return;
+    
+            // 🔄 Always resolve the current project element
+            const currentProjectEl = copyButton.closest('.project');
+            if (!currentProjectEl) return;
+    
+            // 🔄 Fetch fresh project data
+            const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
+            if (!freshProject) return;
+    
+            const db = await initDB();
+            const tx = db.transaction(['projects', 'tiles'], 'readwrite');
+            const projectStore = tx.objectStore('projects');
+            const tileStore = tx.objectStore('tiles');
+    
+            // Get all tiles for this fresh project
+            const tiles = await new Promise((resolve) => {
+                const request = tileStore.index('projectId').getAll(freshProject.id);
+                request.onsuccess = () => resolve(request.result || []);
+            });
+    
+            // Build new project from FRESH data
+            const newProjectData = {
+                id: Date.now().toString(),
+                name: freshProject.name,
+                dashboardId: selectedDashboardId
+            };
+    
+            // Add new project
+            await projectStore.add(newProjectData);
+    
+            // Copy tiles to the new project
+            for (const tile of tiles) {
+                const newTile = {
+                    ...tile,
+                    id: Date.now().toString() + Math.random(),
+                    projectId: newProjectData.id,
+                    dashboardId: selectedDashboardId
+                };
+                await tileStore.add(newTile);
+            }
+    
+            modal.remove();
         };
-
+    
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(copyBtn);
+    
+        content.appendChild(title);
+        content.appendChild(select);
+        content.appendChild(buttons);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    };
+    
         const removeButton = document.createElement("button");
         removeButton.textContent = "Remove";
         removeButton.onclick = async (e) => {
@@ -2121,7 +2144,7 @@ function createDashboardTabs(dashboards, activeId) {
             closeAllMenus();
         }
     });
-
+/*
     function editDashboard(dashboardId, tab) {
         dashboardModal.style.display = "flex";
         dashboardModal.querySelector('h2').textContent = "Edit Dashboard";
@@ -2166,7 +2189,7 @@ function createDashboardTabs(dashboards, activeId) {
             }
         });
     }
-
+*/
     async function updateProjectOrder(evt) {
         const db = await initDB();
         const tx = db.transaction(['projects'], 'readwrite');
@@ -2322,7 +2345,7 @@ async function initDB() {
         };
     });
 }
-
+/*
 async function migrateFromChromeStorage() {
     try {
         // Get all data from chrome.storage.sync
@@ -2387,7 +2410,7 @@ async function migrateFromChromeStorage() {
         return false;
     }
 }
-
+*/
   // Close manage dashboards modal
     const closeManageDashboardsBtn = document.getElementById('close-manage-dashboards');
     if (closeManageDashboardsBtn) {
@@ -2399,6 +2422,8 @@ async function migrateFromChromeStorage() {
                 bulkActionsBar.remove();
             }
         });
+    
+    // Async functions for getting fresh project and tile data to the edit modals
     }
     async function getTileById(id) {
         const db = await initDB();
@@ -2411,3 +2436,15 @@ async function migrateFromChromeStorage() {
             request.onerror = () => reject(request.error);
         });
     }
+
+    async function getProjectById(id) {
+        const db = await initDB();
+        const tx = db.transaction('projects', 'readonly');
+        const store = tx.objectStore('projects');
+      
+        return new Promise((resolve, reject) => {
+          const req = store.get(id);
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror  = () => reject(req.error);
+        });
+      }
