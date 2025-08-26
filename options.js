@@ -28,7 +28,6 @@ async function initDB() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    const toggle = document.getElementById('default-new-tab');
     const importBtn = document.getElementById('import-bookmarks');
     const exportBtn = document.getElementById('export-data');
     const importDataBtn = document.getElementById('import-data');
@@ -305,30 +304,4 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         };
     });
-
-    // Check if Chrome APIs are available
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-        // Load saved settings
-        chrome.storage.sync.get(['defaultNewTab'], function(result) {
-            toggle.checked = result.defaultNewTab || false;
-        });
-
-    // Save settings when changed
-    toggle.addEventListener('change', function() {
-        chrome.storage.sync.set({
-            defaultNewTab: toggle.checked
-        }, function() {
-            status.textContent = 'Settings saved!';
-            status.style.opacity = '1';
-            setTimeout(() => {
-                status.style.opacity = '0';
-            }, 2000);
-        });
-    });
-    } else {
-        console.error('Chrome APIs not available');
-        status.textContent = 'Error: Could not access Chrome settings';
-        status.style.opacity = '1';
-        toggle.disabled = true;
-    }
 });

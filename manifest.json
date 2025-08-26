@@ -1,20 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Lifetiles",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Organize your life with customizable tiles and projects",
   "permissions": [
-    "storage",
-    "favicon",
-    "activeTab",
     "tabs",
     "bookmarks"
-  ],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "host_permissions": [
-    "*://*/*"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -26,9 +17,5 @@
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
-  },
-  "web_accessible_resources": [{
-    "resources": ["options.html", "index.html"],
-    "matches": ["<all_urls>"]
-  }]
+  }
 }
