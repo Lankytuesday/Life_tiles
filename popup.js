@@ -1,13 +1,76 @@
-document.addEventListener('DOMContentLoaded', async function() {
-    document.getElementById('dashboard-link').addEventListener('click', () => {
-        chrome.tabs.create({ url: 'index.html' });
-    });
+// --- Session Buddy–style helpers (no top-level await) ---
 
-    document.getElementById('options-link').addEventListener('click', () => {
-        chrome.tabs.create({
-            url: chrome.runtime.getURL('options.html')
-        });
+// Get the last-focused normal Chrome window id (not the popup)
+async function getTargetWindowId() {
+    try {
+      const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+      if (w && typeof w.id === 'number') return w.id;
+    } catch (_) {
+      // ignore
+    }
+    // Fallback: use any normal window if none are focused (rare)
+    const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
+    return wins[0]?.id ?? null;
+  }
+  
+  // Focus existing dashboard tab in that window, or create it there
+  async function focusOrCreateDashboardInWindow(windowId) {
+    const dashboardUrl = chrome.runtime.getURL('index.html');
+  
+    // Look for an existing Lifetiles tab in THIS window
+    const matches = await chrome.tabs.query({
+      windowId,
+      url: [dashboardUrl, `${dashboardUrl}*`]
     });
+  
+    if (matches.length) {
+      // Prefer the most-recently-used if multiples exist
+      matches.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+      await chrome.tabs.update(matches[0].id, { active: true });
+      await chrome.windows.update(windowId, { focused: true });
+    } else {
+      // Create the tab *in that same window* (prevents Chrome from opening a new window)
+      await chrome.tabs.create({ windowId, url: dashboardUrl, active: true });
+    }
+  }
+  
+  document.addEventListener('DOMContentLoaded', async function() {
+      // ✅ Replaced: Session Buddy–style “Go to dashboard”
+      {
+        const btn =
+          document.getElementById('dashboard-link') ||
+          Array.from(document.querySelectorAll('button,a')).find(
+            el => /go to dashboard/i.test(el.textContent || '')
+          );
+  
+        if (btn) {
+          btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            try {
+              const windowId = await getTargetWindowId();
+              if (windowId == null) {
+                // No normal windows open — open one and bail
+                const url = chrome.runtime.getURL('index.html');
+                await chrome.windows.create({ url });
+              } else {
+                await focusOrCreateDashboardInWindow(windowId);
+              }
+            } catch (err) {
+              console.error('Go to dashboard failed:', err);
+            } finally {
+              // Nice UX: close the popup after jumping
+              window.close();
+            }
+          });
+        }
+      }
+  
+      // Options page link (unchanged)
+      document.getElementById('options-link').addEventListener('click', () => {
+          chrome.tabs.create({
+              url: chrome.runtime.getURL('options.html')
+          });
+      });
 
     const dropdownContainer = document.getElementById('custom-dropdown-container');
     const dropdownHeader = document.getElementById('dropdown-header');
