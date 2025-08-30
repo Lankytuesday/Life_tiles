@@ -343,7 +343,21 @@ async function getTargetWindowId() {
                     request.onerror = reject;
                 });
             }
-
+            // ✅ notify dashboard(s) once all writes are done
+            try {
+                const bc = new BroadcastChannel('lifetiles');
+                bc.postMessage({ type: 'tiles:changed' });
+                bc.close();
+                } catch {}
+                if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+                    try {
+                      chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                        // Swallow "Could not establish connection. Receiving end does not exist."
+                        void chrome.runtime.lastError;
+                      });
+                    } catch (_) {}
+                  }
+                  
             window.close();
         } else {
             const tileName = tileNameInput.value.trim();
@@ -359,7 +373,25 @@ async function getTargetWindowId() {
                 };
                 const tx = db.transaction(['tiles'], 'readwrite');
                 const tileStore = tx.objectStore('tiles');
-                tileStore.add(tileData).onsuccess = () => window.close();
+                const req = tileStore.add(tileData);
+                req.onsuccess = () => {
+                    try {
+                        const bc = new BroadcastChannel('lifetiles');
+                        bc.postMessage({ type: 'tiles:changed' });
+                        bc.close();
+                      } catch {}
+                      if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+                        try {
+                          chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                            void chrome.runtime.lastError; // swallow "Receiving end does not exist"
+                          });
+                        } catch (_) {}
+                      }
+                      window.close();
+                      
+                };
+                req.onerror = (e) => console.error('Failed to save tile:', e);
+
             }
         }
     });

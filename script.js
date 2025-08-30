@@ -1,3 +1,16 @@
+let lifetilesBC = null;
+
+let __ltRefreshScheduled = false;
+
+function __ltScheduleRefresh() {
+  if (__ltRefreshScheduled) return;
+  __ltRefreshScheduled = true;
+  setTimeout(() => {
+    __ltRefreshScheduled = false;
+    window.__lifetilesRefresh?.();
+  }, 50);
+}
+
 // Initialize favicon cache handling
 async function checkFaviconCache(hostname) {
     try {
@@ -152,8 +165,32 @@ window.chrome = {
         }
     };
 */
+// Wire popup→dashboard live updates (BroadcastChannel + runtime message)
+function wireLiveUpdates() {
+    // BroadcastChannel (kept alive via global var)
+    try {
+      lifetilesBC = new BroadcastChannel('lifetiles');
+      lifetilesBC.onmessage = (e) => {
+        if (e?.data?.type === 'tiles:changed') {
+            __ltScheduleRefresh();
+        }
+      };
+      window.addEventListener('unload', () => { try { lifetilesBC?.close(); } catch {} });
+    } catch {}
+  
+    // Fallback: runtime message
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener((msg) => {
+        if (msg?.type === 'tiles:changed') {
+            __ltScheduleRefresh();
+        }
+      });
+    }
+  }
+  
+  
 document.addEventListener("DOMContentLoaded", async function () {
-
+    wireLiveUpdates();
     // Initialize IndexedDB
     try {
         const db = await initDB();
@@ -418,6 +455,8 @@ document.addEventListener("DOMContentLoaded", async function () {
             return [];
         }
     }
+// make the dashboard reload callable from outside this closure
+window.__lifetilesRefresh = () => loadDashboards();
 
 function createDashboardTabs(dashboards, activeId) {
         // Ensure we have a valid container
