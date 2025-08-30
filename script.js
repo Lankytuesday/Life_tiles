@@ -10,6 +10,46 @@ function __ltScheduleRefresh() {
     window.__lifetilesRefresh?.();
   }, 50);
 }
+
+// Favicons cache TTL (24h). Set to 6h if you prefer faster refreshes.
+const FAVICON_TTL_MS = 86400000;
+
+// Per-page in-memory cache to avoid duplicate probes
+const sessionFaviconCache = new Map();
+
+// Probe a favicon by actually loading it as an <img> (avoids ORB/CORB)
+async function loadFaviconForHost(hostname) {
+    if (sessionFaviconCache.has(hostname)) return sessionFaviconCache.get(hostname);
+  
+    const tryImg = (src) => new Promise((resolve) => {
+      const img = new Image();
+      let done = false;
+      const finish = ok => { if (done) return; done = true; resolve(ok ? src : null); };
+      const t = setTimeout(() => finish(false), 1800);
+      img.onload = () => { clearTimeout(t); finish(img.naturalWidth > 0 && img.naturalHeight > 0); };
+      img.onerror = () => { clearTimeout(t); finish(false); };
+      img.referrerPolicy = 'no-referrer';
+      img.src = src;
+    });
+  
+    // Prefer Google S2 → then gstatic → then icon.horse (CDN-only; avoids ORB)
+    let found = await tryImg(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`);
+    if (!found) found = await tryImg(`https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${hostname}&size=64`);
+    if (!found) found = await tryImg(`https://icon.horse/icon/${hostname}`);
+
+  
+    sessionFaviconCache.set(hostname, found || ''); // '' = tried already this session
+    if (found) {
+      // persist to IndexedDB
+      try {
+        const db = await initDB();
+        const tx = db.transaction(['favicons'], 'readwrite');
+        tx.objectStore('favicons').put({ hostname, favicon: found, timestamp: Date.now() });
+      } catch {}
+    }
+    return found;
+  }
+  
 // --- internal URL helpers ---
 const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
 function isInternalUrl(u) {
@@ -29,7 +69,7 @@ async function checkFaviconCache(hostname) {
             request.onerror = () => reject(request.error);
         });
 
-        return (result?.favicon && result.timestamp > Date.now() - 3600000) ? result.favicon : null;
+        return (result?.favicon && result.timestamp > Date.now() - FAVICON_TTL_MS) ? result.favicon : null;
     } catch (e) {
         console.error('Error checking favicon cache:', e);
         return null;
@@ -2072,55 +2112,26 @@ function createDashboardTabs(dashboards, activeId) {
             };
         if (skipFavicon) { showInitials(); } else {
            
-            // Check cached favicon first
-            const cachedFavicon = await checkFaviconCache(url.hostname);
-            if (cachedFavicon) {
-                thumbnailElement.style.backgroundImage = `url('${cachedFavicon}')`;
-                thumbnailElement.innerHTML = '';
+
+            // 1) Check IndexedDB cache (honors FAVICON_TTL_MS)
+            const cached = await checkFaviconCache(url.hostname);
+            if (cached) {
+            thumbnailElement.style.backgroundColor = "transparent";
+            thumbnailElement.style.backgroundImage = `url("${cached}")`;
+            thumbnailElement.innerHTML = "";
+            } else {
+            // 2) Probe via <img> only (no fetch/HEAD → avoids ORB)
+            const src = await loadFaviconForHost(url.hostname);
+            if (src) {
+                thumbnailElement.style.backgroundColor = "transparent";
+                thumbnailElement.style.backgroundImage = `url("${src}")`;
+                thumbnailElement.innerHTML = "";
+            } else {
+                // 3) Fallback to initials
+                showInitials();
+            }
             }
 
-            // Try multiple favicon sources with base domain for SSO
-            const baseDomain = url.hostname.split('.').slice(-2).join('.');
-            const faviconSources = [
-                `${url.origin}/favicon.ico`,
-                `${url.origin}/apple-touch-icon.png`,
-                `${url.origin}/apple-touch-icon-precomposed.png`,
-                `https://${baseDomain}/favicon.ico`,
-                `https://www.google.com/s2/favicons?sz=64&domain=${baseDomain}`,
-                `https://icon.horse/icon/${baseDomain}`,
-                `https://favicons.githubusercontent.com/${baseDomain}`,
-                `https://api.faviconkit.com/${baseDomain}/32`
-            ];
-
-            const tryNextFavicon = async (index = 0) => {
-                if (index >= faviconSources.length) {
-                    showInitials();
-                    return;
-                }
-
-                try {
-                    await new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.onload = async () => {
-                            if (img.width > 0) {
-                                thumbnailElement.style.backgroundImage = `url('${faviconSources[index]}')`;
-                                thumbnailElement.style.backgroundColor = 'transparent';
-                                thumbnailElement.innerHTML = '';
-                                await saveFaviconToCache(url.hostname, faviconSources[index]);
-                                resolve(true);
-                            } else {
-                                reject(new Error("Invalid icon"));
-                            }
-                        };
-                        img.onerror = () => reject(new Error("Failed to load"));
-                        img.src = faviconSources[index];
-                    });
-                } catch (e) {
-                    await tryNextFavicon(index + 1);
-                }
-            };
-
-            tryNextFavicon();
 
             // Call the favicon fetching function
             const tryCommonFaviconLocations = async () => {
