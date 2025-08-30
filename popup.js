@@ -33,7 +33,13 @@ async function getTargetWindowId() {
       await chrome.tabs.create({ windowId, url: dashboardUrl, active: true });
     }
   }
+  const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+  function isInternalUrl(u) {
+    try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
+    catch { return true; }
+  }
   
+
   document.addEventListener('DOMContentLoaded', async function() {
       // ✅ Replaced: Session Buddy–style “Go to dashboard”
       {
@@ -257,6 +263,13 @@ async function getTargetWindowId() {
                 await new Promise(resolve => {
                     const request = projectStore.add(projectData);
                     request.onsuccess = () => {
+                        // Skip creating the initial tile if current tab is internal (chrome://, etc.)
+                        if (!currentTab?.url || isInternalUrl(currentTab.url)) {
+                          projectModal.style.display = 'none';
+                          window.location.reload();
+                          resolve();
+                          return;
+                        }
                         const tileData = {
                             id: Date.now().toString() + Math.random(),
                             name: currentTab.title || 'Untitled',
@@ -291,7 +304,7 @@ async function getTargetWindowId() {
     // Input validation
     function validateInputs() {
         const nameValid = tileNameInput.value.trim() !== "";
-        const urlValid = isValidUrl(tileUrlInput.value);
+        const urlValid = isValidUrl(tileUrlInput.value) && !isInternalUrl(tileUrlInput.value);
         const projectValid = selectedProjectValue !== "";
         saveButton.disabled = !(nameValid && urlValid && projectValid);
     }
@@ -314,6 +327,14 @@ async function getTargetWindowId() {
             saveButton.click();
         }
     });
+    tileUrlInput.addEventListener("input", validateInputs);
+
+    // Optional: press Enter in URL field to save (if valid)
+    tileUrlInput.addEventListener("keydown", function (event) {
+        if (event.key === 'Enter' && !saveButton.disabled) {
+        saveButton.click();
+        }
+    });
 
     // Handle save button click
     saveButton.addEventListener('click', async () => {
@@ -326,6 +347,7 @@ async function getTargetWindowId() {
 
             // Process each tab sequentially with a new transaction
             for (const tab of tabs) {
+                if (!tab.url || isInternalUrl(tab.url)) continue;
                 const tx = db.transaction(['tiles'], 'readwrite');
                 const tileStore = tx.objectStore('tiles');
 
@@ -363,7 +385,7 @@ async function getTargetWindowId() {
             const tileName = tileNameInput.value.trim();
             const tileUrl = tileUrlInput.value;
 
-            if (tileName && isValidUrl(tileUrl)) {
+            if (tileName && isValidUrl(tileUrl) && !isInternalUrl(tileUrl)) {
                 const tileData = {
                     id: Date.now().toString(),
                     name: tileName,

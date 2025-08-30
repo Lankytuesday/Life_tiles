@@ -10,6 +10,12 @@ function __ltScheduleRefresh() {
     window.__lifetilesRefresh?.();
   }, 50);
 }
+// --- internal URL helpers ---
+const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+function isInternalUrl(u) {
+  try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
+  catch { return true; } // invalid/blank -> treat as internal
+}
 
 // Initialize favicon cache handling
 async function checkFaviconCache(hostname) {
@@ -318,7 +324,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     function validateTileInputs() {
         const nameValid = tileNameInput.value.trim() !== "";
-        const urlValid = isValidUrl(tileUrlInput.value);
+        const urlValid = (() => {
+            try {
+              const u = new URL(tileUrlInput.value);
+              return (u.protocol === 'http:' || u.protocol === 'https:');
+            } catch { return false; }
+          })();
+          
         const isValid = nameValid && urlValid;
 
         submitTileBtn.disabled = !isValid;
@@ -327,7 +339,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     function validatePopupTileInputs() {
         const nameValid = popupTileNameInput.value.trim() !== "";
-        const urlValid = isValidUrl(popupTileUrlInput.value);
+        const urlValid = (() => {
+            try {
+              const u = new URL(popupTileUrlInput.value);
+              return (u.protocol === 'http:' || u.protocol === 'https:');
+            } catch { return false; }
+          })();
+          
         const isValid = nameValid && urlValid;
 
         submitPopupTileBtn.disabled = !isValid;
@@ -616,11 +634,16 @@ function createDashboardTabs(dashboards, activeId) {
                         resolve(tiles);
                     };
                 });
-
+                // Filter out internal/unsupported URLs (chrome://, chrome-extension://, etc.)
+                const safeTiles = tiles.filter(t => {
+                    try { const u = new URL(t.url); return u.protocol === 'http:' || u.protocol === 'https:'; }
+                    catch { return false; }
+                });
+  
                 // Create a new project object with tiles included
                 const projectWithTiles = {
                     ...projectData,
-                    tiles: tiles
+                    tiles: safeTiles
                 };
 
                 createProjectElement(projectWithTiles);
@@ -996,7 +1019,12 @@ function createDashboardTabs(dashboards, activeId) {
         const tileName = tileNameInput.value.trim();
         const tileUrl = tileUrlInput.value.trim();
 
-        if (currentProjectContainer && currentProjectId && tileName && isValidUrl(tileUrl)) {
+        if (
+            currentProjectContainer &&
+            currentProjectId &&
+            tileName &&
+            (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
+          ) {          
             const tileData = {
                 id: Date.now().toString(),
                 name: tileName,
@@ -1015,7 +1043,12 @@ function createDashboardTabs(dashboards, activeId) {
         const tileName = popupTileNameInput.value.trim();
         const tileUrl = popupTileUrlInput.value.trim();
 
-        if (currentProjectContainer && currentProjectId && tileName && isValidUrl(tileUrl)) {
+        if (
+            currentProjectContainer &&
+            currentProjectId &&
+            tileName &&
+            (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
+          ) {          
             const tileData = {
                 id: Date.now().toString(),
                 name: tileName,
@@ -1939,7 +1972,10 @@ function createDashboardTabs(dashboards, activeId) {
                 const newName = tileNameInput.value.trim();
                 const newUrl = tileUrlInput.value.trim();
 
-                if (newName && isValidUrl(newUrl)) {
+                if (newName && (() => {
+                    try { const u = new URL(newUrl); return u.protocol === 'http:' || u.protocol === 'https:'; }
+                    catch { return false; }
+                  })()) {                  
                     const db = await initDB();
                     const tx = db.transaction(['tiles'], 'readwrite');
                     const store = tx.objectStore('tiles');
@@ -1997,21 +2033,34 @@ function createDashboardTabs(dashboards, activeId) {
 
         tile.addEventListener("click", function(e) {
             if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
-                e.preventDefault(); // Prevent default navigation
-                if (e.metaKey || e.ctrlKey) {
-                    window.open(tileData.url, '_blank');
-                } else {
-                    // Direct navigation to the tile URL
-                    window.location.href = tileData.url;
+              e.preventDefault(); // Prevent default navigation
+          
+              // block internal schemes (chrome://, chrome-extension://, etc.)
+              try {
+                const u = new URL(tileData.url);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                  alert('This internal Chrome page can’t be opened from Lifetiles.');
+                  return;
                 }
+              } catch {
+                return; // bad URL, do nothing
+              }
+          
+              if (e.metaKey || e.ctrlKey) {
+                window.open(tileData.url, '_blank');
+              } else {
+                window.location.href = tileData.url;
+              }
             }
-        });
+          });
+          
 
         const thumbnailElement = document.createElement("div");
         thumbnailElement.className = "tile-thumbnail";
 
         try {
             const url = new URL(tileData.url);
+            const skipFavicon = url.protocol !== 'http:' && url.protocol !== 'https:';
 
             // Helper function to show initials when favicon fails
             const showInitials = () => {
@@ -2021,7 +2070,8 @@ function createDashboardTabs(dashboards, activeId) {
                 thumbnailElement.style.backgroundColor = bgColor;
                 thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
             };
-
+        if (skipFavicon) { showInitials(); } else {
+           
             // Check cached favicon first
             const cachedFavicon = await checkFaviconCache(url.hostname);
             if (cachedFavicon) {
@@ -2140,6 +2190,7 @@ function createDashboardTabs(dashboards, activeId) {
                 console.error("Error in favicon fetch:", err);
                 showInitials();
             });
+        }
         } catch (error) {
             console.error('Error handling thumbnail:', error);
             thumbnailElement.style.backgroundImage = 'none';

@@ -26,6 +26,12 @@ async function initDB() {
         };
     });
 }
+// --- internal URL helpers ---
+const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+function isInternalUrl(u) {
+  try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
+  catch { return true; }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     const importBtn = document.getElementById('import-bookmarks');
@@ -155,7 +161,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         bookmarkBar.children.forEach(child => {
-            if (child.url) {
+            if (child.url && !isInternalUrl(child.url)) {
                 // Single bookmark goes into the looseBookmarks project
                 looseBookmarks.tiles.push({
                     id: crypto.randomUUID(),
@@ -166,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Folder becomes a new project
                 const tiles = [];
                 child.children.forEach(bookmark => {
-                    if (bookmark.url) {
+                    if (bookmark.url && !isInternalUrl(bookmark.url)) {                  
                         tiles.push({
                             id: crypto.randomUUID(),
                             name: bookmark.title,
