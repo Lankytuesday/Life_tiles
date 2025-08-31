@@ -13,7 +13,43 @@ function __ltScheduleRefresh() {
 
 // Favicons cache TTL (24h). Set to 6h if you prefer faster refreshes.
 const FAVICON_TTL_MS = 86400000;
-
+// Probe an image URL to verify it actually loads (no fetch → no ORB)
+async function probeImage(src, timeout = 1800) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      let done = false;
+      const finish = ok => { if (done) return; done = true; resolve(ok); };
+      const t = setTimeout(() => finish(false), timeout);
+      img.onload = () => { clearTimeout(t); finish(img.naturalWidth > 0 && img.naturalHeight > 0); };
+      img.onerror = () => { clearTimeout(t); finish(false); };
+      img.referrerPolicy = 'no-referrer';
+      img.src = src;
+    });
+  }
+// One-time cleanup: remove legacy cached favicons that point to gstatic
+async function purgeLegacyFavicons() {
+    try {
+      const db = await initDB();
+      const tx = db.transaction(['favicons'], 'readwrite');
+      const store = tx.objectStore('favicons');
+  
+      const rows = await new Promise((res, rej) => {
+        const req = store.getAll();
+        req.onsuccess = () => res(req.result || []);
+        req.onerror = () => rej(req.error);
+      });
+  
+      for (const row of rows) {
+        const f = row?.favicon || '';
+        if (typeof f === 'string' && /(?:^|\/\/)t\d*\.gstatic\.com\/faviconV2/i.test(f)) {
+          store.delete(row.hostname);
+          sessionFaviconCache.delete?.(row.hostname);
+        }
+      }
+    } catch {}
+  }
+purgeLegacyFavicons(); // fire-and-forget migration
+   
 // Per-page in-memory cache to avoid duplicate probes
 const sessionFaviconCache = new Map();
 
@@ -32,10 +68,11 @@ async function loadFaviconForHost(hostname) {
       img.src = src;
     });
   
-    // Prefer Google S2 → then gstatic → then icon.horse (CDN-only; avoids ORB)
+    // Prefer Google S2 → then DuckDuckGo → then icon.horse (CDN-only; avoids ORB/404 spam)
     let found = await tryImg(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`);
-    if (!found) found = await tryImg(`https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${hostname}&size=64`);
+    if (!found) found = await tryImg(`https://icons.duckduckgo.com/ip3/${hostname}.ico`);
     if (!found) found = await tryImg(`https://icon.horse/icon/${hostname}`);
+
 
   
     sessionFaviconCache.set(hostname, found || ''); // '' = tried already this session
@@ -2113,94 +2150,31 @@ function createDashboardTabs(dashboards, activeId) {
         if (skipFavicon) { showInitials(); } else {
            
 
-            // 1) Check IndexedDB cache (honors FAVICON_TTL_MS)
-            const cached = await checkFaviconCache(url.hostname);
-            if (cached) {
-            thumbnailElement.style.backgroundColor = "transparent";
-            thumbnailElement.style.backgroundImage = `url("${cached}")`;
-            thumbnailElement.innerHTML = "";
-            } else {
-            // 2) Probe via <img> only (no fetch/HEAD → avoids ORB)
-            const src = await loadFaviconForHost(url.hostname);
+            let src = await checkFaviconCache(url.hostname);
+
             if (src) {
-                thumbnailElement.style.backgroundColor = "transparent";
-                thumbnailElement.style.backgroundImage = `url("${src}")`;
-                thumbnailElement.innerHTML = "";
-            } else {
-                // 3) Fallback to initials
-                showInitials();
-            }
-            }
-
-
-            // Call the favicon fetching function
-            const tryCommonFaviconLocations = async () => {
+              const ok = await probeImage(src);
+              if (!ok) {
+                // purge bad cache + session memo, then retry via CDN probes
                 try {
-                    // Try direct favicon locations first
-                    const directLocations = [
-                        `${url.origin}/favicon.ico`,
-                        `${url.origin}/favicon.png`,
-                        `${url.origin}/favicon.svg`
-                    ];
-
-                    // Then try other common locations
-                    const otherLocations = [
-                        `${url.origin}/apple-touch-icon.png`,
-                        `${url.origin}/apple-touch-icon-precomposed.png`,
-                        `${url.origin}/assets/favicon.ico`,
-                        `${url.origin}/images/favicon.ico`,
-                        `${url.origin}/img/favicon.ico`,
-                        `${url.origin}/static/favicon.ico`,
-                        `${url.origin}/icons/favicon.ico`,
-                        `https://www.google.com/s2/favicons?sz=64&domain=${url.hostname}`
-                    ];
-
-                    // Combine locations with direct ones first
-                    const commonLocations = [...directLocations, ...otherLocations];
-
-                    for (const location of commonLocations) {
-                        const img = new Image();
-                        try {
-                            await new Promise((resolve, reject) => {
-                                img.onload = () => {
-                                    if (img.width > 16) {
-                                        thumbnailElement.style.backgroundImage = `url('${location}')`;
-                                        // Cache the successful favicon
-                                        saveFaviconToCache(url.hostname, location);
-                                        resolve(true);
-                                    } else {
-                                        reject(new Error("Icon too small"));
-                                    }
-                                };
-                                img.onerror = () => reject(new Error("Failed to load"));
-                                img.src = location;
-
-                                // Set a timeout in case the image hangs
-                                setTimeout(() => reject(new Error("Timeout")), 1000);
-                            });
-                            // If we get here, we found a working favicon
-                            return true;
-                        } catch (e) {
-                            console.log(`Favicon not found at ${location}`);
-                            // Continue to the next location
-                        }
-                    }
-                    return false;
-                } catch (error) {
-                    console.error('Error in tryCommonFaviconLocations:', error);
-                    return false;
-                }
-            };
-
-            // Attempt to fetch favicon
-            tryCommonFaviconLocations().then(success => {
-                if (!success) {
-                    showInitials();
-                }
-            }).catch(err => {
-                console.error("Error in favicon fetch:", err);
-                showInitials();
-            });
+                  const db = await initDB();
+                  const tx = db.transaction(['favicons'], 'readwrite');
+                  tx.objectStore('favicons').delete(url.hostname);
+                } catch {}
+                sessionFaviconCache.delete?.(url.hostname);
+                src = await loadFaviconForHost(url.hostname);
+              }
+            } else {
+              src = await loadFaviconForHost(url.hostname);
+            }
+            
+            if (src) {
+              thumbnailElement.style.backgroundColor = 'transparent';
+              thumbnailElement.style.backgroundImage = `url("${src}")`;
+              thumbnailElement.innerHTML = '';
+            } else {
+              showInitials();
+            }
         }
         } catch (error) {
             console.error('Error handling thumbnail:', error);
