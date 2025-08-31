@@ -342,10 +342,17 @@ document.addEventListener("DOMContentLoaded", async function () {
         onEnd: function(evt) {
             // Reset cursor styles when drag ends
             document.body.classList.remove('dragging');
+            // read clean DOM order and attach to evt
+            const orderedIds = getOrderedTileIds(evt.to);
+            evt.orderedIds = orderedIds;
+
             document.body.style.cursor = '';
 
-            // Update project order in IndexedDB
-            updateProjectOrder(evt);
+            // Update tile order in IndexedDB
+            const fromProjectId = evt.from.closest('.project').dataset.projectId;
+            const toProjectId   = evt.to.closest('.project').dataset.projectId;
+            updateTileOrder(evt, fromProjectId, toProjectId);
+
         }
     });
 
@@ -704,13 +711,36 @@ function createDashboardTabs(dashboards, activeId) {
                 const tiles = await new Promise((resolve) => {
                     const request = tileStore.index('projectId').getAll(projectData.id);
                     request.onsuccess = () => {
-                        const tiles = request.result || [];
-                        // Sort tiles by order property
-                        tiles.sort((a, b) => (a.order || 0) - (b.order || 0));
+                        let tiles = request.result || [];
+                
+                        // Sort by order (fallback to createdAt if missing)
+                        tiles.sort(
+                            (a, b) =>
+                                (a.order ?? 1e9) - (b.order ?? 1e9) ||
+                                (a.createdAt || 0) - (b.createdAt || 0)
+                        );
+                
+                        // Backfill missing order values
+                        let needsSave = false;
+                        tiles.forEach((t, i) => {
+                            if (t.order == null) {
+                                t.order = i;
+                                needsSave = true;
+                            }
+                        });
+                
+                        if (needsSave) {
+                            const txSave = db.transaction(['tiles'], 'readwrite');
+                            const storeSave = txSave.objectStore('tiles');
+                            tiles.forEach(t => storeSave.put(t));
+                        }
+                
                         console.log(`Loaded ${tiles.length} tiles for project ${projectData.id}`);
                         resolve(tiles);
                     };
+                    request.onerror = () => resolve([]);
                 });
+                
                 // Filter out internal/unsupported URLs (chrome://, chrome-extension://, etc.)
                 const safeTiles = tiles.filter(t => {
                     try { const u = new URL(t.url); return u.protocol === 'http:' || u.protocol === 'https:'; }
@@ -1024,6 +1054,7 @@ function createDashboardTabs(dashboards, activeId) {
 
         // Initialize Sortable for tiles
         new Sortable(tilesContainer, {
+            dataIdAttr: 'data-tile-id',
             animation: 150,
             draggable: '.tile',
             handle: '.tile',
@@ -2295,73 +2326,83 @@ function createDashboardTabs(dashboards, activeId) {
         await Promise.all(promises);
     }
 
-    async function updateTileOrder(evt, fromProjectId, toProjectId) {
+  async function updateTileOrder(evt, fromProjectId, toProjectId) {
         try {
             const db = await initDB();
             const tx = db.transaction(['tiles'], 'readwrite');
             const store = tx.objectStore('tiles');
+            // If Sortable gave us a clean order list, prefer it
+            const cleanOrder = evt.orderedIds;
 
             // Get all tiles from both source and destination projects
             const sourceChildren = Array.from(evt.from.children).filter(el => el.classList.contains('tile'));
             const destChildren = Array.from(evt.to.children).filter(el => el.classList.contains('tile'));
+            // Build the ordered id list (ignores the "+ add tile" button)
+            const orderedIds = (Array.isArray(cleanOrder) && cleanOrder.length)
+            ? cleanOrder
+            : destChildren
+                .filter(el => !el.classList.contains('add-tile-button'))
+                .map(el => el.dataset.tileId)
+                .filter(Boolean);
 
             // Wait for transaction to complete before starting another
             await new Promise((resolve, reject) => {
                 const updatePromises = [];
-
-                // Update source project tiles if different projects
-                if (fromProjectId !== toProjectId) {
-                    sourceChildren.forEach((el, i) => {
-                        updatePromises.push(new Promise((resolveUpdate) => {
-                            const request = store.get(el.dataset.tileId);
-                            request.onsuccess = () => {
-                                const tileData = request.result;
-                                if (tileData) {
-                                    tileData.order = i;
-                                    store.put(tileData).onsuccess = resolveUpdate;
-                                } else {
-                                    resolveUpdate();
-                                }
-                            };
-                        }));
-                    });
-                }
-
-                // Update destination project tiles
-                destChildren.forEach((el, i) => {
-                    updatePromises.push(new Promise((resolveUpdate) => {
-                        const request = store.get(el.dataset.tileId);
-                        request.onsuccess = () => {
-                            const tileData = request.result;
-                            if (tileData) {
-                                const updatedTileData = {
-                                    ...tileData,
-                                    order: i,
-                                    projectId: toProjectId,
-                                    dashboardId: currentDashboardId
-                                };
-                                store.put(updatedTileData).onsuccess = resolveUpdate;
-                            } else {
-                                resolveUpdate();
-                            }
-                        };
-                    }));
-                });
-
-                // Wait for all updates to complete
-                Promise.all(updatePromises).then(resolve).catch(reject);
-
-                // Handle transaction completion
-                tx.oncomplete = resolve;
-                tx.onerror = reject;
-            });
-
-            // Wait for transaction to complete
-            await new Promise((resolve, reject) => {
-                tx.oncomplete = resolve;
+            
+                // Resolve when the transaction completes
+                tx.oncomplete = () => resolve();
                 tx.onerror = () => reject(tx.error);
+            
+                // Persist order for destination list using orderedIds
+                for (let i = 0; i < orderedIds.length; i++) {
+                const id = orderedIds[i];
+                const getReq = store.get(id);
+            
+                updatePromises.push(new Promise((res, rej) => {
+                    getReq.onsuccess = () => {
+                    const rec = getReq.result;
+                    if (!rec) { res(); return; }
+            
+                    rec.order = i;
+                    rec.projectId = toProjectId;
+                    rec.dashboardId = currentDashboardId;
+            
+                    const putReq = store.put(rec);
+                    putReq.onsuccess = () => res();
+                    putReq.onerror  = () => rej(putReq.error);
+                    };
+                    getReq.onerror = () => rej(getReq.error);
+                }));
+                }
+                // If tiles were moved between projects, also reindex the source list
+                if (fromProjectId !== toProjectId) {
+                    const sourceOrdered = sourceChildren
+                    .filter(el => !el.classList.contains('add-tile-button'))
+                    .map(el => el.dataset.tileId)
+                    .filter(Boolean);
+                
+                    for (let i = 0; i < sourceOrdered.length; i++) {
+                    const id = sourceOrdered[i];
+                    const getReq = store.get(id);
+                
+                    updatePromises.push(new Promise((res, rej) => {
+                        getReq.onsuccess = () => {
+                        const rec = getReq.result;
+                        if (!rec) { res(); return; }
+                        rec.order = i;
+                        const putReq = store.put(rec);
+                        putReq.onsuccess = () => res();
+                        putReq.onerror  = () => rej(putReq.error);
+                        };
+                        getReq.onerror = () => rej(getReq.error);
+                    }));
+                    }
+                }
+  
+                // If any put/get fails, reject; resolve comes from tx.oncomplete
+                Promise.all(updatePromises).catch(reject);
             });
-
+            
                 // Remove hover states from all add-tile buttons after drag
                 document.querySelectorAll('.add-tile-button').forEach(button => {
                     button.classList.remove('hover');
@@ -2370,7 +2411,7 @@ function createDashboardTabs(dashboards, activeId) {
             console.error('Error updating tile order:', error);
         }
     }
-
+ 
     async function getProjectTiles(projectId) {
         const db = await initDB();
         const tx = db.transaction(['tiles'], 'readonly');
@@ -2381,9 +2422,7 @@ function createDashboardTabs(dashboards, activeId) {
             request.onsuccess = () => resolve(request.result || []);
         });
     }
-
-
-});
+}); 
 
 async function initDB() {
     return new Promise((resolve, reject) => {
@@ -2523,3 +2562,11 @@ async function migrateFromChromeStorage() {
           req.onerror  = () => reject(req.error);
         });
       }
+// --- helper: get current tile order from DOM (ignores add-tile button) ---
+function getOrderedTileIds(containerEl) {
+    return Array.from(containerEl.children)
+      .filter((el) => el.matches('.tile') && !el.classList.contains('add-tile-button'))
+      .map((el) => el.dataset.tileId)
+      .filter(Boolean);
+  }
+  
