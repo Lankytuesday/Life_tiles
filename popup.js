@@ -164,6 +164,9 @@ async function getTargetWindowId() {
             });
 
             if (projects.length > 0) {
+                // Sort projects by order property to match dashboard order
+                projects.sort((a, b) => (a.order || 0) - (b.order || 0));
+
                 // Add dashboard label
                 const dashboardLabel = document.createElement('div');
                 dashboardLabel.className = 'dropdown-group-label';
