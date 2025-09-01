@@ -326,35 +326,27 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.error('Error loading dashboards:', error);
     });
 
-    // Initialize project sorting
-    new Sortable(document.getElementById('projects-container'), {
-        animation: 150,
-        handle: '.project-drag-handle',
-        ghostClass: 'sortable-ghost',
-        chosenClass: 'sortable-chosen',
-        dragClass: 'sortable-drag',
-        onStart: function() {
-            // Add dragging class to body when drag starts
-            document.body.classList.add('dragging');
-            // Set direct cursor style on body
-            document.body.style.cursor = 'grabbing';
-        },
-        onEnd: function(evt) {
-            // Reset cursor styles when drag ends
-            document.body.classList.remove('dragging');
-            // read clean DOM order and attach to evt
-            const orderedIds = getOrderedTileIds(evt.to);
-            evt.orderedIds = orderedIds;
-
-            document.body.style.cursor = '';
-
-            // Update tile order in IndexedDB
-            const fromProjectId = evt.from.closest('.project').dataset.projectId;
-            const toProjectId   = evt.to.closest('.project').dataset.projectId;
-            updateTileOrder(evt, fromProjectId, toProjectId);
-
-        }
-    });
+// Initialize project sorting
+new Sortable(document.getElementById('projects-container'), {
+    animation: 150,
+    // (optional but helpful) prevent dragging the “New Project” button
+    draggable: '.project',
+    handle: '.project-drag-handle',
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    dragClass: 'sortable-drag',
+    onStart: function () {
+      document.body.classList.add('dragging');
+      document.body.style.cursor = 'grabbing';
+    },
+    onEnd: function (evt) {
+      // ✅ Persist PROJECT order (not tiles)
+      document.body.classList.remove('dragging');
+      document.body.style.cursor = '';
+      updateProjectOrder(evt);
+    }
+  });
+  
 
     // Project Modal Event Listeners
     newProjectBtn.addEventListener("click", function() {
@@ -2326,91 +2318,49 @@ function createDashboardTabs(dashboards, activeId) {
         await Promise.all(promises);
     }
 
-  async function updateTileOrder(evt, fromProjectId, toProjectId) {
+    async function updateTileOrder(evt, fromProjectId, toProjectId) {
         try {
-            const db = await initDB();
-            const tx = db.transaction(['tiles'], 'readwrite');
-            const store = tx.objectStore('tiles');
-            // If Sortable gave us a clean order list, prefer it
-            const cleanOrder = evt.orderedIds;
-
-            // Get all tiles from both source and destination projects
-            const sourceChildren = Array.from(evt.from.children).filter(el => el.classList.contains('tile'));
-            const destChildren = Array.from(evt.to.children).filter(el => el.classList.contains('tile'));
-            // Build the ordered id list (ignores the "+ add tile" button)
-            const orderedIds = (Array.isArray(cleanOrder) && cleanOrder.length)
-            ? cleanOrder
-            : destChildren
-                .filter(el => !el.classList.contains('add-tile-button'))
-                .map(el => el.dataset.tileId)
-                .filter(Boolean);
-
-            // Wait for transaction to complete before starting another
-            await new Promise((resolve, reject) => {
-                const updatePromises = [];
-            
-                // Resolve when the transaction completes
-                tx.oncomplete = () => resolve();
-                tx.onerror = () => reject(tx.error);
-            
-                // Persist order for destination list using orderedIds
-                for (let i = 0; i < orderedIds.length; i++) {
-                const id = orderedIds[i];
-                const getReq = store.get(id);
-            
-                updatePromises.push(new Promise((res, rej) => {
-                    getReq.onsuccess = () => {
-                    const rec = getReq.result;
-                    if (!rec) { res(); return; }
-            
-                    rec.order = i;
-                    rec.projectId = toProjectId;
-                    rec.dashboardId = currentDashboardId;
-            
-                    const putReq = store.put(rec);
-                    putReq.onsuccess = () => res();
-                    putReq.onerror  = () => rej(putReq.error);
-                    };
-                    getReq.onerror = () => rej(getReq.error);
-                }));
-                }
-                // If tiles were moved between projects, also reindex the source list
-                if (fromProjectId !== toProjectId) {
-                    const sourceOrdered = sourceChildren
-                    .filter(el => !el.classList.contains('add-tile-button'))
-                    .map(el => el.dataset.tileId)
-                    .filter(Boolean);
-                
-                    for (let i = 0; i < sourceOrdered.length; i++) {
-                    const id = sourceOrdered[i];
-                    const getReq = store.get(id);
-                
-                    updatePromises.push(new Promise((res, rej) => {
-                        getReq.onsuccess = () => {
-                        const rec = getReq.result;
-                        if (!rec) { res(); return; }
-                        rec.order = i;
-                        const putReq = store.put(rec);
-                        putReq.onsuccess = () => res();
-                        putReq.onerror  = () => rej(putReq.error);
-                        };
-                        getReq.onerror = () => rej(getReq.error);
-                    }));
-                    }
-                }
-  
-                // If any put/get fails, reject; resolve comes from tx.oncomplete
-                Promise.all(updatePromises).catch(reject);
-            });
-            
-                // Remove hover states from all add-tile buttons after drag
-                document.querySelectorAll('.add-tile-button').forEach(button => {
-                    button.classList.remove('hover');
-                });
-        } catch (error) {
-            console.error('Error updating tile order:', error);
+          const db = await initDB();
+          const tx = db.transaction(['tiles'], 'readwrite');
+          const store = tx.objectStore('tiles');
+      
+          // 1) Get the authoritative order from Sortable (uses dataIdAttr)
+          const toSortable   = Sortable.get(evt.to);
+          const fromSortable = (evt.from !== evt.to) ? Sortable.get(evt.from) : null;
+      
+          const toIds   = (toSortable   && typeof toSortable.toArray === 'function')   ? toSortable.toArray()   : [];
+          const fromIds = (fromSortable && typeof fromSortable.toArray === 'function') ? fromSortable.toArray() : [];
+      
+          const writeOne = (id, index, newProjectId) => new Promise((resolve, reject) => {
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+              const rec = getReq.result;
+              if (!rec) return resolve();
+              rec.order = index;
+              if (newProjectId != null) rec.projectId = newProjectId; // cross-project moves
+              const putReq = store.put(rec);
+              putReq.onsuccess = resolve;
+              putReq.onerror  = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+          });
+      
+          // 2) Persist destination list (always)
+          const writes = [];
+          for (let i = 0; i < toIds.length; i++) writes.push(writeOne(toIds[i], i, toProjectId));
+      
+          // 3) If moved across projects, reindex the source list too
+          if (fromProjectId !== toProjectId && fromIds.length) {
+            for (let i = 0; i < fromIds.length; i++) writes.push(writeOne(fromIds[i], i, null));
+          }
+      
+          await Promise.all(writes);
+        } catch (err) {
+          console.error('updateTileOrder failed:', err);
         }
-    }
+      }
+      
+      
  
     async function getProjectTiles(projectId) {
         const db = await initDB();
@@ -2568,5 +2518,30 @@ function getOrderedTileIds(containerEl) {
       .filter((el) => el.matches('.tile') && !el.classList.contains('add-tile-button'))
       .map((el) => el.dataset.tileId)
       .filter(Boolean);
+  }
+  async function updateProjectOrder(evt) {
+    try {
+      const container = document.getElementById('projects-container');
+      const projectEls = Array.from(container.querySelectorAll('.project')); // skips the "New Project" button
+      const db = await initDB();
+      const tx = db.transaction(['projects'], 'readwrite');
+      const store = tx.objectStore('projects');
+  
+      await Promise.all(projectEls.map((el, index) => new Promise((resolve, reject) => {
+        const id = el.dataset.projectId;
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const proj = getReq.result;
+          if (!proj) return resolve();
+          proj.order = index;
+          const putReq = store.put(proj);
+          putReq.onsuccess = resolve;
+          putReq.onerror  = () => reject(putReq.error);
+        };
+        getReq.onerror = () => reject(getReq.error);
+      })));
+    } catch (e) {
+      console.error('updateProjectOrder failed:', e);
+    }
   }
   
