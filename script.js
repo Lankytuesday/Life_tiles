@@ -2119,124 +2119,16 @@ function createDashboardTabs(dashboards, activeId) {
                 thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
             };
 
-            // Check cached favicon first
-            const cachedFavicon = await checkFaviconCache(url.hostname);
-            if (cachedFavicon) {
-                thumbnailElement.style.backgroundImage = `url('${cachedFavicon}')`;
+            // Use the streamlined favicon system with early returns to prevent flickering
+            const favicon = await loadFaviconForHost(url.hostname);
+            if (favicon) {
+                thumbnailElement.style.backgroundImage = `url('${favicon}')`;
+                thumbnailElement.style.backgroundColor = 'transparent';
                 thumbnailElement.innerHTML = '';
+            } else {
+                showInitials();
             }
 
-            // Try multiple favicon sources with base domain for SSO
-            const baseDomain = url.hostname.split('.').slice(-2).join('.');
-            const faviconSources = [
-                `${url.origin}/favicon.ico`,
-                `${url.origin}/apple-touch-icon.png`,
-                `${url.origin}/apple-touch-icon-precomposed.png`,
-                `https://${baseDomain}/favicon.ico`,
-                `https://www.google.com/s2/favicons?sz=64&domain=${baseDomain}`,
-                `https://icon.horse/icon/${baseDomain}`,
-                `https://favicons.githubusercontent.com/${baseDomain}`,
-                `https://api.faviconkit.com/${baseDomain}/32`
-            ];
-
-            const tryNextFavicon = async (index = 0) => {
-                if (index >= faviconSources.length) {
-                    showInitials();
-                    return;
-                }
-
-                try {
-                    await new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.onload = async () => {
-                            if (img.width > 0) {
-                                thumbnailElement.style.backgroundImage = `url('${faviconSources[index]}')`;
-                                thumbnailElement.style.backgroundColor = 'transparent';
-                                thumbnailElement.innerHTML = '';
-                                await saveFaviconToCache(url.hostname, faviconSources[index]);
-                                resolve(true);
-                            } else {
-                                reject(new Error("Invalid icon"));
-                            }
-                        };
-                        img.onerror = () => reject(new Error("Failed to load"));
-                        img.src = faviconSources[index];
-                    });
-                } catch (e) {
-                    await tryNextFavicon(index + 1);
-                }
-            };
-
-            tryNextFavicon();
-
-            // Call the favicon fetching function
-            const tryCommonFaviconLocations = async () => {
-                try {
-                    // Try direct favicon locations first
-                    const directLocations = [
-                        `${url.origin}/favicon.ico`,
-                        `${url.origin}/favicon.png`,
-                        `${url.origin}/favicon.svg`
-                    ];
-
-                    // Then try other common locations
-                    const otherLocations = [
-                        `${url.origin}/apple-touch-icon.png`,
-                        `${url.origin}/apple-touch-icon-precomposed.png`,
-                        `${url.origin}/assets/favicon.ico`,
-                        `${url.origin}/images/favicon.ico`,
-                        `${url.origin}/img/favicon.ico`,
-                        `${url.origin}/static/favicon.ico`,
-                        `${url.origin}/icons/favicon.ico`,
-                        `https://www.google.com/s2/favicons?sz=64&domain=${url.hostname}`
-                    ];
-
-                    // Combine locations with direct ones first
-                    const commonLocations = [...directLocations, ...otherLocations];
-
-                    for (const location of commonLocations) {
-                        const img = new Image();
-                        try {
-                            await new Promise((resolve, reject) => {
-                                img.onload = () => {
-                                    if (img.width > 16) {
-                                        thumbnailElement.style.backgroundImage = `url('${location}')`;
-                                        // Cache the successful favicon
-                                        saveFaviconToCache(url.hostname, location);
-                                        resolve(true);
-                                    } else {
-                                        reject(new Error("Icon too small"));
-                                    }
-                                };
-                                img.onerror = () => reject(new Error("Failed to load"));
-                                img.src = location;
-
-                                // Set a timeout in case the image hangs
-                                setTimeout(() => reject(new Error("Timeout")), 1000);
-                            });
-                            // If we get here, we found a working favicon
-                            return true;
-                        } catch (e) {
-                            console.log(`Favicon not found at ${location}`);
-                            // Continue to the next location
-                        }
-                    }
-                    return false;
-                } catch (error) {
-                    console.error('Error in tryCommonFaviconLocations:', error);
-                    return false;
-                }
-            };
-
-            // Attempt to fetch favicon
-            tryCommonFaviconLocations().then(success => {
-                if (!success) {
-                    showInitials();
-                }
-            }).catch(err => {
-                console.error("Error in favicon fetch:", err);
-                showInitials();
-            });
         } catch (error) {
             console.error('Error handling thumbnail:', error);
             thumbnailElement.style.backgroundImage = 'none';
