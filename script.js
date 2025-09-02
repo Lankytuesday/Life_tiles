@@ -26,37 +26,44 @@ async function probeImage(src, timeout = 1800) {
       img.src = src;
     });
   }
-// One-time cleanup: remove legacy cached favicons that point to gstatic
+// One-time cleanup: remove legacy cached favicons that point to deprecated services
 async function purgeLegacyFavicons() {
     try {
       const db = await initDB();
       const tx = db.transaction(['favicons'], 'readwrite');
       const store = tx.objectStore('favicons');
-  
+
       const rows = await new Promise((res, rej) => {
         const req = store.getAll();
         req.onsuccess = () => res(req.result || []);
         req.onerror = () => rej(req.error);
       });
-  
+
       for (const row of rows) {
         const f = row?.favicon || '';
-        if (typeof f === 'string' && /(?:^|\/\/)t\d*\.gstatic\.com\/faviconV2/i.test(f)) {
+        if (typeof f === 'string' && (
+          // Match old Google favicon services
+          /(?:^|\/\/)t\d*\.gstatic\.com\/favicon/i.test(f) ||
+          /(?:^|\/\/)www\.google\.com\/s2\/favicons.*sz=16/i.test(f) ||
+          // Match any deprecated favicon services
+          /favicon.*googleapis/i.test(f)
+        )) {
           store.delete(row.hostname);
           sessionFaviconCache.delete?.(row.hostname);
+          console.log('Purged deprecated favicon cache for:', row.hostname);
         }
       }
     } catch {}
   }
 purgeLegacyFavicons(); // fire-and-forget migration
-   
+
 // Per-page in-memory cache to avoid duplicate probes
 const sessionFaviconCache = new Map();
 
-// Probe a favicon by actually loading it as an <img> (avoids ORB/CORB)
+// Probe a favicon by actually loading it as <img> (avoids ORB/CORB)
 async function loadFaviconForHost(hostname) {
     if (sessionFaviconCache.has(hostname)) return sessionFaviconCache.get(hostname);
-  
+
     const tryImg = (src) => new Promise((resolve) => {
       const img = new Image();
       let done = false;
@@ -67,14 +74,14 @@ async function loadFaviconForHost(hostname) {
       img.referrerPolicy = 'no-referrer';
       img.src = src;
     });
-  
+
     // Prefer Google S2 → then DuckDuckGo → then icon.horse (CDN-only; avoids ORB/404 spam)
     let found = await tryImg(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`);
     if (!found) found = await tryImg(`https://icons.duckduckgo.com/ip3/${hostname}.ico`);
     if (!found) found = await tryImg(`https://icon.horse/icon/${hostname}`);
 
 
-  
+
     sessionFaviconCache.set(hostname, found || ''); // '' = tried already this session
     if (found) {
       // persist to IndexedDB
@@ -86,7 +93,7 @@ async function loadFaviconForHost(hostname) {
     }
     return found;
   }
-  
+
 // --- internal URL helpers ---
 const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
 function isInternalUrl(u) {
@@ -106,7 +113,7 @@ async function checkFaviconCache(hostname) {
             request.onerror = () => reject(request.error);
         });
 
-        return (result?.favicon && result.timestamp > Date.now() - FAVICON_TTL_MS) ? result.favicon : null;
+        return (result?.favicon && result.timestamp > Date.now() - 3600000) ? result.favicon : null;
     } catch (e) {
         console.error('Error checking favicon cache:', e);
         return null;
@@ -208,45 +215,6 @@ async function migrateFromChromeStorage() {
         return false;
     }
 }
-
-window.chrome = {
-        storage: {
-            sync: {
-                get: function(keys, callback) {
-                    const data = {};
-                    if (keys === null) {
-                        // Get all items from localStorage
-                        for (let i = 0; i < localStorage.length; i++) {
-                            const key = localStorage.key(i);
-                            try {
-                                data[key] = JSON.parse(localStorage.getItem(key));
-                            } catch (e) {
-                                data[key] = localStorage.getItem(key);
-                            }
-                        }
-                    } else if (typeof keys === 'string') {
-                        data[keys] = localStorage.getItem(keys) ? JSON.parse(localStorage.getItem(keys)) : null;
-                    } else if (Array.isArray(keys)) {
-                        keys.forEach(key => {
-                            data[key] = localStorage.getItem(key) ? JSON.parse(localStorage.getItem(key)) : null;
-                        });
-                    } else if (typeof keys === 'object') {
-                        Object.keys(keys).forEach(key => {
-                            const value = localStorage.getItem(key);
-                            data[key] = value ? JSON.parse(value) : keys[key];
-                        });
-                    }
-                    callback(data);
-                },
-                set: function(items, callback) {
-                    Object.keys(items).forEach(key => {
-                        localStorage.setItem(key, JSON.stringify(items[key]));
-                    });
-                    if (callback) callback();
-                }
-            }
-        }
-    };
 */
 // Wire popup→dashboard live updates (BroadcastChannel + runtime message)
 function wireLiveUpdates() {
@@ -260,7 +228,7 @@ function wireLiveUpdates() {
       };
       window.addEventListener('unload', () => { try { lifetilesBC?.close(); } catch {} });
     } catch {}
-  
+
     // Fallback: runtime message
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
       chrome.runtime.onMessage.addListener((msg) => {
@@ -270,8 +238,8 @@ function wireLiveUpdates() {
       });
     }
   }
-  
-  
+
+
 document.addEventListener("DOMContentLoaded", async function () {
     wireLiveUpdates();
     // Initialize IndexedDB
@@ -329,7 +297,6 @@ document.addEventListener("DOMContentLoaded", async function () {
 // Initialize project sorting
 new Sortable(document.getElementById('projects-container'), {
     animation: 150,
-    // (optional but helpful) prevent dragging the “New Project” button
     draggable: '.project',
     handle: '.project-drag-handle',
     ghostClass: 'sortable-ghost',
@@ -346,7 +313,7 @@ new Sortable(document.getElementById('projects-container'), {
       updateProjectOrder(evt);
     }
   });
-  
+
 
     // Project Modal Event Listeners
     newProjectBtn.addEventListener("click", function() {
@@ -406,7 +373,7 @@ new Sortable(document.getElementById('projects-container'), {
               return (u.protocol === 'http:' || u.protocol === 'https:');
             } catch { return false; }
           })();
-          
+
         const isValid = nameValid && urlValid;
 
         submitTileBtn.disabled = !isValid;
@@ -421,7 +388,7 @@ new Sortable(document.getElementById('projects-container'), {
               return (u.protocol === 'http:' || u.protocol === 'https:');
             } catch { return false; }
           })();
-          
+
         const isValid = nameValid && urlValid;
 
         submitPopupTileBtn.disabled = !isValid;
@@ -471,7 +438,7 @@ new Sortable(document.getElementById('projects-container'), {
             let dashboards = await new Promise((resolve, reject) => {
                 const dashboardStore = db.transaction(['dashboards'], 'readonly').objectStore('dashboards');
                 const request = dashboardStore.getAll();
-                request.onsuccess = () => resolve(request.result);
+                request.onsuccess = () => resolve(request.result || []);
                 request.onerror = () => reject(request.error);
             });
 
@@ -498,14 +465,14 @@ new Sortable(document.getElementById('projects-container'), {
             }
 
             const currentId = localStorage.getItem('currentDashboardId') || dashboards[0].id;
-            
+
             // Validate that the current dashboard still exists
             const validCurrentId = dashboards.find(d => d.id === currentId) ? currentId : dashboards[0].id;
             if (validCurrentId !== currentId) {
                 localStorage.setItem('currentDashboardId', validCurrentId);
                 currentDashboardId = validCurrentId;
             }
-            
+
             createDashboardTabs(dashboards, validCurrentId);
 
             // Clear existing projects before loading new ones to prevent duplication
@@ -703,42 +670,21 @@ function createDashboardTabs(dashboards, activeId) {
                 const tiles = await new Promise((resolve) => {
                     const request = tileStore.index('projectId').getAll(projectData.id);
                     request.onsuccess = () => {
-                        let tiles = request.result || [];
-                
-                        // Sort by order (fallback to createdAt if missing)
-                        tiles.sort(
-                            (a, b) =>
-                                (a.order ?? 1e9) - (b.order ?? 1e9) ||
-                                (a.createdAt || 0) - (b.createdAt || 0)
-                        );
-                
-                        // Backfill missing order values
-                        let needsSave = false;
-                        tiles.forEach((t, i) => {
-                            if (t.order == null) {
-                                t.order = i;
-                                needsSave = true;
-                            }
-                        });
-                
-                        if (needsSave) {
-                            const txSave = db.transaction(['tiles'], 'readwrite');
-                            const storeSave = txSave.objectStore('tiles');
-                            tiles.forEach(t => storeSave.put(t));
-                        }
-                
+                        const tiles = request.result || [];
+                        // Sort tiles by order property
+                        tiles.sort((a, b) => (a.order || 0) - (b.order || 0));
                         console.log(`Loaded ${tiles.length} tiles for project ${projectData.id}`);
                         resolve(tiles);
                     };
                     request.onerror = () => resolve([]);
                 });
-                
+
                 // Filter out internal/unsupported URLs (chrome://, chrome-extension://, etc.)
                 const safeTiles = tiles.filter(t => {
                     try { const u = new URL(t.url); return u.protocol === 'http:' || u.protocol === 'https:'; }
                     catch { return false; }
                 });
-  
+
                 // Create a new project object with tiles included
                 const projectWithTiles = {
                     ...projectData,
@@ -898,42 +844,42 @@ function createDashboardTabs(dashboards, activeId) {
         });
     };
 
-        
+
     const copyButton = document.createElement("button");
     copyButton.textContent = "Copy to Dashboard";
     copyButton.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
         closeAllMenus();
-    
+
         const db = await initDB();
         let tx = db.transaction(['dashboards'], 'readonly'); // Only need dashboards for selection
         const dashboardStore = tx.objectStore('dashboards');
-    
+
         // Get all dashboards
         let dashboards = await new Promise((resolve, reject) => {
             const request = dashboardStore.getAll();
             request.onsuccess = () => resolve(request.result || []);
             request.onerror = () => reject(request.error);
         });
-    
+
         // Sort dashboards by order property
         if (dashboards.length > 0) {
             dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
         }
-    
+
         // Create dashboard selection modal
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.style.display = 'flex';
-    
+
         const content = document.createElement('div');
         content.className = 'modal-content';
         content.style.width = '280px';
-    
+
         const title = document.createElement('h2');
         title.textContent = 'Select Dashboard';
-    
+
         const select = document.createElement('select');
         select.style.cssText = `
             width: 100%;
@@ -941,7 +887,7 @@ function createDashboardTabs(dashboards, activeId) {
             padding: 8px;
             font-size: 14px;
         `;
-    
+
         dashboards.forEach(dashboard => {
             if (dashboard.id !== currentDashboardId) {
                 const option = document.createElement('option');
@@ -950,51 +896,51 @@ function createDashboardTabs(dashboards, activeId) {
                 select.appendChild(option);
             }
         });
-    
+
         const buttons = document.createElement('div');
         buttons.className = 'modal-buttons';
-    
+
         const cancelBtn = document.createElement('button');
         cancelBtn.className = 'cancel-button';
         cancelBtn.textContent = 'Cancel';
         cancelBtn.onclick = () => modal.remove();
-    
+
         const copyBtn = document.createElement('button');
         copyBtn.className = 'done-button enabled';
         copyBtn.textContent = 'Copy';
         copyBtn.onclick = async () => {
             const selectedDashboardId = select.value;
             if (!selectedDashboardId) return;
-    
+
             // 🔄 Always resolve the current project element
             const currentProjectEl = copyButton.closest('.project');
             if (!currentProjectEl) return;
-    
+
             // 🔄 Fetch fresh project data
             const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
             if (!freshProject) return;
-    
+
             const db = await initDB();
             const tx = db.transaction(['projects', 'tiles'], 'readwrite');
             const projectStore = tx.objectStore('projects');
             const tileStore = tx.objectStore('tiles');
-    
+
             // Get all tiles for this fresh project
             const tiles = await new Promise((resolve) => {
                 const request = tileStore.index('projectId').getAll(freshProject.id);
                 request.onsuccess = () => resolve(request.result || []);
             });
-    
+
             // Build new project from FRESH data
             const newProjectData = {
                 id: Date.now().toString(),
                 name: freshProject.name,
                 dashboardId: selectedDashboardId
             };
-    
+
             // Add new project
             await projectStore.add(newProjectData);
-    
+
             // Copy tiles to the new project
             for (const tile of tiles) {
                 const newTile = {
@@ -1005,20 +951,20 @@ function createDashboardTabs(dashboards, activeId) {
                 };
                 await tileStore.add(newTile);
             }
-    
+
             modal.remove();
         };
-    
+
         buttons.appendChild(cancelBtn);
         buttons.appendChild(copyBtn);
-    
+
         content.appendChild(title);
         content.appendChild(select);
         content.appendChild(buttons);
         modal.appendChild(content);
         document.body.appendChild(modal);
     };
-    
+
         const removeButton = document.createElement("button");
         removeButton.textContent = "Remove";
         removeButton.onclick = async (e) => {
@@ -1046,12 +992,13 @@ function createDashboardTabs(dashboards, activeId) {
 
         // Initialize Sortable for tiles
         new Sortable(tilesContainer, {
-            dataIdAttr: 'data-tile-id',
             animation: 150,
             draggable: '.tile',
             handle: '.tile',
             group: 'tiles',
             ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            dragClass: 'sortable-drag',
             filter: '.add-tile-button', // Prevent sorting on add button
             preventOnFilter: false,
             onStart: function(evt) {
@@ -1060,6 +1007,14 @@ function createDashboardTabs(dashboards, activeId) {
                 document.querySelectorAll('.add-tile-button').forEach(btn => {
                     btn.classList.add('dragging-disabled');
                 });
+
+                // Ensure the dragged item has its tile ID
+                const tileId = evt.item.dataset.tileId;
+                if (!tileId) {
+                    console.error('Dragged tile missing ID:', evt.item);
+                } else {
+                    console.log('Starting drag for tile:', tileId);
+                }
             },
             onEnd: function(evt) {
                 document.body.classList.remove('dragging');
@@ -1124,13 +1079,18 @@ function createDashboardTabs(dashboards, activeId) {
             currentProjectId &&
             tileName &&
             (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
-          ) {          
+          ) {
+            // Get current tile count for proper order assignment
+            const existingTiles = Array.from(currentProjectContainer.children)
+                .filter(el => el.classList.contains('tile') && el.dataset.tileId);
+
             const tileData = {
                 id: Date.now().toString(),
                 name: tileName,
                 url: tileUrl,
                 projectId: currentProjectId,
-                dashboardId: currentDashboardId
+                dashboardId: currentDashboardId,
+                order: existingTiles.length
             };
 
             await saveTile(currentProjectId, tileData);
@@ -1148,13 +1108,18 @@ function createDashboardTabs(dashboards, activeId) {
             currentProjectId &&
             tileName &&
             (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
-          ) {          
+          ) {
+            // Get current tile count for proper order assignment
+            const existingTiles = Array.from(currentProjectContainer.children)
+                .filter(el => el.classList.contains('tile') && el.dataset.tileId);
+
             const tileData = {
                 id: Date.now().toString(),
                 name: tileName,
                 url: tileUrl,
                 projectId: currentProjectId,
-                dashboardId: currentDashboardId
+                dashboardId: currentDashboardId,
+                order: existingTiles.length
             };
 
             await saveTile(currentProjectId, tileData);
@@ -1229,7 +1194,6 @@ function createDashboardTabs(dashboards, activeId) {
         dashboardModal.style.display = "flex";
         dashboardNameInput.value = "";
         dashboardNameInput.focus();
-        dashboardModal.querySelector('h2').textContent = "Create New Dashboard";
     });
 
     // Edit Dashboard button
@@ -1982,14 +1946,14 @@ function createDashboardTabs(dashboards, activeId) {
 
             if (dashboards && dashboards.length > 0) {
                 const currentId = localStorage.getItem('currentDashboardId') || dashboards[0].id;
-                
+
                 // Validate that the current dashboard still exists
                 const validCurrentId = dashboards.find(d => d.id === currentId) ? currentId : dashboards[0].id;
                 if (validCurrentId !== currentId) {
                     localStorage.setItem('currentDashboardId', validCurrentId);
                     currentDashboardId = validCurrentId;
                 }
-                
+
                 createDashboardTabs(dashboards, validCurrentId);
             }
         } catch (error) {
@@ -2072,10 +2036,7 @@ function createDashboardTabs(dashboards, activeId) {
                 const newName = tileNameInput.value.trim();
                 const newUrl = tileUrlInput.value.trim();
 
-                if (newName && (() => {
-                    try { const u = new URL(newUrl); return u.protocol === 'http:' || u.protocol === 'https:'; }
-                    catch { return false; }
-                  })()) {                  
+                if (newName && isValidUrl(newUrl)) {
                     const db = await initDB();
                     const tx = db.transaction(['tiles'], 'readwrite');
                     const store = tx.objectStore('tiles');
@@ -2133,34 +2094,21 @@ function createDashboardTabs(dashboards, activeId) {
 
         tile.addEventListener("click", function(e) {
             if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
-              e.preventDefault(); // Prevent default navigation
-          
-              // block internal schemes (chrome://, chrome-extension://, etc.)
-              try {
-                const u = new URL(tileData.url);
-                if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-                  alert('This internal Chrome page can’t be opened from Lifetiles.');
-                  return;
+                e.preventDefault(); // Prevent default navigation
+                if (e.metaKey || e.ctrlKey) {
+                    window.open(tileData.url, '_blank');
+                } else {
+                    // Direct navigation to the tile URL
+                    window.location.href = tileData.url;
                 }
-              } catch {
-                return; // bad URL, do nothing
-              }
-          
-              if (e.metaKey || e.ctrlKey) {
-                window.open(tileData.url, '_blank');
-              } else {
-                window.location.href = tileData.url;
-              }
             }
-          });
-          
+        });
 
         const thumbnailElement = document.createElement("div");
         thumbnailElement.className = "tile-thumbnail";
 
         try {
             const url = new URL(tileData.url);
-            const skipFavicon = url.protocol !== 'http:' && url.protocol !== 'https:';
 
             // Helper function to show initials when favicon fails
             const showInitials = () => {
@@ -2170,35 +2118,125 @@ function createDashboardTabs(dashboards, activeId) {
                 thumbnailElement.style.backgroundColor = bgColor;
                 thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
             };
-        if (skipFavicon) { showInitials(); } else {
-           
 
-            let src = await checkFaviconCache(url.hostname);
+            // Check cached favicon first
+            const cachedFavicon = await checkFaviconCache(url.hostname);
+            if (cachedFavicon) {
+                thumbnailElement.style.backgroundImage = `url('${cachedFavicon}')`;
+                thumbnailElement.innerHTML = '';
+            }
 
-            if (src) {
-              const ok = await probeImage(src);
-              if (!ok) {
-                // purge bad cache + session memo, then retry via CDN probes
+            // Try multiple favicon sources with base domain for SSO
+            const baseDomain = url.hostname.split('.').slice(-2).join('.');
+            const faviconSources = [
+                `${url.origin}/favicon.ico`,
+                `${url.origin}/apple-touch-icon.png`,
+                `${url.origin}/apple-touch-icon-precomposed.png`,
+                `https://${baseDomain}/favicon.ico`,
+                `https://www.google.com/s2/favicons?sz=64&domain=${baseDomain}`,
+                `https://icon.horse/icon/${baseDomain}`,
+                `https://favicons.githubusercontent.com/${baseDomain}`,
+                `https://api.faviconkit.com/${baseDomain}/32`
+            ];
+
+            const tryNextFavicon = async (index = 0) => {
+                if (index >= faviconSources.length) {
+                    showInitials();
+                    return;
+                }
+
                 try {
-                  const db = await initDB();
-                  const tx = db.transaction(['favicons'], 'readwrite');
-                  tx.objectStore('favicons').delete(url.hostname);
-                } catch {}
-                sessionFaviconCache.delete?.(url.hostname);
-                src = await loadFaviconForHost(url.hostname);
-              }
-            } else {
-              src = await loadFaviconForHost(url.hostname);
-            }
-            
-            if (src) {
-              thumbnailElement.style.backgroundColor = 'transparent';
-              thumbnailElement.style.backgroundImage = `url("${src}")`;
-              thumbnailElement.innerHTML = '';
-            } else {
-              showInitials();
-            }
-        }
+                    await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = async () => {
+                            if (img.width > 0) {
+                                thumbnailElement.style.backgroundImage = `url('${faviconSources[index]}')`;
+                                thumbnailElement.style.backgroundColor = 'transparent';
+                                thumbnailElement.innerHTML = '';
+                                await saveFaviconToCache(url.hostname, faviconSources[index]);
+                                resolve(true);
+                            } else {
+                                reject(new Error("Invalid icon"));
+                            }
+                        };
+                        img.onerror = () => reject(new Error("Failed to load"));
+                        img.src = faviconSources[index];
+                    });
+                } catch (e) {
+                    await tryNextFavicon(index + 1);
+                }
+            };
+
+            tryNextFavicon();
+
+            // Call the favicon fetching function
+            const tryCommonFaviconLocations = async () => {
+                try {
+                    // Try direct favicon locations first
+                    const directLocations = [
+                        `${url.origin}/favicon.ico`,
+                        `${url.origin}/favicon.png`,
+                        `${url.origin}/favicon.svg`
+                    ];
+
+                    // Then try other common locations
+                    const otherLocations = [
+                        `${url.origin}/apple-touch-icon.png`,
+                        `${url.origin}/apple-touch-icon-precomposed.png`,
+                        `${url.origin}/assets/favicon.ico`,
+                        `${url.origin}/images/favicon.ico`,
+                        `${url.origin}/img/favicon.ico`,
+                        `${url.origin}/static/favicon.ico`,
+                        `${url.origin}/icons/favicon.ico`,
+                        `https://www.google.com/s2/favicons?sz=64&domain=${url.hostname}`
+                    ];
+
+                    // Combine locations with direct ones first
+                    const commonLocations = [...directLocations, ...otherLocations];
+
+                    for (const location of commonLocations) {
+                        const img = new Image();
+                        try {
+                            await new Promise((resolve, reject) => {
+                                img.onload = () => {
+                                    if (img.width > 16) {
+                                        thumbnailElement.style.backgroundImage = `url('${location}')`;
+                                        // Cache the successful favicon
+                                        saveFaviconToCache(url.hostname, location);
+                                        resolve(true);
+                                    } else {
+                                        reject(new Error("Icon too small"));
+                                    }
+                                };
+                                img.onerror = () => reject(new Error("Failed to load"));
+                                img.src = location;
+
+                                // Set a timeout in case the image hangs
+                                setTimeout(() => reject(new Error("Timeout")), 1000);
+                            });
+                            // If we get here, we found a working favicon
+                            return true;
+                        } catch (e) {
+                            console.log(`Favicon not found at ${location}`);
+                            // Continue to the next location
+                        }
+                    }
+                    return false;
+                } catch (error) {
+                    console.error('Error in tryCommonFaviconLocations:', error);
+                    return false;
+                }
+            };
+
+            // Attempt to fetch favicon
+            tryCommonFaviconLocations().then(success => {
+                if (!success) {
+                    showInitials();
+                }
+            }).catch(err => {
+                console.error("Error in favicon fetch:", err);
+                showInitials();
+            });
         } catch (error) {
             console.error('Error handling thumbnail:', error);
             thumbnailElement.style.backgroundImage = 'none';
@@ -2219,149 +2257,146 @@ function createDashboardTabs(dashboards, activeId) {
         const addTileButton = container.querySelector('.add-tile-button');
         container.insertBefore(tile, addTileButton);
     }
+// --- helper: get current tile order from DOM (ignores add-tile button) ---
+function getOrderedTileIds(containerEl) {
+    return Array.from(containerEl.children)
+      .filter((el) => el.classList.contains('tile') && !el.classList.contains('add-tile-button'))
+      .map((el) => el.dataset.tileId)
+      .filter(Boolean);
+  }
+  async function updateProjectOrder(evt) {
+    try {
+      const container = document.getElementById('projects-container');
+      const projectEls = Array.from(container.querySelectorAll('.project')); // skips the "New Project" button
+      const db = await initDB();
+      const tx = db.transaction(['projects'], 'readwrite');
+      const store = tx.objectStore('projects');
 
-    function showPopupSaveModal(url, title) {
-        currentProjectContainer = document.querySelector('.tiles-container');
-        currentProjectId = currentProjectContainer.parentElement.dataset.projectId;
-
-        popupTileUrlInput.value = url;
-        popupTileNameInput.value = title || '';
-        validatePopupTileInputs();
-
-        popupSaveModal.style.display = "flex";
-        popupTileNameInput.focus();
+      await Promise.all(projectEls.map((el, index) => new Promise((resolve, reject) => {
+        const id = el.dataset.projectId;
+        const getReq = store.get(id);
+        getReq.onsuccess = () => {
+          const proj = getReq.result;
+          if (!proj) return resolve();
+          proj.order = index;
+          const putReq = store.put(proj);
+          putReq.onsuccess = resolve;
+          putReq.onerror  = () => reject(putReq.error);
+        };
+        getReq.onerror = () => reject(getReq.error);
+      })));
+    } catch (e) {
+      console.error('updateProjectOrder failed:', e);
     }
+  }
+async function updateTileOrder(evt, fromProjectId, toProjectId) {
+        try {
+            const db = await initDB();
 
-    document.addEventListener("click", (e) => {
-        if (!e.target.closest('.project-menu') &&
-            !e.target.closest('.project-menu-trigger') &&
-            !e.target.closest('.tile-menu') &&
-            !e.target.closest('.tile-menu-trigger') &&
-            !e.target.closest('.dashboard-actions-menu') &&
-            !e.target.closest('.dashboard-menu-trigger')) {
-            closeAllMenus();
-        }
-    });
-/*
-    function editDashboard(dashboardId, tab) {
-        dashboardModal.style.display = "flex";
-        dashboardModal.querySelector('h2').textContent = "Edit Dashboard";
-
-        chrome.storage.sync.get(['dashboards'], function(result) {
-            const dashboards = result.dashboards || [];
-            const dashboard = dashboards.find(d => d.id === dashboardId);
-            if (dashboard) {
-                dashboardNameInput.value = dashboard.name;
-                validateDashboardInput();
-
-                // Replace the default create handler with an edit handler
-                const newSubmitBtn = submitDashboardBtn.cloneNode(true);
-                submitDashboardBtn.parentNode.replaceChild(newSubmitBtn, submitDashboardBtn);
-                submitDashboardBtn = newSubmitBtn;
-
-                submitDashboardBtn.addEventListener('click', async function editDashboardHandler() {
-                    const newName = dashboardNameInput.value.trim();
-                    if (newName) {
-                        const db = await initDB();
-                        const tx = db.transaction(['dashboards'], 'readwrite');
-                        const store = tx.objectStore('dashboards');
-                        const request = store.get(dashboardId);
-                        request.onsuccess = async () => {
-                            const updatedDashboard = request.result;
-                            updatedDashboard.name = newName;
-                            const updateRequest = store.put(updatedDashboard);
-                            updateRequest.onsuccess = () => {
-                                // Update the tab name
-                                tab.textContent = newName;
-                                closeDashboardModalHandler();
-
-                                // Reset the submit button to create mode
-                                const oldBtn = submitDashboardBtn;
-                                submitDashboardBtn = oldBtn.cloneNode(true);
-                                oldBtn.parentNode.replaceChild(submitDashboardBtn, oldBtn);
-                                submitDashboardBtn.addEventListener('click', createNewDashboard);
-                            };
-                        };
-                    }
-                });
+            // Ensure we have valid project IDs
+            if (!fromProjectId || !toProjectId) {
+                console.error('Invalid project IDs:', fromProjectId, toProjectId);
+                return;
             }
-        });
+
+            // Get the dragged tile ID from the event
+            const draggedTileId = evt.item.dataset.tileId;
+            if (!draggedTileId) {
+                console.error('No tile ID found on dragged element');
+                return;
+            }
+
+            console.log(`Updating tile order: ${draggedTileId} from ${fromProjectId} to ${toProjectId}`);
+
+            // Use separate transactions to avoid conflicts
+            if (fromProjectId !== toProjectId) {
+                // Handle cross-project move
+                await handleCrossProjectMove(db, draggedTileId, fromProjectId, toProjectId, evt);
+            } else {
+                // Handle same-project reorder
+                await handleSameProjectReorder(db, toProjectId, evt);
+            }
+
+            // Remove hover states from all add-tile buttons after drag
+            document.querySelectorAll('.add-tile-button').forEach(button => {
+                button.classList.remove('hover');
+            });
+
+        } catch (error) {
+            console.error('Error updating tile order:', error);
+        }
     }
-*/
-    async function updateProjectOrder(evt) {
-        const db = await initDB();
-        const tx = db.transaction(['projects'], 'readwrite');
-        const projectStore = tx.objectStore('projects');
 
-        const projectElements = Array.from(document.querySelectorAll('.project'));
+    async function handleCrossProjectMove(db, draggedTileId, fromProjectId, toProjectId, evt) {
+        // First, update the dragged tile's project
+        const tx1 = db.transaction(['tiles'], 'readwrite');
+        const store1 = tx1.objectStore('tiles');
 
-        // Update each project's order based on its current position
-        const promises = projectElements.map(async (element, index) => {
-            const projectId = element.dataset.projectId;
+        await new Promise((resolve, reject) => {
+            const getRequest = store1.get(draggedTileId);
+            getRequest.onsuccess = () => {
+                const tileData = getRequest.result;
+                if (tileData) {
+                    tileData.projectId = toProjectId;
+                    tileData.dashboardId = currentDashboardId;
+                    const putRequest = store1.put(tileData);
+                    putRequest.onsuccess = () => resolve();
+                    putRequest.onerror = () => reject(putRequest.error);
+                } else {
+                    reject(new Error('Tile not found: ' + draggedTileId));
+                }
+            };
+            getRequest.onerror = () => reject(getRequest.error);
+        });
+
+        // Wait for transaction to complete
+        await new Promise(resolve => {
+            tx1.oncomplete = resolve;
+        });
+
+        // Then reorder both projects
+        await handleSameProjectReorder(db, fromProjectId, { from: evt.from });
+        await handleSameProjectReorder(db, toProjectId, { to: evt.to });
+    }
+
+    async function handleSameProjectReorder(db, projectId, evt) {
+        const container = evt.to || evt.from;
+        if (!container) return;
+
+        const tileElements = Array.from(container.children).filter(el =>
+            el.classList.contains('tile') && el.dataset.tileId
+        );
+
+        if (tileElements.length === 0) return;
+
+        const tx = db.transaction(['tiles'], 'readwrite');
+        const store = tx.objectStore('tiles');
+
+        // Update each tile's order based on its DOM position
+        const promises = tileElements.map((el, index) => {
+            const tileId = el.dataset.tileId;
             return new Promise((resolve, reject) => {
-                const request = projectStore.get(projectId);
-                request.onsuccess = () => {
-                    const project = request.result;
-                    if (project) {
-                        project.order = index;
-                        const updateRequest = projectStore.put(project);
-                        updateRequest.onsuccess = () => resolve();
-                        updateRequest.onerror = () => reject(updateRequest.error);
+                const getRequest = store.get(tileId);
+                getRequest.onsuccess = () => {
+                    const tileData = getRequest.result;
+                    if (tileData && tileData.projectId === projectId) {
+                        tileData.order = index;
+                        const putRequest = store.put(tileData);
+                        putRequest.onsuccess = () => resolve();
+                        putRequest.onerror = () => reject(putRequest.error);
                     } else {
-                        resolve();
+                        resolve(); // Skip tiles that don't belong to this project
                     }
                 };
-                request.onerror = () => reject(request.error);
+                getRequest.onerror = () => reject(getRequest.error);
             });
         });
 
         await Promise.all(promises);
     }
 
-    async function updateTileOrder(evt, fromProjectId, toProjectId) {
-        try {
-          const db = await initDB();
-          const tx = db.transaction(['tiles'], 'readwrite');
-          const store = tx.objectStore('tiles');
-      
-          // 1) Get the authoritative order from Sortable (uses dataIdAttr)
-          const toSortable   = Sortable.get(evt.to);
-          const fromSortable = (evt.from !== evt.to) ? Sortable.get(evt.from) : null;
-      
-          const toIds   = (toSortable   && typeof toSortable.toArray === 'function')   ? toSortable.toArray()   : [];
-          const fromIds = (fromSortable && typeof fromSortable.toArray === 'function') ? fromSortable.toArray() : [];
-      
-          const writeOne = (id, index, newProjectId) => new Promise((resolve, reject) => {
-            const getReq = store.get(id);
-            getReq.onsuccess = () => {
-              const rec = getReq.result;
-              if (!rec) return resolve();
-              rec.order = index;
-              if (newProjectId != null) rec.projectId = newProjectId; // cross-project moves
-              const putReq = store.put(rec);
-              putReq.onsuccess = resolve;
-              putReq.onerror  = () => reject(putReq.error);
-            };
-            getReq.onerror = () => reject(getReq.error);
-          });
-      
-          // 2) Persist destination list (always)
-          const writes = [];
-          for (let i = 0; i < toIds.length; i++) writes.push(writeOne(toIds[i], i, toProjectId));
-      
-          // 3) If moved across projects, reindex the source list too
-          if (fromProjectId !== toProjectId && fromIds.length) {
-            for (let i = 0; i < fromIds.length; i++) writes.push(writeOne(fromIds[i], i, null));
-          }
-      
-          await Promise.all(writes);
-        } catch (err) {
-          console.error('updateTileOrder failed:', err);
-        }
-      }
-      
-      
- 
+
+
     async function getProjectTiles(projectId) {
         const db = await initDB();
         const tx = db.transaction(['tiles'], 'readonly');
@@ -2372,7 +2407,7 @@ function createDashboardTabs(dashboards, activeId) {
             request.onsuccess = () => resolve(request.result || []);
         });
     }
-}); 
+});
 
 async function initDB() {
     return new Promise((resolve, reject) => {
@@ -2486,14 +2521,14 @@ async function migrateFromChromeStorage() {
                 bulkActionsBar.remove();
             }
         });
-    
+
     // Async functions for getting fresh project and tile data to the edit modals
     }
     async function getTileById(id) {
         const db = await initDB();
         const tx = db.transaction('tiles', 'readonly');
         const store = tx.objectStore('tiles');
-    
+
         return new Promise((resolve, reject) => {
             const request = store.get(id);
             request.onsuccess = () => resolve(request.result || null);
@@ -2505,43 +2540,10 @@ async function migrateFromChromeStorage() {
         const db = await initDB();
         const tx = db.transaction('projects', 'readonly');
         const store = tx.objectStore('projects');
-      
+
         return new Promise((resolve, reject) => {
           const req = store.get(id);
           req.onsuccess = () => resolve(req.result || null);
           req.onerror  = () => reject(req.error);
         });
       }
-// --- helper: get current tile order from DOM (ignores add-tile button) ---
-function getOrderedTileIds(containerEl) {
-    return Array.from(containerEl.children)
-      .filter((el) => el.matches('.tile') && !el.classList.contains('add-tile-button'))
-      .map((el) => el.dataset.tileId)
-      .filter(Boolean);
-  }
-  async function updateProjectOrder(evt) {
-    try {
-      const container = document.getElementById('projects-container');
-      const projectEls = Array.from(container.querySelectorAll('.project')); // skips the "New Project" button
-      const db = await initDB();
-      const tx = db.transaction(['projects'], 'readwrite');
-      const store = tx.objectStore('projects');
-  
-      await Promise.all(projectEls.map((el, index) => new Promise((resolve, reject) => {
-        const id = el.dataset.projectId;
-        const getReq = store.get(id);
-        getReq.onsuccess = () => {
-          const proj = getReq.result;
-          if (!proj) return resolve();
-          proj.order = index;
-          const putReq = store.put(proj);
-          putReq.onsuccess = resolve;
-          putReq.onerror  = () => reject(putReq.error);
-        };
-        getReq.onerror = () => reject(getReq.error);
-      })));
-    } catch (e) {
-      console.error('updateProjectOrder failed:', e);
-    }
-  }
-  
