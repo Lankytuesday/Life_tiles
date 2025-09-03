@@ -535,7 +535,7 @@ function createDashboardTabs(dashboards, activeId) {
             return;
         }
 
-        // Create current dashboard selector
+        // Create current dashboard display element
         const currentDashboard = dashboards.find(d => d.id === activeId) || dashboards[0];
         if (!currentDashboard) {
             console.error('No current dashboard found');
@@ -564,44 +564,90 @@ function createDashboardTabs(dashboards, activeId) {
                 dropdownContainer.classList.toggle('active');
             });
 
-            // Add dashboards to dropdown
+            // Create scrollable area for dashboard tabs
+            const scrollArea = document.createElement('div');
+            scrollArea.classList.add('dashboard-dropdown-scroll');
+
+            // Add all dashboard tabs to scroll area
             dashboards.forEach(dashboard => {
                 const tab = document.createElement('button');
                 tab.classList.add('dashboard-tab');
                 tab.textContent = dashboard.name;
                 tab.dataset.dashboardId = dashboard.id;
 
-                // Add tooltip only if text might overflow
-                if (dashboard.name.length > 20) {
-                    tab.title = dashboard.name;
-                }
-
-                // Apply custom color if available
-                if (dashboard.color) {
-                    tab.style.setProperty('--dashboard-indicator-color', dashboard.color);
-                }
-
                 if (dashboard.id === activeId) {
                     tab.classList.add('active');
                 }
 
                 tab.addEventListener('click', function() {
-                    switchDashboard(dashboard.id);
-                    currentElement.textContent = dashboard.name;
+                    const newDashboardId = this.dataset.dashboardId;
+
+                    // Update current display
+                    const newDashboardName = dashboards.find(d => d.id === newDashboardId)?.name || 'Dashboard';
+                    currentElement.textContent = newDashboardName;
 
                     // Only set title attribute if name is likely to be truncated
-                    if (dashboard.name.length > 20) {
-                        currentElement.title = dashboard.name;
+                    if (newDashboardName.length > 20) {
+                        currentElement.title = newDashboardName;
                     } else {
                         currentElement.removeAttribute('title');
                     }
 
+                    // Update active states
+                    document.querySelectorAll('.dashboard-tab').forEach(t => {
+                        t.classList.toggle('active', t.dataset.dashboardId === newDashboardId);
+                    });
+
                     currentElement.classList.remove('active');
                     dropdownContainer.classList.remove('active');
+
+                    // Switch to the selected dashboard
+                    switchDashboard(newDashboardId);
                 });
 
-                dropdownContainer.appendChild(tab);
+                scrollArea.appendChild(tab);
             });
+
+            // Add manage dashboards button as sticky footer
+            const manageDashboardsBtn = document.createElement('button');
+            manageDashboardsBtn.className = 'dashboard-tab manage-dashboards-footer';
+            manageDashboardsBtn.innerHTML = '<span class="settings-icon">⚙</span> Manage Dashboards';
+            manageDashboardsBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                currentElement.classList.remove('active');
+                dropdownContainer.classList.remove('active');
+                openManageDashboardsModal();
+            });
+
+            dropdownContainer.appendChild(scrollArea);
+            dropdownContainer.appendChild(manageDashboardsBtn);
+
+            // Delegate wheel/touch from the footer into the scroll area
+            dropdownContainer.addEventListener('wheel', (e) => {
+                if (e.target.closest('.manage-dashboards-footer')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    scrollArea.scrollTop += (e.deltaY || 0);
+                }
+            }, { passive: false });
+
+            let _mdLastY = 0;
+            dropdownContainer.addEventListener('touchstart', (e) => {
+                if (e.target.closest('.manage-dashboards-footer') && e.touches[0]) {
+                    _mdLastY = e.touches[0].clientY;
+                }
+            }, { passive: true });
+
+            dropdownContainer.addEventListener('touchmove', (e) => {
+                if (e.target.closest('.manage-dashboards-footer') && e.touches[0]) {
+                    const dy = _mdLastY - e.touches[0].clientY; // >0 means scroll down
+                    _mdLastY = e.touches[0].clientY;
+                    scrollArea.scrollTop += dy;
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, { passive: false });
 
             // Close dropdown when clicking outside
             document.addEventListener('click', function(e) {
@@ -1621,10 +1667,17 @@ function createDashboardTabs(dashboards, activeId) {
                             });
 
                             for (const tile of tiles) {
-                                tileStore.delete(tile.id);
+                                await new Promise((resolve) => {
+                                    const request = tileStore.delete(tile.id);
+                                    request.onsuccess = resolve;
+                                });
                             }
 
-                            projectStore.delete(project.id);
+                            // Delete the project
+                            await new Promise((resolve) => {
+                                const request = projectStore.delete(project.id);
+                                request.onsuccess = resolve;
+                            });
                         }
 
                         // Delete the dashboard

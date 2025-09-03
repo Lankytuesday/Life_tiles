@@ -93,26 +93,42 @@
     margin-top: 4px;
     min-width: 200px;
     max-height: 300px;
+    width: 100%;
+    overscroll-behavior: contain;
+}
+
+.dashboard-dropdown-scroll {
     overflow-y: auto;
+    max-height: 250px;
+    flex: 1;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
 }
 
 /* Simple scrollbar styling for better visibility */
-#dashboard-dropdown::-webkit-scrollbar {
+.dashboard-dropdown-scroll::-webkit-scrollbar {
     width: 6px;
 }
 
-#dashboard-dropdown::-webkit-scrollbar-track {
+.dashboard-dropdown-scroll::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 3px;
 }
 
-#dashboard-dropdown::-webkit-scrollbar-thumb {
+.dashboard-dropdown-scroll::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 3px;
 }
 
-#dashboard-dropdown::-webkit-scrollbar-thumb:hover {
+.dashboard-dropdown-scroll::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
+}
+
+.dashboard-dropdown-scroll,
+.manage-dashboards-footer {
+  overscroll-behavior: contain;
 }
 
 #dashboard-dropdown.active {
@@ -129,6 +145,12 @@
     color: #333;
     transition: background-color 0.2s ease;
     border-radius: 0;
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    flex: none;
+    flex-shrink: 0;
+    min-width: 0;
 }
 
 .dashboard-tab:hover {
@@ -147,9 +169,28 @@
     border-top-right-radius: 8px;
 }
 
-.dashboard-tab:last-child {
+.dashboard-tab:last-child:not(.manage-dashboards-footer) {
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
+}
+
+.manage-dashboards-footer {
+    border-top: 2px solid #e8f0fe;
+    background: #f8f9fa;
+    font-size: 13px;
+    color: #1a73e8;
+    font-weight: 500;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
+    flex-shrink: 0;
+    margin-top: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.manage-dashboards-footer:hover {
+    background: #e8f0fe;
+    color: #1557b0;
 }
 
 /* Dashboard actions menu styles */
