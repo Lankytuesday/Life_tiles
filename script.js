@@ -2147,13 +2147,11 @@ function createDashboardTabs(dashboards, activeId) {
 
         tile.addEventListener("click", function(e) {
             if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
-                e.preventDefault(); // Prevent default navigation
-                if (e.metaKey || e.ctrlKey) {
-                    window.open(tileData.url, '_blank');
-                } else {
-                    // Direct navigation to the tile URL
-                    window.location.href = tileData.url;
-                }
+                e.preventDefault(); // keep drag/click behavior clean
+                // Always open tiles in a new tab
+                const win = window.open(tileData.url, '_blank', 'noopener,noreferrer');
+                // (optional) focus the new tab if the browser allows
+                win?.focus?.();
             }
         });
 
