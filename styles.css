@@ -148,7 +148,7 @@
     .app-shell {
         grid-template-columns: 1fr;
     }
-    
+
     .sidebar {
         display: none; /* Hide sidebar on mobile for now */
     }
@@ -916,14 +916,33 @@ html, body {
   height: 100dvh;                   /* full viewport for the grid */
 }
 
-/* Sidebar stays pinned and scrolls by itself */
-#sidebar {
-  position: sticky;   /* or use 'fixed' if you prefer absolute pinning */
+/* Sidebar: shell only (no scrollbar) */
+#sidebar,
+.sidebar {
+  overflow: hidden;         /* ensure the shell itself never scrolls */
+  height: 100dvh;           /* keep full-height column */
+  display: flex;
+  flex-direction: column;
+  position: sticky;
   top: 0;
-  height: 100dvh;
+}
+
+/* Sticky header stays outside the scroller */
+.sidebar-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+/* List: the only scroll container */
+#sidebar-list,
+.sidebar-list {
+  flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable; /* optional: reserves gutter, avoids overlay */
 }
 
 /* Main content scrolls by itself */
@@ -932,11 +951,6 @@ html, body {
   overflow: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-}
-
-/* Sidebar list itself can be long; make sure it doesn't grow past container */
-#sidebar-list {
-  overflow: visible;     /* list flows; container handles scroll */
 }
 
 /* Safety on modals/menus in case they sit at edges */
