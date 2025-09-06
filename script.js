@@ -705,7 +705,11 @@ function createDashboardTabs(dashboards, activeId) {
     async function loadProjects(projects = []) {
         if (projects && projects.length > 0) {
             // Sort projects by order before creating elements
-            projects.sort((a, b) => (a.order || 0) - (b.order || 0));
+            projects.sort((a, b) => {
+                const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+                const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+                return ao - bo || String(a.id).localeCompare(String(b.id));
+            });
 
             const db = await initDB();
             const tx = db.transaction(['tiles'], 'readonly');
@@ -718,7 +722,11 @@ function createDashboardTabs(dashboards, activeId) {
                     request.onsuccess = () => {
                         const tiles = request.result || [];
                         // Sort tiles by order property
-                        tiles.sort((a, b) => (a.order || 0) - (b.order || 0));
+                        tiles.sort((a, b) => {
+                            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+                            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+                            return ao - bo || String(a.id).localeCompare(String(b.id));
+                        });
                         console.log(`Loaded ${tiles.length} tiles for project ${projectData.id}`);
                         resolve(tiles);
                     };
@@ -730,6 +738,9 @@ function createDashboardTabs(dashboards, activeId) {
                     try { const u = new URL(t.url); return u.protocol === 'http:' || u.protocol === 'https:'; }
                     catch { return false; }
                 });
+
+                // Sort tiles before creating project element
+                sortTilesInPlace(safeTiles);
 
                 // Create a new project object with tiles included
                 const projectWithTiles = {
@@ -787,7 +798,9 @@ function createDashboardTabs(dashboards, activeId) {
                 name: tileData.name,
                 url: tileData.url,
                 projectId: projectId,
-                dashboardId: currentDashboardId
+                dashboardId: currentDashboardId,
+                // ✅ keep the order assigned at creation (existingTiles.length)
+                order: Number.isFinite(+tileData.order) ? +tileData.order : 0
             });
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
@@ -1062,7 +1075,8 @@ function createDashboardTabs(dashboards, activeId) {
                     console.log('Starting drag for tile:', tileId);
                 }
             },
-            onEnd: function(evt) {
+            onEnd: async function (evt) {
+                // remove any drag state you set elsewhere
                 document.body.classList.remove('dragging');
 
                 // Re-enable all add buttons after drag
@@ -1079,13 +1093,37 @@ function createDashboardTabs(dashboards, activeId) {
                     evt.to.appendChild(addTileButton);
                 }
 
-                var fromProjectId = evt.from.closest('.project').dataset.projectId;
-                var toProjectId = evt.to.closest('.project').dataset.projectId;
+                const db = await initDB();
+                const tx = db.transaction(['tiles'], 'readwrite');
+                const store = tx.objectStore('tiles');
 
-                // Ensure the transaction completes before moving on
-                requestAnimationFrame(() => {
-                    updateTileOrder(evt, fromProjectId, toProjectId);
-                });
+                const resequence = (container) => {
+                    if (!container) return;
+                    const projEl = container.closest('.project');
+                    if (!projEl) return;
+                    const projectId = String(projEl.dataset.projectId);
+
+                    // only real tiles; skip placeholders
+                    const tileEls = [...container.querySelectorAll('.tile[data-tile-id]')];
+                    tileEls.forEach((el, idx) => {
+                        const tileId = el.dataset.tileId; // string id
+                        const getReq = store.get(tileId);
+                        getReq.onsuccess = () => {
+                            const rec = getReq.result;
+                            if (!rec) return;
+                            rec.projectId = projectId;     // normalize container ownership
+                            rec.order = idx;               // 0..N numeric
+                            store.put(rec);
+                        };
+                    });
+                };
+
+                // handle same-project and cross-project moves
+                resequence(evt.from);
+                resequence(evt.to);
+
+                // ✅ ensure all writes have actually committed before UI/broadcast
+                await new Promise(res => tx.oncomplete = res);
             },
             onMove: function(evt) {
                 return !evt.related.classList.contains('add-tile-button');
@@ -1172,6 +1210,13 @@ function createDashboardTabs(dashboards, activeId) {
             createTileElement(currentProjectContainer, tileData);
             closePopupModalHandler();
         }
+    }
+
+    // Function to sort tiles by order with stable tiebreaker
+    function sortTilesInPlace(tiles) {
+        // coerce in place so later code always sees numbers
+        for (const t of tiles) t.order = Number.isFinite(+t.order) ? +t.order : Number.MAX_SAFE_INTEGER;
+        tiles.sort((a, b) => a.order - b.order || String(a.id).localeCompare(String(b.id)));
     }
 
     // Function to generate a color based on domain
@@ -2030,9 +2075,12 @@ function createDashboardTabs(dashboards, activeId) {
     }
 
     async function createTileElement(container, tileData) {
+        if (!tileData.id) {
+            tileData.id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+        }
         const tile = document.createElement("div");
         tile.className = "tile";
-        tile.dataset.tileId = tileData.id;
+        tile.dataset.tileId = String(tileData.id); // 👈 critical for resequencing
 
         const menuTrigger = document.createElement("button");
         menuTrigger.className = "tile-menu-trigger";
@@ -2061,7 +2109,7 @@ function createDashboardTabs(dashboards, activeId) {
             e.stopPropagation();
             menuTrigger.classList.remove('active'); // Close the menu
 
- // Always get the CURRENT container and project ID at the time of clicking edit
+            // Always get the CURRENT container and project ID at the time of clicking edit
             // This ensures we're editing the tile in its current location, not its original one
             const currentContainer = tile.closest('.tiles-container');
             const currentProject = tile.closest('.project');
@@ -2158,34 +2206,26 @@ function createDashboardTabs(dashboards, activeId) {
         const thumbnailElement = document.createElement("div");
         thumbnailElement.className = "tile-thumbnail";
 
-        try {
-            const url = new URL(tileData.url);
+        // Get hostname for favicon logic
+        const safeHost = (() => { 
+            try { 
+                return new URL(tileData.url).hostname; 
+            } catch { 
+                return ''; 
+            } 
+        })();
 
-            // Helper function to show initials when favicon fails
-            const showInitials = () => {
-                const initials = getSiteInitials(url.hostname) || 'LT';
-                const bgColor = generateColorFromString(url.hostname);
-                thumbnailElement.style.backgroundImage = 'none';
-                thumbnailElement.style.backgroundColor = bgColor;
-                thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
-            };
-
-            // Use the streamlined favicon system with early returns to prevent flickering
-            const favicon = await loadFaviconForHost(url.hostname);
-            if (favicon) {
-                thumbnailElement.style.backgroundImage = `url('${favicon}')`;
-                thumbnailElement.style.backgroundColor = 'transparent';
-                thumbnailElement.innerHTML = '';
-            } else {
-                showInitials();
-            }
-
-        } catch (error) {
-            console.error('Error handling thumbnail:', error);
+        // Helper function to show initials
+        const showInitials = () => {
+            const initials = getSiteInitials(safeHost) || 'LT';
+            const bgColor = generateColorFromString(safeHost || 'lifetiles');
             thumbnailElement.style.backgroundImage = 'none';
-            thumbnailElement.style.backgroundColor = generateColorFromString('lifetiles');
-            thumbnailElement.innerHTML = '<span class="tile-initials">LT</span>';
-        }
+            thumbnailElement.style.backgroundColor = bgColor;
+            thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
+        };
+
+        // Show initials immediately as placeholder
+        showInitials();
 
         const nameElement = document.createElement("div");
         nameElement.className = "tile-name";
@@ -2196,9 +2236,25 @@ function createDashboardTabs(dashboards, activeId) {
         tile.appendChild(thumbnailElement);
         tile.appendChild(nameElement);
 
-        // Find the "Add Tile" button and insert the new tile before it
+        // 🔑 Insert NOW to preserve the sorted order
         const addTileButton = container.querySelector('.add-tile-button');
         container.insertBefore(tile, addTileButton);
+
+        // Fetch favicon without blocking insertion
+        (async () => {
+            try {
+                if (safeHost) {
+                    const favicon = await loadFaviconForHost(safeHost);
+                    if (favicon) {
+                        thumbnailElement.style.backgroundImage = `url('${favicon}')`;
+                        thumbnailElement.style.backgroundColor = 'transparent';
+                        thumbnailElement.innerHTML = '';
+                    } // else keep initials already shown
+                }
+            } catch {
+                // keep initials fallback
+            }
+        })();
     }
 // --- helper: get current tile order from DOM (ignores add-tile button) ---
 function getOrderedTileIds(containerEl) {
@@ -2306,36 +2362,35 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
         const container = evt.to || evt.from;
         if (!container) return;
 
-        const tileElements = Array.from(container.children).filter(el =>
-            el.classList.contains('tile') && el.dataset.tileId
+        const tileElements = Array.from(container.children).filter(
+            el => el.classList.contains('tile') && el.dataset.tileId
         );
-
-        if (tileElements.length === 0) return;
+        if (!tileElements.length) return;
 
         const tx = db.transaction(['tiles'], 'readwrite');
         const store = tx.objectStore('tiles');
 
-        // Update each tile's order based on its DOM position
-        const promises = tileElements.map((el, index) => {
+        const writes = tileElements.map((el, index) => {
             const tileId = el.dataset.tileId;
             return new Promise((resolve, reject) => {
                 const getRequest = store.get(tileId);
                 getRequest.onsuccess = () => {
-                    const tileData = getRequest.result;
-                    if (tileData && tileData.projectId === projectId) {
-                        tileData.order = index;
-                        const putRequest = store.put(tileData);
-                        putRequest.onsuccess = () => resolve();
-                        putRequest.onerror = () => reject(putRequest.error);
-                    } else {
-                        resolve(); // Skip tiles that don't belong to this project
-                    }
+                    const rec = getRequest.result;
+                    if (!rec) return resolve(); // nothing to do for orphan
+                    // ✅ Always normalize project + sequential order
+                    rec.projectId = String(projectId);
+                    rec.order = Number(index);
+                    const put = store.put(rec);
+                    put.onsuccess = () => resolve();
+                    put.onerror  = () => reject(put.error);
                 };
                 getRequest.onerror = () => reject(getRequest.error);
             });
         });
 
-        await Promise.all(promises);
+        await Promise.all(writes);
+        // ✅ make sure the transaction actually commits before we return
+        await new Promise(res => { tx.oncomplete = res; });
     }
 
 
