@@ -7,91 +7,89 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <header class="main-header">
-        <div class="header-left">
-            <img src="headericon.svg" alt="Lifetiles Logo" class="header-logo">
-        </div>
-        <div class="header-center" id="dashboard-selector-container">
-            <!-- Dashboard tabs will be inserted here -->
-        </div>
-        <div class="header-right">
-            <div class="dashboard-actions">
-                <button id="dashboard-menu-trigger" class="dashboard-menu-trigger">&#8942;</button>
-                <div id="dashboard-actions-menu" class="dashboard-actions-menu">
-                    <button id="new-dashboard" class="dashboard-action">+ New dashboard</button>
-                    <button id="edit-dashboard" class="dashboard-action">Edit Dashboard</button>
-                    <button id="remove-dashboard" class="dashboard-action">Remove Dashboard</button>
-                    <button id="manage-dashboards" class="dashboard-action">Manage Dashboards</button>
+    <div class="app-shell">
+        <!-- Sidebar -->
+        <aside id="sidebar" class="sidebar" aria-label="Dashboards navigation">
+            <div class="sidebar-header">
+                <img src="headericon.svg" alt="Lifetiles Logo" class="sidebar-logo">
+                <h2 class="sidebar-title">Dashboards</h2>
+                <button id="sidebar-add" class="icon-btn" title="New dashboard" aria-label="Add new dashboard">+</button>
+            </div>
+            <ul id="sidebar-list" class="sidebar-list" role="listbox" aria-label="Project dashboards">
+                <!-- Dashboard items will be inserted here -->
+            </ul>
+        </aside>
+
+        <!-- Main content area -->
+        <main id="main">
+            <div id="projects-container">
+                <button id="new-project" class="new-project">New Project</button>
+            </div>
+
+            <!-- Project Creation Modal -->
+            <div id="project-modal" class="modal">
+                <div class="modal-content">
+                    <h2>Create New Project</h2>
+                    <input type="text" id="project-name-input" placeholder="Enter project name">
+                    <div class="modal-buttons">
+                        <button id="close-modal" class="cancel-button">Cancel</button>
+                        <button id="submit-project-name" class="done-button" disabled>Done</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </header>
-    <div id="projects-container">
-        <button id="new-project" class="new-project">New Project</button>
-    </div>
 
-    <!-- Project Creation Modal -->
-    <div id="project-modal" class="modal">
-        <div class="modal-content">
-            <h2>Create New Project</h2>
-            <input type="text" id="project-name-input" placeholder="Enter project name">
-            <div class="modal-buttons">
-                <button id="close-modal" class="cancel-button">Cancel</button>
-                <button id="submit-project-name" class="done-button" disabled>Done</button>
+            <!-- Tile Creation Modal -->
+            <div id="tile-modal" class="modal">
+                <div class="modal-content">
+                    <h2>Create New Tile</h2>
+                    <input type="text" id="tile-name-input" placeholder="Enter tile name">
+                    <input type="url" id="tile-url-input" placeholder="Enter URL (https://...)">
+                    <div class="modal-buttons">
+                        <button id="close-tile-modal" class="cancel-button">Cancel</button>
+                        <button id="submit-tile" class="done-button" disabled>Done</button>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Tile Creation Modal -->
-    <div id="tile-modal" class="modal">
-        <div class="modal-content">
-            <h2>Create New Tile</h2>
-            <input type="text" id="tile-name-input" placeholder="Enter tile name">
-            <input type="url" id="tile-url-input" placeholder="Enter URL (https://...)">
-            <div class="modal-buttons">
-                <button id="close-tile-modal" class="cancel-button">Cancel</button>
-                <button id="submit-tile" class="done-button" disabled>Done</button>
-            </div>
-        </div>
-    </div>
+            <!-- Dashboard Creation/Edit Modal -->
+            <div id="dashboard-modal" class="modal">
+                <div class="modal-content">
+                    <h2>Create New Dashboard</h2>
+                    <input type="text" id="dashboard-name-input" placeholder="Enter dashboard name">
 
-    <!-- Dashboard Creation/Edit Modal -->
-    <div id="dashboard-modal" class="modal">
-        <div class="modal-content">
-            <h2>Create New Dashboard</h2>
-            <input type="text" id="dashboard-name-input" placeholder="Enter dashboard name">
-            
-            <div class="modal-buttons">
-                <button id="close-dashboard-modal" class="cancel-button">Cancel</button>
-                <button id="submit-dashboard-name" class="done-button" disabled>Done</button>
+                    <div class="modal-buttons">
+                        <button id="close-dashboard-modal" class="cancel-button">Cancel</button>
+                        <button id="submit-dashboard-name" class="done-button" disabled>Done</button>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
-    <!-- Popup Save Tile Modal -->
-    <div id="popup-save-modal" class="modal">
-        <div class="modal-content">
-            <h2>Save to Lifetiles</h2>
-            <input type="text" id="popup-tile-name-input" placeholder="Enter tile name">
-            <input type="url" id="popup-tile-url-input" placeholder="URL" readonly>
-            <div class="modal-buttons">
-                <button id="close-popup-modal" class="cancel-button">Cancel</button>
-                <button id="submit-popup-tile" class="done-button" disabled>Done</button>
+            <!-- Popup Save Tile Modal -->
+            <div id="popup-save-modal" class="modal">
+                <div class="modal-content">
+                    <h2>Save to Lifetiles</h2>
+                    <input type="text" id="popup-tile-name-input" placeholder="Enter tile name">
+                    <input type="url" id="popup-tile-url-input" placeholder="URL" readonly>
+                    <div class="modal-buttons">
+                        <button id="close-popup-modal" class="cancel-button">Cancel</button>
+                        <button id="submit-popup-tile" class="done-button" disabled>Done</button>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
-    
-    <!-- Manage Dashboards Modal -->
-    <div id="manage-dashboards-modal" class="modal">
-        <div class="modal-content" style="width: 480px; max-width: 90vw;">
-            <h2>Manage Dashboards</h2>
-            <div id="manage-dashboards-list" class="manage-dashboards-list">
-                <!-- Dashboard items will be populated here -->
+
+            <!-- Manage Dashboards Modal -->
+            <div id="manage-dashboards-modal" class="modal">
+                <div class="modal-content" style="width: 480px; max-width: 90vw;">
+                    <h2>Manage Dashboards</h2>
+                    <div id="manage-dashboards-list" class="manage-dashboards-list">
+                        <!-- Dashboard items will be populated here -->
+                    </div>
+                    <div class="modal-buttons">
+                        <button id="close-manage-dashboards" class="cancel-button">Close</button>
+                    </div>
+                </div>
             </div>
-            <div class="modal-buttons">
-                <button id="close-manage-dashboards" class="cancel-button">Close</button>
-            </div>
-        </div>
+        </main>
     </div>
 
     <script src="Sortable.min.js"></script>

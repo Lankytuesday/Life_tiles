@@ -251,18 +251,13 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
 
     // Dashboard Modal Elements
-    const newDashboardBtn = document.getElementById("new-dashboard");
     const dashboardModal = document.getElementById("dashboard-modal");
     const dashboardNameInput = document.getElementById("dashboard-name-input");
     let submitDashboardBtn = document.getElementById("submit-dashboard-name");
     const closeDashboardModal = document.getElementById("close-dashboard-modal");
-    const dashboardSelectorContainer = document.getElementById("dashboard-selector-container");
 
-    // Verify critical elements exist
-    if (!dashboardSelectorContainer) {
-        console.error('Dashboard selector container not found in DOM');
-        return;
-    }
+    // Setup sidebar
+    setupSidebar();
 
     // Project Modal Elements
     const newProjectBtn = document.getElementById("new-project");
@@ -473,7 +468,7 @@ new Sortable(document.getElementById('projects-container'), {
                 currentDashboardId = validCurrentId;
             }
 
-            createDashboardTabs(dashboards, validCurrentId);
+            renderSidebar(dashboards, validCurrentId);
 
             // Clear existing projects before loading new ones to prevent duplication
             const projectsContainer = document.getElementById('projects-container');
@@ -519,165 +514,199 @@ new Sortable(document.getElementById('projects-container'), {
 // make the dashboard reload callable from outside this closure
 window.__lifetilesRefresh = () => loadDashboards();
 
-function createDashboardTabs(dashboards, activeId) {
-        // Ensure we have a valid container
-        if (!dashboardSelectorContainer) {
-            console.error('Dashboard selector container not found');
-            return;
-        }
+// Create sidebar item element
+    function createSidebarItem(dashboard) {
+        const li = document.createElement('li');
+        li.className = 'sidebar-item';
+        li.setAttribute('role', 'option');
+        li.dataset.dashboardId = dashboard.id;
+        li.innerHTML = `
+            <span class="dot"></span>
+            <span class="label">${dashboard.name}</span>
+            <div class="actions">
+                <button class="sidebar-item-btn edit-btn" title="Edit" aria-label="Edit dashboard">✎</button>
+                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete dashboard">×</button>
+            </div>
+        `;
+        return li;
+    }
 
-        // Clear existing tabs
-        dashboardSelectorContainer.innerHTML = '';
-
-        // Ensure we have dashboards and a valid activeId
-        if (!dashboards || dashboards.length === 0) {
-            console.error('No dashboards provided to createDashboardTabs');
-            return;
-        }
-
-        // Create current dashboard display element
-        const currentDashboard = dashboards.find(d => d.id === activeId) || dashboards[0];
-        if (!currentDashboard) {
-            console.error('No current dashboard found');
-            return;
-        }
-
-        // Create the current dashboard display element
-        const currentElement = document.createElement('div');
-        currentElement.id = 'dashboard-selector-current';
-        currentElement.textContent = currentDashboard.name;
-
-        // Only add tooltip for long dashboard names
-        if (currentDashboard.name.length > 20) {
-            currentElement.title = currentDashboard.name;
-        }
-
-        // Only show dropdown if there's more than one dashboard
-        if (dashboards.length > 1) {
-            // Create dropdown container
-            const dropdownContainer = document.createElement('div');
-            dropdownContainer.id = 'dashboard-dropdown';
-
-            // Add click handler to toggle dropdown
-            currentElement.addEventListener('click', function() {
-                currentElement.classList.toggle('active');
-                dropdownContainer.classList.toggle('active');
+    // Render sidebar with all dashboards
+    function renderSidebar(dashboards, currentId) {
+        const list = document.getElementById('sidebar-list');
+        if (!list) return;
+        
+        list.innerHTML = '';
+        
+        // Sort dashboards by order
+        const sortedDashboards = dashboards.slice().sort((a, b) => {
+            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+            return ao - bo || String(a.id).localeCompare(String(b.id));
+        });
+        
+        sortedDashboards.forEach(dashboard => {
+            const li = createSidebarItem(dashboard);
+            li.setAttribute('aria-selected', String(dashboard.id === currentId));
+            li.tabIndex = dashboard.id === currentId ? 0 : -1;
+            
+            // Click to select dashboard
+            li.addEventListener('click', (e) => {
+                if (e.target.closest('.actions')) return; // Don't select if clicking action buttons
+                switchDashboard(dashboard.id);
             });
-
-            // Create scrollable area for dashboard tabs
-            const scrollArea = document.createElement('div');
-            scrollArea.classList.add('dashboard-dropdown-scroll');
-
-            // Add all dashboard tabs to scroll area
-            dashboards.forEach(dashboard => {
-                const tab = document.createElement('button');
-                tab.classList.add('dashboard-tab');
-                tab.textContent = dashboard.name;
-                tab.dataset.dashboardId = dashboard.id;
-
-                if (dashboard.id === activeId) {
-                    tab.classList.add('active');
-                }
-
-                tab.addEventListener('click', function() {
-                    const newDashboardId = this.dataset.dashboardId;
-
-                    // Update current display
-                    const newDashboardName = dashboards.find(d => d.id === newDashboardId)?.name || 'Dashboard';
-                    currentElement.textContent = newDashboardName;
-
-                    // Only set title attribute if name is likely to be truncated
-                    if (newDashboardName.length > 20) {
-                        currentElement.title = newDashboardName;
-                    } else {
-                        currentElement.removeAttribute('title');
-                    }
-
-                    // Update active states
-                    document.querySelectorAll('.dashboard-tab').forEach(t => {
-                        t.classList.toggle('active', t.dataset.dashboardId === newDashboardId);
-                    });
-
-                    currentElement.classList.remove('active');
-                    dropdownContainer.classList.remove('active');
-
-                    // Switch to the selected dashboard
-                    switchDashboard(newDashboardId);
-                });
-
-                scrollArea.appendChild(tab);
-            });
-
-            // Add manage dashboards button as sticky footer
-            const manageDashboardsBtn = document.createElement('button');
-            manageDashboardsBtn.className = 'dashboard-tab manage-dashboards-footer';
-            manageDashboardsBtn.innerHTML = '<span class="settings-icon">⚙</span> Manage Dashboards';
-            manageDashboardsBtn.addEventListener('click', function(e) {
-                e.preventDefault();
+            
+            // Edit button
+            const editBtn = li.querySelector('.edit-btn');
+            editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                currentElement.classList.remove('active');
-                dropdownContainer.classList.remove('active');
-                openManageDashboardsModal();
+                editDashboardInline(dashboard, li);
             });
+            
+            // Delete button
+            const deleteBtn = li.querySelector('.delete-btn');
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteDashboardFromSidebar(dashboard.id);
+            });
+            
+            list.appendChild(li);
+        });
 
-            dropdownContainer.appendChild(scrollArea);
-            dropdownContainer.appendChild(manageDashboardsBtn);
-
-            // Delegate wheel/touch from the footer into the scroll area
-            dropdownContainer.addEventListener('wheel', (e) => {
-                if (e.target.closest('.manage-dashboards-footer')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    scrollArea.scrollTop += (e.deltaY || 0);
-                }
-            }, { passive: false });
-
-            let _mdLastY = 0;
-            dropdownContainer.addEventListener('touchstart', (e) => {
-                if (e.target.closest('.manage-dashboards-footer') && e.touches[0]) {
-                    _mdLastY = e.touches[0].clientY;
-                }
-            }, { passive: true });
-
-            dropdownContainer.addEventListener('touchmove', (e) => {
-                if (e.target.closest('.manage-dashboards-footer') && e.touches[0]) {
-                    const dy = _mdLastY - e.touches[0].clientY; // >0 means scroll down
-                    _mdLastY = e.touches[0].clientY;
-                    scrollArea.scrollTop += dy;
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }, { passive: false });
-
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(e) {
-                if (!dashboardSelectorContainer.contains(e.target)) {
-                    currentElement.classList.remove('active');
-                    dropdownContainer.classList.remove('active');
+        // Optional: Make sidebar sortable for reordering
+        if (window.Sortable && !list.__sortable) {
+            list.__sortable = new Sortable(list, {
+                animation: 150,
+                onEnd: async () => {
+                    const ids = [...list.querySelectorAll('.sidebar-item')].map(li => li.dataset.dashboardId);
+                    await updateDashboardOrderFromSidebar(ids);
                 }
             });
-
-            // Indicate that dropdown is available with a visual cue
-            currentElement.style.cursor = 'pointer';
-            currentElement.classList.add('has-dropdown');
-
-            // Add elements to container
-            dashboardSelectorContainer.appendChild(currentElement);
-            dashboardSelectorContainer.appendChild(dropdownContainer);
-        } else {
-            // For a single dashboard, just show the name with no dropdown functionality
-            currentElement.style.cursor = 'default';
-            // Remove the dropdown arrow for single dashboard
-            currentElement.style.padding = '12px 18px';
-            currentElement.classList.add('single-dashboard');
-            dashboardSelectorContainer.appendChild(currentElement);
         }
     }
 
+    // Edit dashboard name inline
+    async function editDashboardInline(dashboard, listItem) {
+        const labelEl = listItem.querySelector('.label');
+        const actionsEl = listItem.querySelector('.actions');
+        
+        // Create input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = dashboard.name;
+        input.style.cssText = 'border:1px solid #ddd; border-radius:4px; padding:2px 6px; font-size:14px; width:100%;';
+        
+        // Replace label with input
+        labelEl.style.display = 'none';
+        actionsEl.style.display = 'none';
+        listItem.insertBefore(input, actionsEl);
+        input.focus();
+        input.select();
+        
+        const finishEdit = async (save = false) => {
+            const newName = input.value.trim();
+            if (save && newName && newName !== dashboard.name) {
+                try {
+                    const db = await initDB();
+                    const tx = db.transaction(['dashboards'], 'readwrite');
+                    const store = tx.objectStore('dashboards');
+                    
+                    await new Promise((resolve, reject) => {
+                        const request = store.get(dashboard.id);
+                        request.onsuccess = () => {
+                            const updated = request.result;
+                            updated.name = newName;
+                            const updateRequest = store.put(updated);
+                            updateRequest.onsuccess = () => resolve();
+                            updateRequest.onerror = () => reject(updateRequest.error);
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+                    
+                    labelEl.textContent = newName;
+                    dashboard.name = newName;
+                } catch (error) {
+                    console.error('Error updating dashboard name:', error);
+                }
+            }
+            
+            input.remove();
+            labelEl.style.display = '';
+            actionsEl.style.display = '';
+        };
+        
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') finishEdit(true);
+            if (e.key === 'Escape') finishEdit(false);
+        });
+        
+        input.addEventListener('blur', () => finishEdit(true));
+    }
+
+    // Delete dashboard from sidebar
+    async function deleteDashboardFromSidebar(dashboardId) {
+        const db = await initDB();
+        const tx = db.transaction(['dashboards'], 'readonly');
+        const store = tx.objectStore('dashboards');
+
+        const dashboards = await new Promise((resolve) => {
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result || []);
+        });
+
+        if (dashboards.length <= 1) {
+            alert("Cannot delete the last dashboard");
+            return;
+        }
+
+        if (confirm('Are you sure you want to delete this dashboard? All projects and tiles in it will be removed.')) {
+            // Use existing deletion logic
+            await deleteDashboardFromManage(dashboardId, null);
+            
+            // Refresh sidebar
+            const updatedDashboards = await loadDashboards();
+        }
+    }
+
+    // Update dashboard order from sidebar
+    async function updateDashboardOrderFromSidebar(idsInNewOrder) {
+        try {
+            const db = await initDB();
+            const tx = db.transaction(['dashboards'], 'readwrite');
+            const store = tx.objectStore('dashboards');
+
+            idsInNewOrder.forEach((id, idx) => {
+                const getReq = store.get(id);
+                getReq.onsuccess = () => {
+                    const rec = getReq.result;
+                    if (!rec) return;
+                    rec.order = idx;
+                    store.put(rec);
+                };
+            });
+            
+            await new Promise(res => tx.oncomplete = res);
+        } catch (error) {
+            console.error('Error updating dashboard order:', error);
+        }
+    }
+
+    // Setup sidebar functionality
+    function setupSidebar() {
+        const addBtn = document.getElementById('sidebar-add');
+        addBtn?.addEventListener('click', async () => {
+            dashboardModal.style.display = "flex";
+            dashboardNameInput.value = "";
+            dashboardNameInput.focus();
+        });
+    }
+
     function switchDashboard(dashboardId) {
-        // Update active tab
-        document.querySelectorAll('.dashboard-tab').forEach(tab => {
-            tab.classList.toggle('active', tab.dataset.dashboardId === dashboardId);
+        // Update active sidebar item
+        document.querySelectorAll('.sidebar-item').forEach(item => {
+            const isActive = item.dataset.dashboardId === dashboardId;
+            item.setAttribute('aria-selected', String(isActive));
+            item.tabIndex = isActive ? 0 : -1;
         });
 
         // Save current dashboard
@@ -1255,202 +1284,7 @@ function createDashboardTabs(dashboards, activeId) {
         }
     }
 
-    // Dashboard Menu Event Listeners
-    const dashboardMenuTrigger = document.getElementById("dashboard-menu-trigger");
-    const dashboardActionsMenu = document.getElementById("dashboard-actions-menu");
-    const editDashboardBtn = document.getElementById("edit-dashboard");
-    const removeDashboardBtn = document.getElementById("remove-dashboard");
-    const manageDashboardsBtn = document.getElementById("manage-dashboards");
-
-    dashboardMenuTrigger.addEventListener("click", function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        closeAllMenus();
-        dashboardActionsMenu.classList.toggle("active");
-        dashboardMenuTrigger.classList.toggle("active");
-    });
-
-    // Close menu when clicking outside
-    document.addEventListener("click", function(e) {
-        if (!dashboardActionsMenu.contains(e.target) && e.target !== dashboardMenuTrigger) {
-            dashboardActionsMenu.classList.remove("active");
-            dashboardMenuTrigger.classList.remove("active");
-        }
-    });
-
-    // New Dashboard button
-    newDashboardBtn.addEventListener("click", function() {
-        dashboardActionsMenu.classList.remove("active");
-        dashboardMenuTrigger.classList.remove("active");
-        dashboardModal.style.display = "flex";
-        dashboardNameInput.value = "";
-        dashboardNameInput.focus();
-    });
-
-    // Edit Dashboard button
-    editDashboardBtn.addEventListener("click", async function() {
-        dashboardActionsMenu.classList.remove("active");
-        dashboardMenuTrigger.classList.remove("active");
-        if (currentDashboardId) {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const store = tx.objectStore('dashboards');
-            const request = store.get(currentDashboardId);
-            request.onsuccess = async () => {
-                const dashboard = request.result;
-                if (dashboard) {
-                    dashboardModal.style.display = "flex";
-                    dashboardModal.querySelector('h2').textContent = "Edit Dashboard";
-                    dashboardNameInput.value = dashboard.name;
-                    validateDashboardInput();
-
-                    // Replace the default create handler with an edit handler
-                    const newSubmitBtn = submitDashboardBtn.cloneNode(true);
-                    submitDashboardBtn.parentNode.replaceChild(newSubmitBtn, submitDashboardBtn);
-                    submitDashboardBtn = newSubmitBtn;
-
-                    submitDashboardBtn.addEventListener('click', async function editDashboardHandler() {
-                        const newName = dashboardNameInput.value.trim();
-
-                        if (newName) {
-                            const db = await initDB();
-                            const tx = db.transaction(['dashboards'], 'readwrite');
-                            const store = tx.objectStore('dashboards');;
-                            const request = store.get(currentDashboardId);
-                            request.onsuccess = async () => {
-                                const updatedDashboard = request.result;
-                                updatedDashboard.name = newName;
-                                const updateRequest = store.put(updatedDashboard);
-                                updateRequest.onsuccess = () => {
-                                    // Only update the dashboard selector without reloading projects
-                                    updateDashboardSelector();
-                                    closeDashboardModalHandler();
-
-                                    // Reset the submit button to create mode
-                                    const oldBtn = submitDashboardBtn;
-                                    submitDashboardBtn = oldBtn.cloneNode(true);
-                                    oldBtn.parentNode.replaceChild(submitDashboardBtn, oldBtn);
-                                    submitDashboardBtn.addEventListener('click', createNewDashboard);
-                                };
-                            };
-                        }
-                    });
-                }
-            };
-        }
-    });
-
-    // Remove Dashboard button
-    removeDashboardBtn.addEventListener("click", async function() {
-        dashboardActionsMenu.classList.remove("active");
-        dashboardMenuTrigger.classList.remove("active");
-        if (currentDashboardId) {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readwrite');
-            const store = tx.objectStore('dashboards');
-            const dashboards = await loadDashboards();
-            if (dashboards.length <= 1) {
-                alert("Cannot remove the last dashboard. Create a new dashboard first.");
-                return;
-            }
-
-            if (confirm("Are you sure you want to remove this dashboard?")) {
-                // Get all dashboards except the one being deleted
-                const remainingDashboards = dashboards.filter(d => d.id !== currentDashboardId);
-
-                // Find the index of the current dashboard being deleted
-                const currentIndex = dashboards.findIndex(d => d.id === currentDashboardId);
-
-                // Choose the next dashboard using a more reliable method
-                let newCurrentId;
-                if (remainingDashboards.length > 0) {
-                    if (currentIndex < remainingDashboards.length) {
-                        // If there are enough remaining dashboards after current position, pick that one
-                        newCurrentId = remainingDashboards[currentIndex].id;
-                    } else {
-                        // Otherwise pick the last remaining dashboard
-                        newCurrentId = remainingDashboards[remainingDashboards.length - 1].id;
-                    }
-                } else {
-                    // This shouldn't happen since we check for at least 2 dashboards before deletion
-                    console.error('No remaining dashboards after deletion');
-                    return;
-                }
-
-                try {
-                    // Clear the projects container first
-                    document.getElementById('projects-container').innerHTML = '';
-                    const newProjectButton = document.createElement('button');
-                    newProjectButton.id = 'new-project';
-                    newProjectButton.className = 'new-project';
-                    newProjectButton.textContent = 'New Project';
-                    newProjectButton.addEventListener('click', function() {
-                        projectModal.style.display = "flex";
-                        projectNameInput.focus();
-                    });
-                    document.getElementById('projects-container').appendChild(newProjectButton);
-
-                    // Use a single transaction for all operations
-                    const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-                    const dashboardStore = tx.objectStore('dashboards');
-                    const projectStore = tx.objectStore('projects');
-                    const tileStore = tx.objectStore('tiles');
-
-                    // Delete the dashboard first
-                    await new Promise((resolve, reject) => {
-                        const request = dashboardStore.delete(currentDashboardId);
-                        request.onsuccess = resolve;
-                        request.onerror = reject;
-                    });
-
-                    // Delete all projects for this dashboard
-                    const projects = await new Promise((resolve) => {
-                        const request = projectStore.index('dashboardId').getAll(currentDashboardId);
-                        request.onsuccess = () => resolve(request.result || []);
-                    });
-
-                    for (const project of projects) {
-                        // Delete all tiles for this project
-                        const tiles = await new Promise((resolve) => {
-                            const request = tileStore.index('projectId').getAll(project.id);
-                            request.onsuccess = () => resolve(request.result || []);
-                        });
-
-                        for (const tile of tiles) {
-                            await new Promise((resolve) => {
-                                const request = tileStore.delete(tile.id);
-                                request.onsuccess = resolve;
-                            });
-                        }
-
-                        // Delete the project
-                        await new Promise((resolve) => {
-                            const request = projectStore.delete(project.id);
-                            request.onsuccess = resolve;
-                        });
-                    }
-
-                    // Update UI and switch to new dashboard
-                    localStorage.setItem('currentDashboardId', newCurrentId);
-                    currentDashboardId = newCurrentId;
-
-                    // Clear and reload the UI
-                    await loadDashboards();
-                    await loadProjectsForDashboard(newCurrentId);
-                } catch (error) {
-                    console.error('Error deleting dashboard:', error);
-                    alert('Failed to delete dashboard. Please try again.');
-                }
-            }
-        }
-    });
-
-    // Manage Dashboards button
-    manageDashboardsBtn.addEventListener("click", function() {
-        dashboardActionsMenu.classList.remove("active");
-        dashboardMenuTrigger.classList.remove("active");
-        openManageDashboardsModal();
-    });
+    // Dashboard modal functionality only (sidebar handles dashboard management now)
 
     dashboardNameInput.addEventListener("input", validateDashboardInput);
 
@@ -2052,7 +1886,7 @@ function createDashboardTabs(dashboards, activeId) {
                     currentDashboardId = validCurrentId;
                 }
 
-                createDashboardTabs(dashboards, validCurrentId);
+                renderSidebar(dashboards, validCurrentId);
             }
         } catch (error) {
             console.error('Error updating dashboard selector:', error);
