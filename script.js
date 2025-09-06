@@ -242,6 +242,30 @@ function wireLiveUpdates() {
 
 document.addEventListener("DOMContentLoaded", async function () {
     wireLiveUpdates();
+    
+    // Add scroll isolation for sidebar
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+        // Stop wheel/touch events from bubbling into the page when over the sidebar
+        ['wheel', 'touchstart', 'touchmove'].forEach(type => {
+            sidebar.addEventListener(type, (e) => {
+                e.stopPropagation();
+                // NOTE: we do NOT call preventDefault(), so native sidebar scrolling still works.
+            }, { passive: true }); // only stopping propagation; passive is fine
+        });
+    }
+    
+    // Add scroll isolation for main content area
+    const main = document.getElementById('main');
+    if (main) {
+        // Stop wheel/touch events from bubbling into the page when over the main content
+        ['wheel', 'touchstart', 'touchmove'].forEach(type => {
+            main.addEventListener(type, (e) => {
+                e.stopPropagation(); // keep scroll confined to main content
+            }, { passive: true });
+        });
+    }
+    
     // Initialize IndexedDB
     try {
         const db = await initDB();

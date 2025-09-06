@@ -10,10 +10,6 @@
     background: #f8f9fa;
     border-right: 1px solid #e5e7eb;
     padding: 16px;
-    overflow-y: auto;
-    position: sticky;
-    top: 0;
-    height: 100vh;
 }
 
 .sidebar-header {
@@ -896,4 +892,44 @@ button:disabled {
     opacity: 0.6;
     background-color: #f0f0f0;
     border: 2px dashed #ccc;
+}
+
+/* --- Two independent scroll containers --- */
+html, body {
+  height: 100%;
+  overflow: hidden;            /* 🔒 prevent body from scrolling */
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 260px 1fr; /* sidebar | main */
+  height: 100dvh;                   /* full viewport for the grid */
+}
+
+/* Sidebar stays pinned and scrolls by itself */
+#sidebar {
+  position: sticky;   /* or use 'fixed' if you prefer absolute pinning */
+  top: 0;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Main content scrolls by itself */
+#main {
+  height: 100dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sidebar list itself can be long; make sure it doesn't grow past container */
+#sidebar-list {
+  overflow: visible;     /* list flows; container handles scroll */
+}
+
+/* Safety on modals/menus in case they sit at edges */
+.modal, .project-menu, .tile-menu, .dashboard-actions-menu {
+  overscroll-behavior: contain;
 }
