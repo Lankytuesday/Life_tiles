@@ -9,16 +9,23 @@
 .sidebar {
     background: #f8f9fa;
     border-right: 1px solid #e5e7eb;
-    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
 .sidebar-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f8f9fa;
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
+    padding: 16px 16px 16px 16px;
     border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
 }
 
 .sidebar-logo {
@@ -53,8 +60,11 @@
 }
 
 .sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     margin: 0;
-    padding: 0;
+    padding: 16px;
     list-style: none;
     display: flex;
     flex-direction: column;
