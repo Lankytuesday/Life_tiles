@@ -230,7 +230,6 @@
 .project-header:hover .project-menu-trigger {
     opacity: 1;
     visibility: visible;
-    transition-delay: 200ms;
     display: flex;
 }
 
