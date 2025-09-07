@@ -304,20 +304,64 @@ document.addEventListener("DOMContentLoaded", async function () {
     const submitPopupTileBtn = document.getElementById("submit-popup-tile");
     const closePopupModal = document.getElementById("close-popup-modal");
     
-    // Settings gear (top-right of main) → open Options page
+    // Settings gear with dropdown menu
     const settingsBtn = document.getElementById('open-settings');
     if (settingsBtn) {
-    settingsBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        // Prefer the built-in options opener; fall back to opening options.html in a new tab
-        if (chrome?.runtime?.openOptionsPage) {
-        chrome.runtime.openOptionsPage();
-        } else if (chrome?.tabs?.create) {
-        chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
-        } else {
-        window.open('options.html', '_blank'); // dev fallback
+        // Create the settings menu
+        const menu = document.createElement('div');
+        menu.className = 'settings-menu';
+        menu.innerHTML = `
+            <button type="button" data-action="import-google">Import Google bookmarks</button>
+            <button type="button" data-action="export-dashboards">Export dashboards (JSON)</button>
+            <button type="button" data-action="import-dashboards">Import dashboards (JSON)</button>
+        `;
+        settingsBtn.parentElement.appendChild(menu);
+
+        // Toggle open/close
+        function closeSettingsMenu() {
+            settingsBtn.classList.remove('active');
+            settingsBtn.setAttribute('aria-expanded', 'false');
         }
-    });
+        function openSettingsMenu() {
+            settingsBtn.classList.add('active');
+            settingsBtn.setAttribute('aria-expanded', 'true');
+        }
+
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (settingsBtn.classList.contains('active')) closeSettingsMenu(); else openSettingsMenu();
+        });
+
+        // Click outside & ESC to close
+        document.addEventListener('click', (e) => {
+            if (!menu.contains(e.target) && e.target !== settingsBtn) closeSettingsMenu();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeSettingsMenu();
+        });
+
+        // Hook up actions
+        menu.addEventListener('click', async (e) => {
+            if (!(e.target instanceof HTMLElement)) return;
+            const action = e.target.dataset.action;
+            if (!action) return;
+
+            try {
+                if (action === 'import-google') {
+                    await importGoogleBookmarks();
+                } else if (action === 'export-dashboards') {
+                    await exportDashboardsJSON();
+                } else if (action === 'import-dashboards') {
+                    await importDashboardsJSON();
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Something went wrong. Check the console for details.');
+            } finally {
+                closeSettingsMenu();
+            }
+        });
     }
 
 
@@ -1838,7 +1882,10 @@ window.__lifetilesRefresh = () => loadDashboards();
                 });
 
                 // Remove from UI
-                item.remove();
+                const itemEl =
+                  item ||
+                  document.querySelector(`.manage-dashboard-item[data-dashboard-id="${dashboardId}"]`);
+                itemEl?.remove();
 
                 // If this was the current dashboard, switch to another one first
                 if (dashboardId === currentDashboardId) {
@@ -2449,3 +2496,287 @@ async function migrateFromChromeStorage() {
           req.onerror  = () => reject(req.error);
         });
       }
+
+
+// Import/Export functions moved from options.js
+async function exportDashboardsJSON() {
+    const db = await initDB();
+    const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readonly');
+    const dashboardStore = tx.objectStore('dashboards');
+    const projectStore = tx.objectStore('projects');
+    const tileStore = tx.objectStore('tiles');
+
+    const dashboards = await new Promise((resolve) => {
+        const request = dashboardStore.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+    });
+
+    const projects = await new Promise((resolve) => {
+        const request = projectStore.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+    });
+
+    const tiles = await new Promise((resolve) => {
+        const request = tileStore.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+    });
+
+    const exportData = {
+        dashboards,
+        projects,
+        tiles,
+        exportDate: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `lifetiles-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showStatus('Data exported successfully!');
+}
+
+async function importDashboardsJSON() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const importData = JSON.parse(e.target.result);
+                const db = await initDB();
+                const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
+                
+                // Import new data while preserving existing
+                for (const dashboard of importData.dashboards) {
+                    const newDashboard = {
+                        ...dashboard,
+                        id: Date.now().toString() + Math.random() // Generate new ID to avoid conflicts
+                    };
+                    await tx.objectStore('dashboards').add(newDashboard);
+
+                    // Update project references to new dashboard ID
+                    const dashboardProjects = importData.projects.filter(p => p.dashboardId === dashboard.id);
+                    for (const project of dashboardProjects) {
+                        const newProject = {
+                            ...project,
+                            id: Date.now().toString() + Math.random(),
+                            dashboardId: newDashboard.id
+                        };
+                        await tx.objectStore('projects').add(newProject);
+
+                        // Update tile references to new project ID
+                        const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
+                        for (const tile of projectTiles) {
+                            await tx.objectStore('tiles').add({
+                                ...tile,
+                                id: Date.now().toString() + Math.random(),
+                                projectId: newProject.id,
+                                dashboardId: newDashboard.id
+                            });
+                        }
+                    }
+                }
+
+                showStatus('Data imported successfully! Reloading page...');
+                setTimeout(() => window.location.reload(), 2000);
+            } catch (error) {
+                console.error('Import error:', error);
+                showStatus('Error importing data');
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+function processBookmarksBar(bookmarkBar) {
+    const projects = [];
+    const looseBookmarks = {
+        id: crypto.randomUUID(),
+        name: 'Imported Bookmarks',
+        tiles: []
+    };
+
+    bookmarkBar.children.forEach(child => {
+        if (child.url && !isInternalUrl(child.url)) {
+            // Single bookmark goes into the looseBookmarks project
+            looseBookmarks.tiles.push({
+                id: crypto.randomUUID(),
+                name: child.title,
+                url: child.url
+            });
+        } else if (child.children) {
+            // Folder becomes a new project
+            const tiles = [];
+            child.children.forEach(bookmark => {
+                if (bookmark.url && !isInternalUrl(bookmark.url)) {                  
+                    tiles.push({
+                        id: crypto.randomUUID(),
+                        name: bookmark.title,
+                        url: bookmark.url
+                    });
+                }
+            });
+            if (tiles.length > 0) {
+                projects.push({
+                    id: crypto.randomUUID(),
+                    name: child.title,
+                    tiles: tiles
+                });
+            }
+        }
+    });
+
+    // Only add the loose bookmarks project if it has any tiles
+    if (looseBookmarks.tiles.length > 0) {
+        projects.push(looseBookmarks);
+    }
+
+    return projects;
+}
+
+async function importGoogleBookmarks() {
+    if (!chrome?.bookmarks) {
+        alert('Bookmark access not available. This feature requires the Chrome extension.');
+        return;
+    }
+
+    // Create and show dashboard selection modal
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    content.innerHTML = `
+        <h2>Select Dashboard</h2>
+        <select id="dashboard-select" style="width: 100%; padding: 8px; margin: 10px 0;">
+        </select>
+        <div class="modal-buttons">
+            <button id="cancel-import" class="cancel-button">Cancel</button>
+            <button id="confirm-import" class="done-button enabled">Import</button>
+        </div>
+    `;
+
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+
+    // Populate dashboard select using IndexedDB
+    try {
+        const db = await initDB();
+        const tx = db.transaction(['dashboards'], 'readonly');
+        const store = tx.objectStore('dashboards');
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+            const select = document.getElementById('dashboard-select');
+            request.result.forEach(dashboard => {
+                const option = document.createElement('option');
+                option.value = dashboard.id;
+                option.textContent = dashboard.name;
+                select.appendChild(option);
+            });
+        };
+    } catch (error) {
+        console.error('Error loading dashboards:', error);
+        modal.remove();
+        return;
+    }
+
+    // Handle cancel
+    document.getElementById('cancel-import').onclick = () => {
+        modal.remove();
+    };
+
+    // Handle confirm
+    document.getElementById('confirm-import').onclick = () => {
+        const selectedDashboardId = document.getElementById('dashboard-select').value;
+
+        chrome.bookmarks.getTree(function(bookmarkTree) {
+            // The bookmarks bar is the first child in the bookmark tree
+            const bookmarkBar = bookmarkTree[0].children[0];
+            const projects = processBookmarksBar(bookmarkBar);
+
+            // Save imported projects using IndexedDB
+            initDB().then(async db => {
+                const tx = db.transaction(['projects', 'tiles'], 'readwrite');
+                const projectStore = tx.objectStore('projects');
+                const tileStore = tx.objectStore('tiles');
+
+                // Get existing projects to determine order
+                const existingProjects = await new Promise((resolve) => {
+                    const request = projectStore.index('dashboardId').getAll(selectedDashboardId);
+                    request.onsuccess = () => resolve(request.result || []);
+                });
+
+                // Add each project and its tiles
+                for (const project of projects) {
+                    project.dashboardId = selectedDashboardId;
+                    // Save project
+                    await projectStore.add(project);
+
+                    // Add tiles for this project
+                    if (project.tiles) {
+                        for (const tile of project.tiles) {
+                            tile.projectId = project.id;
+                            tile.dashboardId = selectedDashboardId;
+                            await tileStore.put(tile);
+                        }
+                    }
+                }
+
+                modal.remove();
+                showStatus('Bookmarks imported successfully!');
+                
+                // Delay reload to allow status message to be seen
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            }).catch(error => {
+                console.error('Error importing bookmarks:', error);
+                showStatus('Error importing bookmarks');
+            });
+        });
+    };
+}
+
+function showStatus(message) {
+    // Create a temporary status element since we don't have one in main page
+    const status = document.createElement('div');
+    status.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #4CAF50;
+        color: white;
+        padding: 12px 24px;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        z-index: 9999;
+        font-size: 14px;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    `;
+    status.textContent = message;
+    document.body.appendChild(status);
+
+    requestAnimationFrame(() => {
+        status.style.opacity = '1';
+        setTimeout(() => {
+            status.style.opacity = '0';
+            setTimeout(() => {
+                document.body.removeChild(status);
+            }, 300);
+        }, 3000);
+    });
+}

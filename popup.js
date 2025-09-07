@@ -71,12 +71,6 @@ async function getTargetWindowId() {
         }
       }
   
-      // Options page link (unchanged)
-      document.getElementById('options-link').addEventListener('click', () => {
-          chrome.tabs.create({
-              url: chrome.runtime.getURL('options.html')
-          });
-      });
 
     const dropdownContainer = document.getElementById('custom-dropdown-container');
     const dropdownHeader = document.getElementById('dropdown-header');
