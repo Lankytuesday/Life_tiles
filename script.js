@@ -1380,6 +1380,35 @@ window.__lifetilesRefresh = () => loadDashboards();
         allMenus.forEach(menu => menu.classList.remove('active'));
     }
 
+    // Close any open menus (project/tile/dashboard) on true outside-click or Esc
+    (() => {
+        if (document.__ltGlobalMenuCloser) return; // idempotent
+
+        const isMenuOrTrigger = (el) =>
+            el.closest('.project-menu, .tile-menu, .dashboard-actions-menu, .project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
+
+        const outsideClose = (e) => {
+            if (isMenuOrTrigger(e.target)) return; // clicked inside a menu or on its trigger
+            closeAllMenus();                       // otherwise, close everything
+        };
+
+        // Use capture so we're not defeated by stopPropagation in nested UIs
+        document.addEventListener('pointerdown', outsideClose, true);
+
+        // Bonus: Esc closes menus too
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeAllMenus();
+        }, true);
+
+        // Nice-to-have: close menus when you scroll either pane
+        const killOnScroll = () => closeAllMenus();
+        document.getElementById('main')?.addEventListener('scroll', killOnScroll, { passive: true });
+        document.getElementById('sidebar')?.querySelector('.sidebar-list')
+            ?.addEventListener('scroll', killOnScroll, { passive: true });
+
+        document.__ltGlobalMenuCloser = true;
+    })();
+
     function resetDashboardButton() {
         // Reset the submit button to create mode
         const oldBtn = submitDashboardBtn;
