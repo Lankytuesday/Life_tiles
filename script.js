@@ -303,6 +303,23 @@ document.addEventListener("DOMContentLoaded", async function () {
     const popupTileUrlInput = document.getElementById("popup-tile-url-input");
     const submitPopupTileBtn = document.getElementById("submit-popup-tile");
     const closePopupModal = document.getElementById("close-popup-modal");
+    
+    // Settings gear (top-right of main) → open Options page
+    const settingsBtn = document.getElementById('open-settings');
+    if (settingsBtn) {
+    settingsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        // Prefer the built-in options opener; fall back to opening options.html in a new tab
+        if (chrome?.runtime?.openOptionsPage) {
+        chrome.runtime.openOptionsPage();
+        } else if (chrome?.tabs?.create) {
+        chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+        } else {
+        window.open('options.html', '_blank'); // dev fallback
+        }
+    });
+    }
+
 
     let currentProjectContainer = null;
     let currentProjectId = null;

@@ -956,3 +956,18 @@ html, body {
 .modal, .project-menu, .tile-menu, .dashboard-actions-menu {
   overscroll-behavior: contain;
 }
+.main-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px;
+  }
+  
+  .settings-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0;
+    border: none; border-radius: 6px; background: none; cursor: pointer;
+    color: #555;
+  }
+  .settings-btn svg { width: 20px; height: 20px; display: block; }
+  .settings-btn:hover { background: rgba(0,0,0,0.06); color: #111; }
+
