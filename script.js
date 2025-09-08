@@ -101,6 +101,22 @@ function isInternalUrl(u) {
   catch { return true; } // invalid/blank -> treat as internal
 }
 
+// Dashboard title helpers
+function setDashboardTitle(name) {
+    const el = document.getElementById('dashboard-title');
+    if (el) el.textContent = name || 'Untitled dashboard';
+}
+
+async function getCurrentDashboardName(db, id) {
+    return new Promise((resolve) => {
+        const tx = db.transaction(['dashboards'], 'readonly');
+        const store = tx.objectStore('dashboards');
+        const req = store.get(id);
+        req.onsuccess = () => resolve(req.result?.name || 'Dashboard');
+        req.onerror = () => resolve('Dashboard');
+    });
+}
+
 // Initialize favicon cache handling
 async function checkFaviconCache(hostname) {
     try {
@@ -590,6 +606,10 @@ new Sortable(document.getElementById('projects-container'), {
 
             loadProjects(projects);
             currentDashboardId = validCurrentId;
+            
+            // Update dashboard title
+            setDashboardTitle(await getCurrentDashboardName(db, validCurrentId));
+            
             return dashboards;
         } catch (error) {
             console.error('Error in loadDashboards:', error);
@@ -710,6 +730,11 @@ window.__lifetilesRefresh = () => loadDashboards();
                     
                     labelEl.textContent = newName;
                     dashboard.name = newName;
+                    
+                    // Update title if this is the current dashboard
+                    if (dashboard.id === currentDashboardId) {
+                        setDashboardTitle(newName);
+                    }
                 } catch (error) {
                     console.error('Error updating dashboard name:', error);
                 }
@@ -786,7 +811,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
     }
 
-    function switchDashboard(dashboardId) {
+    async function switchDashboard(dashboardId) {
         // Update active sidebar item
         document.querySelectorAll('.sidebar-item').forEach(item => {
             const isActive = item.dataset.dashboardId === dashboardId;
@@ -797,6 +822,10 @@ window.__lifetilesRefresh = () => loadDashboards();
         // Save current dashboard
         localStorage.setItem('currentDashboardId', dashboardId);
         currentDashboardId = dashboardId;
+
+        // Update dashboard title
+        const db = await initDB();
+        setDashboardTitle(await getCurrentDashboardName(db, dashboardId));
 
         // Clear projects
         document.getElementById('projects-container').innerHTML = '';
@@ -1428,6 +1457,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 // Update state and UI
                 localStorage.setItem('currentDashboardId', dashboardData.id);
                 currentDashboardId = dashboardData.id;
+                setDashboardTitle(dashboardData.name);
                 await loadDashboards();
                 closeDashboardModalHandler();
             };
@@ -1812,6 +1842,11 @@ window.__lifetilesRefresh = () => loadDashboards();
                         // Update the manage modal display
                         item.querySelector('.manage-dashboard-name').textContent = newName;
                         item.classList.remove('editing');
+
+                        // Update title if this is the current dashboard
+                        if (dashboardId === currentDashboardId) {
+                            setDashboardTitle(newName);
+                        }
 
                         // Only update the dashboard selector without reloading projects
                         updateDashboardSelector().then(() => {

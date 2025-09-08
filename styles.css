@@ -273,6 +273,52 @@
     color: #333;
 }
 
+:root { 
+    --toolbar-h: 56px; 
+}
+
+.main-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 500;
+    height: var(--toolbar-h);
+    padding: 0 12px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr; /* left | title | right */
+    align-items: center;                /* vertical centering */
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    box-sizing: border-box;
+  }
+  
+  .dashboard-title {
+    grid-column: 2;        /* force into center column */
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .settings-btn {
+    grid-column: 3;         /* gear in right column */
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+    color: #555;
+  }
+  .settings-btn svg { width: 20px; height: 20px; }
+
 /* Projects container layout */
 #projects-container {
     padding: 24px;
@@ -964,17 +1010,7 @@ html, body {
 .modal, .project-menu, .tile-menu, .dashboard-actions-menu {
   overscroll-behavior: contain;
 }
-.main-toolbar {
-    position: relative;
-    height: var(--toolbar-h);
-    padding: 0 12px;
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    box-sizing: border-box;
-    border-bottom: 1px solid #e5e7eb;
-    background: #fff;
-}
+
 
   .settings-btn {
     display: inline-flex; align-items: center; justify-content: center;
