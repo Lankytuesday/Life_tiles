@@ -1,3 +1,7 @@
+:root {
+  --toolbar-h: 56px; /* pick the height you want */
+}
+
 /* App shell layout */
 .app-shell {
     display: grid;
@@ -20,10 +24,12 @@
     top: 0;
     z-index: 10;
     background: #f8f9fa;
+    height: var(--toolbar-h);
+    padding: 0 12px;
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 16px 16px 16px 16px;
+    box-sizing: border-box;
     border-bottom: 1px solid #e5e7eb;
     flex-shrink: 0;
 }
@@ -905,6 +911,8 @@ button:disabled {
 
 /* --- Two independent scroll containers --- */
 html, body {
+  margin: 0;     /* eliminate default 8px gap */
+  padding: 0; 
   height: 100%;
   overflow: hidden;            /* 🔒 prevent body from scrolling */
 }
@@ -958,10 +966,14 @@ html, body {
 }
 .main-toolbar {
     position: relative;
+    height: var(--toolbar-h);
+    padding: 0 12px;
     display: flex;
     justify-content: flex-end;
-    padding: 16px 20px;
-    border-bottom: 1px solid #e8eaed;
+    align-items: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid #e5e7eb;
+    background: #fff;
 }
 
   .settings-btn {
