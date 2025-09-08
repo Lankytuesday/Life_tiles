@@ -544,21 +544,49 @@ new Sortable(document.getElementById('projects-container'), {
             }
 
             if (!dashboards || dashboards.length === 0) {
-                // Create default dashboard
+                // Create a default dashboard row
                 const defaultDashboard = {
-                    id: Date.now().toString(),
-                    name: "My Dashboard"
+                  id: (crypto?.randomUUID?.() || Date.now().toString()),
+                  name: "My Dashboard",
+                  order: 0
                 };
-
-                const tx = db.transaction(['dashboards'], 'readwrite');
-                const store = tx.objectStore('dashboards');
-                await store.add(defaultDashboard);
-
+              
+                // ✅ Properly await the IndexedDB transaction
+                await new Promise((resolve, reject) => {
+                  const tx = db.transaction(['dashboards'], 'readwrite');
+                  const store = tx.objectStore('dashboards');
+                  store.add(defaultDashboard);
+                  tx.oncomplete = resolve;
+                  tx.onerror = () => reject(tx.error);
+                });
+              
+                // Select it
                 localStorage.setItem('currentDashboardId', defaultDashboard.id);
-                createDashboardTabs([defaultDashboard], defaultDashboard.id);
                 currentDashboardId = defaultDashboard.id;
+              
+                // ✅ Paint the UI immediately (sidebar + title + empty projects area)
+                renderSidebar([defaultDashboard], defaultDashboard.id);
+                setDashboardTitle(defaultDashboard.name);
+              
+                const projectsContainer = document.getElementById('projects-container');
+                if (projectsContainer) {
+                  projectsContainer.innerHTML = '';
+                  const newProjectButton = document.createElement('button');
+                  newProjectButton.id = 'new-project';
+                  newProjectButton.className = 'new-project';
+                  newProjectButton.textContent = 'New Project';
+                  newProjectButton.addEventListener('click', function () {
+                    projectModal.style.display = "flex";
+                    projectNameInput.focus();
+                  });
+                  projectsContainer.appendChild(newProjectButton);
+                }
+              
+                // Nothing else to load yet
                 return [defaultDashboard];
-            }
+              }
+              
+              
 
             const currentId = localStorage.getItem('currentDashboardId') || dashboards[0].id;
 
