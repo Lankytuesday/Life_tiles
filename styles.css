@@ -283,29 +283,17 @@
     z-index: 500;
     height: var(--toolbar-h);
     padding: 0 12px;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr; /* left | title | right */
-    align-items: center;                /* vertical centering */
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     background: #fff;
     border-bottom: 1px solid #e5e7eb;
     box-sizing: border-box;
   }
   
-  .dashboard-title {
-    grid-column: 2;        /* force into center column */
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #333;
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  
   
   .settings-btn {
-    grid-column: 3;         /* gear in right column */
-    justify-self: end;
     display: inline-flex;
     align-items: center;
     justify-content: center;

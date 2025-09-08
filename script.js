@@ -101,21 +101,9 @@ function isInternalUrl(u) {
   catch { return true; } // invalid/blank -> treat as internal
 }
 
-// Dashboard title helpers
-function setDashboardTitle(name) {
-    const el = document.getElementById('dashboard-title');
-    if (el) el.textContent = name || 'Untitled dashboard';
-}
 
-async function getCurrentDashboardName(db, id) {
-    return new Promise((resolve) => {
-        const tx = db.transaction(['dashboards'], 'readonly');
-        const store = tx.objectStore('dashboards');
-        const req = store.get(id);
-        req.onsuccess = () => resolve(req.result?.name || 'Dashboard');
-        req.onerror = () => resolve('Dashboard');
-    });
-}
+
+
 
 // Initialize favicon cache handling
 async function checkFaviconCache(hostname) {
@@ -564,9 +552,8 @@ new Sortable(document.getElementById('projects-container'), {
                 localStorage.setItem('currentDashboardId', defaultDashboard.id);
                 currentDashboardId = defaultDashboard.id;
               
-                // ✅ Paint the UI immediately (sidebar + title + empty projects area)
+                // ✅ Paint the UI immediately (sidebar + empty projects area)
                 renderSidebar([defaultDashboard], defaultDashboard.id);
-                setDashboardTitle(defaultDashboard.name);
               
                 const projectsContainer = document.getElementById('projects-container');
                 if (projectsContainer) {
@@ -634,9 +621,6 @@ new Sortable(document.getElementById('projects-container'), {
 
             loadProjects(projects);
             currentDashboardId = validCurrentId;
-            
-            // Update dashboard title
-            setDashboardTitle(await getCurrentDashboardName(db, validCurrentId));
             
             return dashboards;
         } catch (error) {
@@ -758,11 +742,6 @@ window.__lifetilesRefresh = () => loadDashboards();
                     
                     labelEl.textContent = newName;
                     dashboard.name = newName;
-                    
-                    // Update title if this is the current dashboard
-                    if (dashboard.id === currentDashboardId) {
-                        setDashboardTitle(newName);
-                    }
                 } catch (error) {
                     console.error('Error updating dashboard name:', error);
                 }
@@ -851,9 +830,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         localStorage.setItem('currentDashboardId', dashboardId);
         currentDashboardId = dashboardId;
 
-        // Update dashboard title
-        const db = await initDB();
-        setDashboardTitle(await getCurrentDashboardName(db, dashboardId));
+        
 
         // Clear projects
         document.getElementById('projects-container').innerHTML = '';
@@ -1485,7 +1462,6 @@ window.__lifetilesRefresh = () => loadDashboards();
                 // Update state and UI
                 localStorage.setItem('currentDashboardId', dashboardData.id);
                 currentDashboardId = dashboardData.id;
-                setDashboardTitle(dashboardData.name);
                 await loadDashboards();
                 closeDashboardModalHandler();
             };
@@ -1870,11 +1846,6 @@ window.__lifetilesRefresh = () => loadDashboards();
                         // Update the manage modal display
                         item.querySelector('.manage-dashboard-name').textContent = newName;
                         item.classList.remove('editing');
-
-                        // Update title if this is the current dashboard
-                        if (dashboardId === currentDashboardId) {
-                            setDashboardTitle(newName);
-                        }
 
                         // Only update the dashboard selector without reloading projects
                         updateDashboardSelector().then(() => {
