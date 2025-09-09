@@ -135,7 +135,8 @@ async function getTargetWindowId() {
 
         // Sort dashboards by order property
         if (dashboards && dashboards.length > 0) {
-            dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));            
         }
 
         // Clear existing options
@@ -159,7 +160,8 @@ async function getTargetWindowId() {
 
             if (projects.length > 0) {
                 // Sort projects by order property to match dashboard order
-                projects.sort((a, b) => (a.order || 0) - (b.order || 0));
+                const ord = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+                projects.sort((a, b) => ord(a) - ord(b) || String(a.id).localeCompare(String(b.id)));
 
                 // Add dashboard label
                 const dashboardLabel = document.createElement('div');

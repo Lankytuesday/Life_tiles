@@ -528,7 +528,9 @@ new Sortable(document.getElementById('projects-container'), {
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
-                dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+                const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+                dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+
             }
 
             if (!dashboards || dashboards.length === 0) {
@@ -1072,7 +1074,9 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         // Sort dashboards by order property
         if (dashboards.length > 0) {
-            dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+
         }
 
         // Create dashboard selection modal
@@ -1534,7 +1538,9 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
-                dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+                const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+                dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+
             }
 
             // Get project counts for each dashboard
@@ -1547,7 +1553,9 @@ window.__lifetilesRefresh = () => loadDashboards();
             }
 
             // Sort dashboards by order (if available) or by name
-            dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+
 
             // Create dashboard items
             dashboards.forEach((dashboard, index) => {
@@ -2022,7 +2030,8 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
-                dashboards.sort((a, b) => (a.order || 0) - (b.order || 0));
+                const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+                dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));                
             }
 
             if (dashboards && dashboards.length > 0) {
