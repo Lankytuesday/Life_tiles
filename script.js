@@ -1427,47 +1427,45 @@ window.__lifetilesRefresh = () => loadDashboards();
         dashboardNameInput.value = "";
         validateDashboardInput();
     }
-
-
-    async function createNewDashboard() {
+    async function getNextDashboardOrder(db) {
+        const store = db.transaction(['dashboards'], 'readonly').objectStore('dashboards');
+        const dashboards = await new Promise((res, rej) => {
+          const req = store.getAll();
+          req.onsuccess = () => res(req.result || []);
+          req.onerror = () => rej(req.error);
+        });
+        const max = dashboards
+          .map(d => Number.isFinite(+d.order) ? +d.order : -1)
+          .reduce((a, b) => Math.max(a, b), -1);
+        return max + 1;
+      }
+      
+      // inside createNewDashboard()
+      async function createNewDashboard() {
         const dashboardName = dashboardNameInput.value.trim();
-
-        if (dashboardName) {
-            const dashboardData = {
-                id: Date.now().toString(),
-                name: dashboardName,
-                projects: []
-            };
-
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'],'readwrite');
-            const store = tx.objectStore('dashboards');
-            const request = store.add(dashboardData);
-
-            request.onsuccess = async () => {
-                // Clear the projects container first
-                document.getElementById('projects-container').innerHTML = '';
-
-                // Add the New Project button
-                const newProjectButton = document.createElement('button');
-                newProjectButton.id = 'new-project';
-                newProjectButton.className = 'new-project';
-                newProjectButton.textContent = 'New Project';
-                newProjectButton.addEventListener('click', function() {
-                    projectModal.style.display = "flex";
-                    projectNameInput.focus();
-                });
-                document.getElementById('projects-container').appendChild(newProjectButton);
-
-                // Update state and UI
-                localStorage.setItem('currentDashboardId', dashboardData.id);
-                currentDashboardId = dashboardData.id;
-                await loadDashboards();
-                closeDashboardModalHandler();
-            };
-        }
-    }
-
+        if (!dashboardName) return;
+      
+        const db = await initDB();
+        const order = await getNextDashboardOrder(db);
+      
+        const dashboardData = {
+          id: Date.now().toString(),
+          name: dashboardName,
+          projects: [],
+          order
+        };
+      
+        const tx = db.transaction(['dashboards'],'readwrite');
+        tx.objectStore('dashboards').add(dashboardData);
+        tx.oncomplete = async () => {
+          // …your existing UI refresh code
+          localStorage.setItem('currentDashboardId', dashboardData.id);
+          currentDashboardId = dashboardData.id;
+          await loadDashboards();
+          closeDashboardModalHandler();
+        };
+      }
+      
     function closeAllMenus() {
         const allMenuTriggers = document.querySelectorAll('.project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
         allMenuTriggers.forEach(trigger => trigger.classList.remove('active'));
