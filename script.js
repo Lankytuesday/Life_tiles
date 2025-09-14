@@ -60,39 +60,115 @@ purgeLegacyFavicons(); // fire-and-forget migration
 // Per-page in-memory cache to avoid duplicate probes
 const sessionFaviconCache = new Map();
 
-// Probe a favicon by actually loading it as <img> (avoids ORB/CORB)
-async function loadFaviconForHost(hostname) {
-    if (sessionFaviconCache.has(hostname)) return sessionFaviconCache.get(hostname);
-
-    const tryImg = (src) => new Promise((resolve) => {
-      const img = new Image();
-      let done = false;
-      const finish = ok => { if (done) return; done = true; resolve(ok ? src : null); };
-      const t = setTimeout(() => finish(false), 1800);
-      img.onload = () => { clearTimeout(t); finish(img.naturalWidth > 0 && img.naturalHeight > 0); };
-      img.onerror = () => { clearTimeout(t); finish(false); };
-      img.referrerPolicy = 'no-referrer';
-      img.src = src;
-    });
-
-    // Prefer Google S2 → then DuckDuckGo → then icon.horse (CDN-only; avoids ORB/404 spam)
-    let found = await tryImg(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`);
-    if (!found) found = await tryImg(`https://icons.duckduckgo.com/ip3/${hostname}.ico`);
-    if (!found) found = await tryImg(`https://icon.horse/icon/${hostname}`);
-
-
-
-    sessionFaviconCache.set(hostname, found || ''); // '' = tried already this session
+// First: tab-based probe (needs "tabs" permission in manifest)
+async function tryTabFavicon(pageUrl, min = 3) {
+    try {
+      if (!chrome?.tabs?.query || !pageUrl) return null;
+  
+      const wanted = new URL(pageUrl);
+      const wantedHost = wanted.hostname;
+  
+      // Query all tabs (avoids needing host_permissions for url filtering)
+      const tabs = await chrome.tabs.query({});
+      // Prefer exact URL match, then same-host match
+      let u = null;
+      const exact = tabs.find(t => {
+        try { return new URL(t.url).href === wanted.href; } catch { return false; }
+      });
+      if (exact?.favIconUrl) u = exact.favIconUrl;
+      if (!u) {
+        const sameHost = tabs.find(t => {
+          try { return new URL(t.url).hostname === wantedHost; } catch { return false; }
+        });
+        if (sameHost?.favIconUrl) u = sameHost.favIconUrl;
+      }
+      if (!u) return null;
+  
+      // Size-check via your img probe
+      return await tryImgWithMinSize(u, min);
+    } catch {
+      return null;
+    }
+  }
+  
+  // Probe a favicon by actually loading it as <img> (avoids ORB/CORB)
+  async function loadFaviconForHost(hostname, pageUrl) {
+    if (sessionFaviconCache.has(hostname)) {
+      return sessionFaviconCache.get(hostname);
+    }
+  
+    const MIN_FAVICON_PX = 24; // one declaration here
+  
+    // Image probe with min-size filter
+    const tryImgWithMinSize = (url, min = MIN_FAVICON_PX, timeoutMs = 1800) =>
+      new Promise((resolve) => {
+        const img = new Image();
+        let finished = false;
+        const cleanup = () => { img.onload = null; img.onerror = null; };
+        const timer = setTimeout(() => { if (!finished) { finished = true; cleanup(); resolve(null); } }, timeoutMs);
+        img.onload = () => {
+          clearTimeout(timer);
+          if (finished) return;
+          finished = true;
+          const w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+          cleanup();
+          resolve((w >= min && h >= min) ? url : null);
+        };
+        img.onerror = () => {
+          clearTimeout(timer);
+          if (finished) return;
+          finished = true; cleanup(); resolve(null);
+        };
+        img.referrerPolicy = 'no-referrer';
+        img.src = url;
+      });
+  
+    // Normalize page URL
+    let normalizedPageUrl = null;
+    if (typeof pageUrl === 'string') {
+      try { normalizedPageUrl = new URL(pageUrl).href; } catch {}
+    }
+    if (!normalizedPageUrl && hostname) {
+      normalizedPageUrl = `https://${hostname}`;
+    }
+  
+    // 0) Try tab favicon first (no CORS, like Session Buddy)
+    let found = await tryTabFavicon(normalizedPageUrl, MIN_FAVICON_PX);
+    
+    // 1) Site /favicon.ico
+    if (!found && hostname) {
+      found = await tryImgWithMinSize(`https://${hostname}/favicon.ico`, MIN_FAVICON_PX);
+    }
+  
+    // 2) External services
+    if (!found && hostname) {
+      found = await tryImgWithMinSize(
+        `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`,
+        MIN_FAVICON_PX
+      );
+    }
+    // Optional: DDG (can be noisy/small)
+    // if (!found && hostname) {
+    //   found = await tryImgWithMinSize(`https://icons.duckduckgo.com/ip3/${hostname}.ico`, MIN_FAVICON_PX);
+    // }
+  
+    if (!found && hostname) {
+      found = await tryImgWithMinSize(`https://icon.horse/icon/${hostname}`, MIN_FAVICON_PX);
+    }
+  
+    sessionFaviconCache.set(hostname, found || ''); // '' = tried this session
+  
     if (found) {
-      // persist to IndexedDB
       try {
         const db = await initDB();
         const tx = db.transaction(['favicons'], 'readwrite');
         tx.objectStore('favicons').put({ hostname, favicon: found, timestamp: Date.now() });
       } catch {}
     }
+  
     return found;
   }
+  
 
 // --- internal URL helpers ---
 const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
@@ -2031,7 +2107,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
                 const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-                dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));                
+                dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+                
             }
 
             if (dashboards && dashboards.length > 0) {
@@ -2236,7 +2313,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         (async () => {
             try {
                 if (safeHost) {
-                    const favicon = await loadFaviconForHost(safeHost);
+                    const favicon = await loadFaviconForHost(safeHost, tileData.url);
                     if (favicon) {
                         thumbnailElement.style.backgroundImage = `url('${favicon}')`;
                         thumbnailElement.style.backgroundColor = 'transparent';
