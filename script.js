@@ -1,3 +1,5 @@
+const __ltOnsiteBlocked = new Set();
+
 let lifetilesBC = null;
 
 let __ltRefreshScheduled = false;
@@ -14,7 +16,7 @@ function __ltScheduleRefresh() {
 // Favicons cache TTL (24h). Set to 6h if you prefer faster refreshes.
 const FAVICON_TTL_MS = 86400000;
 // Probe an image URL to verify it actually loads (no fetch → no ORB)
-async function probeImage(src, timeout = 1800) {
+async function probeImage(src, timeout = 900) {
     return new Promise((resolve) => {
       const img = new Image();
       let done = false;
@@ -90,84 +92,187 @@ async function tryTabFavicon(pageUrl, min = 3) {
       return null;
     }
   }
-  
-  // Probe a favicon by actually loading it as <img> (avoids ORB/CORB)
-  async function loadFaviconForHost(hostname, pageUrl) {
+// Probe a favicon by actually loading it as <img> (avoids ORB/CORB)
+async function loadFaviconForHost(hostname, pageUrl) {
     if (sessionFaviconCache.has(hostname)) {
       return sessionFaviconCache.get(hostname);
     }
   
-    const MIN_FAVICON_PX = 24; // one declaration here
+    // --- size preferences ---
+    const MIN_FAVICON_PX = 16;   // allow legit 16px icons
+    const PREF_FAVICON_PX = 24;  // prefer ≥24px when available
+    const S2_MIN_PX      = 24;   // S2 must be ≥24px (blocks 16px globe)
   
-    // Image probe with min-size filter
-    const tryImgWithMinSize = (url, min = MIN_FAVICON_PX, timeoutMs = 1800) =>
-      new Promise((resolve) => {
-        const img = new Image();
-        let finished = false;
-        const cleanup = () => { img.onload = null; img.onerror = null; };
-        const timer = setTimeout(() => { if (!finished) { finished = true; cleanup(); resolve(null); } }, timeoutMs);
-        img.onload = () => {
-          clearTimeout(timer);
-          if (finished) return;
-          finished = true;
-          const w = img.naturalWidth || 0, h = img.naturalHeight || 0;
-          cleanup();
-          resolve((w >= min && h >= min) ? url : null);
-        };
-        img.onerror = () => {
-          clearTimeout(timer);
-          if (finished) return;
-          finished = true; cleanup(); resolve(null);
-        };
-        img.referrerPolicy = 'no-referrer';
-        img.src = url;
-      });
-  
-    // Normalize page URL
+    // Normalize page URL (for tab-favicon path)
     let normalizedPageUrl = null;
-    if (typeof pageUrl === 'string') {
+    if (typeof pageUrl === "string") {
       try { normalizedPageUrl = new URL(pageUrl).href; } catch {}
     }
     if (!normalizedPageUrl && hostname) {
       normalizedPageUrl = `https://${hostname}`;
     }
   
-    // 0) Try tab favicon first (no CORS, like Session Buddy)
-    let found = await tryTabFavicon(normalizedPageUrl, MIN_FAVICON_PX);
-    
-    // 1) Site /favicon.ico
-    if (!found && hostname) {
-      found = await tryImgWithMinSize(`https://${hostname}/favicon.ico`, MIN_FAVICON_PX);
+    // Detect the pixelated S2 globe
+    function isLikelyPlaceholder(url = "", w = 0, h = 0) {
+      const isS2 = /(?:^|\/\/)www\.google\.com\/s2\/favicons/i.test(url);
+      const tiny = Math.max(w, h) <= 16;
+      return isS2 && tiny;
     }
   
-    // 2) External services
-    if (!found && hostname) {
-      found = await tryImgWithMinSize(
-        `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(hostname)}`,
-        MIN_FAVICON_PX
-      );
-    }
-    // Optional: DDG (can be noisy/small)
-    // if (!found && hostname) {
-    //   found = await tryImgWithMinSize(`https://icons.duckduckgo.com/ip3/${hostname}.ico`, MIN_FAVICON_PX);
-    // }
+    // Helper: apex vs subdomain
+    const isApexHost = (h) => (h || "").split(".").filter(Boolean).length === 2;
   
-    if (!found && hostname) {
-      found = await tryImgWithMinSize(`https://icon.horse/icon/${hostname}`, MIN_FAVICON_PX);
+    // Host variants for **onsite/icon.horse** (no eTLD+1 expansion here)
+    function buildSiteVariants(host) {
+      if (!host) return [];
+      const parts = host.split(".").filter(Boolean);
+      const set = new Set([host]);
+      if (parts[0] === "www") set.add(parts.slice(1).join("."));
+      else if (parts.length === 2) set.add(`www.${host}`);
+      return Array.from(set);
     }
   
-    sessionFaviconCache.set(hostname, found || ''); // '' = tried this session
+    // eTLD+1 for S2 fallback (e.g., news.kvue.com → kvue.com)
+    function etld1(host) {
+      const parts = (host || "").split(".").filter(Boolean);
+      return parts.length >= 2 ? parts.slice(-2).join(".") : host;
+    }
   
+    // Generic probe with min-size filter + globe reject + 900ms timeout
+    // Also: if a site URL fails *very fast*, mark host as "onsite blocked"
+    const tryImgWithMinSize = (url, min = MIN_FAVICON_PX, timeoutMs = 900) =>
+      new Promise((resolve) => {
+        const img = new Image();
+        let finished = false;
+        const t0 = performance.now();
+        const done = (val) => { if (!finished) { finished = true; resolve(val); } };
+        const timer = setTimeout(() => done(null), timeoutMs);
+  
+        img.onload = () => {
+          clearTimeout(timer);
+          const w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+          if (isLikelyPlaceholder(url, w, h)) return done(null); // 🚫 block S2 globe
+          done((w >= min && h >= min) ? url : null);
+        };
+        img.onerror = () => {
+          clearTimeout(timer);
+          const dt = performance.now() - t0;
+          // Fast fail on same-origin site path → likely 403/cert block → remember
+          if (dt < 150 && hostname && url.startsWith(`https://${hostname}/`)) {
+            __ltOnsiteBlocked.add(hostname);
+          }
+          done(null);
+        };
+        img.referrerPolicy = "no-referrer";
+        img.src = url;
+      });
+  
+    const siteVariants = buildSiteVariants(hostname);
+    let found = null;
+  
+    // 0) Tab favicon first (prefer ≥24px, then allow 16px)
+    if (typeof tryTabFavicon === "function" && normalizedPageUrl) {
+      found = await tryTabFavicon(normalizedPageUrl, PREF_FAVICON_PX);
+      if (!found) found = await tryTabFavicon(normalizedPageUrl, MIN_FAVICON_PX);
+    }
+  
+    // ===== SUBDOMAINS: services → onsite (lean) =====
+    if (!found && hostname && !isApexHost(hostname)) {
+      // Services first: S2 (≥24) then icon.horse (24, then 16)
+      if (!found) {
+        const s2Hosts = Array.from(new Set([hostname, etld1(hostname)])).filter(Boolean);
+        for (const h of s2Hosts) {
+          const s2 = `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`;
+          const hit = await tryImgWithMinSize(s2, S2_MIN_PX);
+          if (hit) { found = hit; break; }
+        }
+      }
+      if (!found) {
+        for (const h of siteVariants) {
+          found = await tryImgWithMinSize(`https://icon.horse/icon/${h}`, PREF_FAVICON_PX)
+               || await tryImgWithMinSize(`https://icon.horse/icon/${h}`, MIN_FAVICON_PX);
+          if (found) break;
+        }
+      }
+      // Onsite last (only if not flagged as blocked)
+      if (!found && !__ltOnsiteBlocked.has(hostname)) {
+        for (const h of siteVariants) {
+          const candidates = [
+            `https://${h}/favicon.ico`,
+            `https://${h}/favicon.svg`,
+          ];
+          for (const u of candidates) {
+            found = await tryImgWithMinSize(u, PREF_FAVICON_PX);
+            if (found) break;
+          }
+          if (!found) {
+            for (const u of candidates) {
+              found = await tryImgWithMinSize(u, MIN_FAVICON_PX);
+              if (found) break;
+            }
+          }
+          if (found) break;
+        }
+      }
+    }
+  
+    // ===== APEX: onsite (rich) → services =====
+    if (!found && hostname && isApexHost(hostname)) {
+      // Onsite first (unless previously flagged)
+      if (!__ltOnsiteBlocked.has(hostname)) {
+        for (const h of siteVariants) {
+          const candidates = [
+            `https://${h}/favicon.svg`,
+            `https://${h}/apple-touch-icon.png`,
+            `https://${h}/favicon.ico`,
+            `https://${h}/favicon-32x32.png`,
+          ];
+          for (const u of candidates) {
+            found = await tryImgWithMinSize(u, PREF_FAVICON_PX);
+            if (found) break;
+          }
+          if (!found) {
+            for (const u of candidates) {
+              found = await tryImgWithMinSize(u, MIN_FAVICON_PX);
+              if (found) break;
+            }
+          }
+          if (found) break;
+        }
+      }
+      // Services next
+      if (!found) {
+        const s2Hosts = Array.from(new Set([hostname, etld1(hostname)])).filter(Boolean);
+        for (const h of s2Hosts) {
+          const s2 = `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`;
+          const hit = await tryImgWithMinSize(s2, S2_MIN_PX);
+          if (hit) { found = hit; break; }
+        }
+        if (!found) {
+          for (const h of siteVariants) {
+            found = await tryImgWithMinSize(`https://icon.horse/icon/${h}`, PREF_FAVICON_PX)
+                 || await tryImgWithMinSize(`https://icon.horse/icon/${h}`, MIN_FAVICON_PX);
+            if (found) break;
+          }
+        }
+      }
+    }
+  
+    // Cache for this session
+    sessionFaviconCache.set(hostname, found || "");
+  
+    // Persist if found
     if (found) {
       try {
         const db = await initDB();
-        const tx = db.transaction(['favicons'], 'readwrite');
-        tx.objectStore('favicons').put({ hostname, favicon: found, timestamp: Date.now() });
+        const tx = db.transaction(["favicons"], "readwrite");
+        tx.objectStore("favicons").put({ hostname, favicon: found, timestamp: Date.now() });
       } catch {}
     }
   
     return found;
   }
+  
   
 
 // --- internal URL helpers ---
@@ -2898,3 +3003,79 @@ function showStatus(message) {
         }, 3000);
     });
 }
+// --- ONE-TIME CLEANUP: remove stale gstatic/S2-16px favicon records ---
+(function runOneTimePurge() {
+    const START_DELAY_MS = 0; // change to 500 if you want to be extra cautious
+  
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  
+    async function getDb() {
+      if (typeof initDB === 'function') {
+        return initDB(); // your existing helper
+      }
+      // Fallback: open the same DB name/version your app uses
+      // Replace 'lifetiles' and version if your initDB differs.
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('lifetiles');
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+  
+    function storeExists(db, name) {
+      try { return db.objectStoreNames.contains(name); }
+      catch { return false; }
+    }
+  
+    function getAll(store) {
+      return new Promise((resolve, reject) => {
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+  
+    async function purge() {
+      try {
+        await sleep(START_DELAY_MS); // give initDB time to be defined
+        const db = await getDb();
+        if (!db || !storeExists(db, 'favicons')) {
+          console.log('🧹 Purge skipped: favicons store not found yet.');
+          return;
+        }
+  
+        const tx = db.transaction(['favicons'], 'readwrite');
+        const store = tx.objectStore('favicons');
+  
+        const all = await getAll(store);
+        let removed = 0;
+  
+        const BAD = /(?:^|\/\/)t\d+\.gstatic\.com\/favicon/i
+                  | /(?:^|\/\/)t\d+\.gstatic\.com\/faviconV2/i
+                  | /(?:^|\/\/)www\.google\.com\/s2\/favicons(?:\?|$).*sz=16/i
+                  | /googleusercontent\.com\/s2\/favicons/i;
+  
+        for (const rec of all) {
+          const f = rec?.favicon;
+          if (typeof f === 'string' && BAD.test(f)) {
+            store.delete(rec.hostname);
+            removed++;
+          }
+        }
+  
+        await new Promise((res, rej) => {
+          tx.oncomplete = res;
+          tx.onerror = () => rej(tx.error);
+          tx.onabort = () => rej(tx.error);
+        });
+  
+        console.log(`✅ Purge complete (${removed} removed)`);
+      } catch (err) {
+        console.warn('Purge failed', err);
+      }
+    }
+  
+    // Run after load/idle so DB/schema is ready
+    (window.requestIdleCallback || setTimeout)(purge, 0);
+  })();
+  
