@@ -298,7 +298,7 @@ async function checkFaviconCache(hostname) {
             request.onerror = () => reject(request.error);
         });
 
-        return (result?.favicon && result.timestamp > Date.now() - 3600000) ? result.favicon : null;
+        return (result?.favicon && result.timestamp > Date.now() - FAVICON_TTL_MS) ? result.favicon : null;
     } catch (e) {
         console.error('Error checking favicon cache:', e);
         return null;
@@ -2414,19 +2414,27 @@ window.__lifetilesRefresh = () => loadDashboards();
         const addTileButton = container.querySelector('.add-tile-button');
         container.insertBefore(tile, addTileButton);
 
-        // Fetch favicon without blocking insertion
+        // Fetch favicon without blocking insertion (cache-first)
         (async () => {
             try {
-                if (safeHost) {
-                    const favicon = await loadFaviconForHost(safeHost, tileData.url);
-                    if (favicon) {
-                        thumbnailElement.style.backgroundImage = `url('${favicon}')`;
-                        thumbnailElement.style.backgroundColor = 'transparent';
-                        thumbnailElement.innerHTML = '';
-                    } // else keep initials already shown
-                }
+            if (!safeHost) return;
+        
+            // 1) Try cache immediately (fast path, no network)
+            let favicon = await checkFaviconCache(safeHost);
+        
+            // 2) If cache miss, do your normal discovery chain
+            if (!favicon) {
+                favicon = await loadFaviconForHost(safeHost, tileData.url);
+            }
+        
+            // 3) Apply if we found one; otherwise initials remain
+            if (favicon) {
+                thumbnailElement.style.backgroundImage = `url('${favicon}')`;
+                thumbnailElement.style.backgroundColor = 'transparent';
+                thumbnailElement.innerHTML = '';
+            }
             } catch {
-                // keep initials fallback
+            // keep initials fallback
             }
         })();
     }
