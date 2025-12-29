@@ -86,26 +86,43 @@ select, button:not(.create-round-button), input, #custom-dropdown-container, .cu
     letter-spacing: 0.5px;
     background-color: #f5f5f5;
     border-bottom: 1px solid #ddd;
-    cursor: default;
-    pointer-events: none;
+    cursor: pointer;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
+    transition: background-color 0.15s ease;
+}
+
+.dropdown-group-label:hover {
+    background-color: #eaeaea;
 }
 
 .dropdown-group-label::before {
     content: "";
     display: block;
-    min-width: 14px;
-    width: 14px;
-    height: 14px;
+    min-width: 8px;
+    width: 8px;
+    height: 8px;
     flex-shrink: 0;
-    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M3 12h18"></path><path d="M3 18h18"></path></svg>');
-    background-repeat: no-repeat;
-    background-size: contain;
-    margin-right: 8px;
-    margin-top: 0px;
-    position: relative;
-    top: 1px;
+    border: none;
+    border-right: 2px solid #666;
+    border-bottom: 2px solid #666;
+    transform: rotate(45deg);
+    margin-right: 10px;
+    margin-left: 2px;
+    transition: transform 0.2s ease;
+}
+
+.dropdown-group-label.collapsed::before {
+    transform: rotate(-45deg);
+}
+
+/* Collapsible project container */
+.dashboard-projects {
+    overflow: hidden;
+}
+
+.dashboard-projects.collapsed {
+    display: none;
 }
 
 .dropdown-option {

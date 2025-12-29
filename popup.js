@@ -151,7 +151,13 @@ async function getTargetWindowId() {
         dropdownOptions.innerHTML = '';
         dropdownOptions.appendChild(scrollArea);
 
+        // Get last-used dashboard from localStorage
+        const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
+        console.log('Last used dashboard from localStorage:', lastUsedDashboardId);
+
         // Create groups for each dashboard
+        let firstDashboardId = null;
+
         for (const dashboard of dashboards) {
             const projectsRequest = projectStore.index('dashboardId').getAll(dashboard.id);
             const projects = await new Promise(resolve => {
@@ -159,16 +165,46 @@ async function getTargetWindowId() {
             });
 
             if (projects.length > 0) {
+                // Track first dashboard with projects
+                if (!firstDashboardId) {
+                    firstDashboardId = String(dashboard.id);
+                }
+
                 // Sort projects by order property to match dashboard order
                 const ord = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
                 projects.sort((a, b) => ord(a) - ord(b) || String(a.id).localeCompare(String(b.id)));
 
-                // Add dashboard label
+                // Determine if this dashboard should be expanded
+                const dashboardIdStr = String(dashboard.id);
+                const shouldExpand = lastUsedDashboardId
+                    ? lastUsedDashboardId === dashboardIdStr
+                    : dashboardIdStr === firstDashboardId;
+
+                // Add dashboard label (clickable for collapse/expand)
                 const dashboardLabel = document.createElement('div');
                 dashboardLabel.className = 'dropdown-group-label';
+                if (!shouldExpand) {
+                    dashboardLabel.classList.add('collapsed');
+                }
                 dashboardLabel.textContent = dashboard.name;
-                dashboardLabel.title = "Dashboard";
+                dashboardLabel.title = "Click to expand/collapse";
+                dashboardLabel.dataset.dashboardId = dashboard.id;
                 scrollArea.appendChild(dashboardLabel);
+
+                // Create collapsible container for projects
+                const projectsContainer = document.createElement('div');
+                projectsContainer.className = 'dashboard-projects';
+                if (!shouldExpand) {
+                    projectsContainer.classList.add('collapsed');
+                }
+                projectsContainer.dataset.dashboardId = dashboard.id;
+
+                // Add click handler to toggle collapse
+                dashboardLabel.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    dashboardLabel.classList.toggle('collapsed');
+                    projectsContainer.classList.toggle('collapsed');
+                });
 
                 // Add projects from this dashboard
                 projects.forEach(project => {
@@ -189,6 +225,11 @@ async function getTargetWindowId() {
                         selectedProjectValue = this.dataset.value;
                         dropdownOptions.classList.add('dropdown-hidden');
 
+                        // Save last-used dashboard to localStorage
+                        const dashId = String(dashboard.id);
+                        localStorage.setItem('lifetiles_lastDashboard', dashId);
+                        console.log('Saved dashboard to localStorage:', dashId);
+
                         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                         tileNameInput.value = tab.title || '';
                         tileUrlInput.value = tab.url || '';
@@ -197,8 +238,10 @@ async function getTargetWindowId() {
                         tileNameInput.focus();
                     });
 
-                    scrollArea.appendChild(projectOption);
+                    projectsContainer.appendChild(projectOption);
                 });
+
+                scrollArea.appendChild(projectsContainer);
             }
         }
 
