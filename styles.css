@@ -1,36 +1,61 @@
 :root {
-  --toolbar-h: 56px; /* pick the height you want */
+  /* Layout */
+  --toolbar-h: 56px;
+  --sidebar-w: 260px;
+
+  /* Colors */
+  --color-brand: #1a73e8;
+  --color-brand-dark: #1557b0;
+  --color-success: #4CAF50;
+  --color-success-dark: #45a049;
+  --color-danger: #dc3545;
+  --color-danger-dark: #c82333;
+  --color-text: #333;
+  --color-text-muted: #666;
+  --color-border: #e5e7eb;
+  --color-bg-light: #f8f9fa;
+  --color-bg-hover: #f0f0f0;
+
+  /* Effects */
+  --shadow-menu: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
+  --shadow-card: 2px 2px 10px rgba(0, 0, 0, 0.1);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --transition: 0.2s ease;
 }
 
 /* App shell layout */
 .app-shell {
     display: grid;
-    grid-template-columns: 260px 1fr;
-    min-height: 100vh;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    height: 100dvh;
 }
 
 /* Sidebar styles */
 .sidebar {
-    background: #f8f9fa;
-    border-right: 1px solid #e5e7eb;
+    background: var(--color-bg-light);
+    border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 100dvh;
     overflow: hidden;
+    position: sticky;
+    top: 0;
 }
 
 .sidebar-header {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: #f8f9fa;
+    background: var(--color-bg-light);
     height: var(--toolbar-h);
     padding: 0 12px;
     display: flex;
     align-items: center;
     gap: 12px;
     box-sizing: border-box;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
@@ -44,7 +69,7 @@
     font-weight: 600;
     margin: 0;
     flex: 1;
-    color: #333;
+    color: var(--color-text);
 }
 
 .icon-btn {
@@ -55,20 +80,22 @@
     font-size: 18px;
     line-height: 1;
     padding: 8px;
-    border-radius: 6px;
-    color: #666;
-    transition: background-color 0.2s ease;
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    transition: background-color var(--transition);
 }
 
 .icon-btn:hover {
     background: rgba(0, 0, 0, 0.05);
-    color: #333;
+    color: var(--color-text);
 }
 
 .sidebar-list {
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
     margin: 0;
     padding: 16px;
     list-style: none;
@@ -82,9 +109,9 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color var(--transition);
     position: relative;
     color: #555;
     font-size: 14px;
@@ -92,12 +119,12 @@
 
 .sidebar-item:hover {
     background: #e8eef6;
-    color: #333;
+    color: var(--color-text);
 }
 
 .sidebar-item[aria-selected="true"] {
     background: #e8f0fe;
-    color: #1a73e8;
+    color: var(--color-brand);
     font-weight: 500;
 }
 
@@ -110,7 +137,7 @@
 }
 
 .sidebar-item[aria-selected="true"] .dot {
-    background: #1a73e8;
+    background: var(--color-brand);
 }
 
 .sidebar-item .label {
@@ -125,7 +152,7 @@
     opacity: 0;
     display: flex;
     gap: 4px;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--transition);
 }
 
 .sidebar-item:hover .actions {
@@ -139,14 +166,14 @@
     cursor: pointer;
     font-size: 14px;
     padding: 4px;
-    border-radius: 4px;
-    color: #666;
-    transition: background-color 0.2s ease;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    transition: background-color var(--transition);
 }
 
 .sidebar-item-btn:hover {
     background: rgba(0, 0, 0, 0.1);
-    color: #333;
+    color: var(--color-text);
 }
 
 /* Mobile responsiveness */
@@ -245,8 +272,8 @@
     right: 4px;
     display: none;
     background-color: white;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-menu);
     z-index: 1000;
     min-width: 120px;
 }
@@ -262,19 +289,15 @@
     background: none;
     cursor: pointer;
     font-size: 14px;
-    color: #333;
+    color: var(--color-text);
     margin: 0;
     width: 100%;
     text-align: left;
 }
 
 .project-menu button:hover {
-    background-color: #f0f0f0;
-    color: #333;
-}
-
-:root { 
-    --toolbar-h: 56px; 
+    background-color: var(--color-bg-hover);
+    color: var(--color-text);
 }
 
 .main-toolbar {
@@ -287,25 +310,34 @@
     align-items: center;
     justify-content: flex-end;
     background: #fff;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--color-border);
     box-sizing: border-box;
-  }
-  
-  
-  
-  .settings-btn {
+}
+
+.settings-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 32px;
     height: 32px;
+    padding: 0;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     background: none;
     cursor: pointer;
     color: #555;
-  }
-  .settings-btn svg { width: 20px; height: 20px; }
+}
+
+.settings-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.settings-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #111;
+}
 
 /* Projects container layout */
 #projects-container {
@@ -320,8 +352,11 @@
 }
 
 #main {
-    min-height: 100vh;
+    height: 100dvh;
+    overflow: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Keep new project button full width and properly positioned */
@@ -329,10 +364,10 @@
     padding: 10px 24px;
     font-size: 16px;
     cursor: pointer;
-    background-color: #1a73e8;
+    background-color: var(--color-brand);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
     transition: all 0.2s ease-in-out;
     box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     width: auto;
@@ -360,23 +395,11 @@
     flex-direction: column;
 }
 
-/* Allow container to be wider at larger breakpoints, but don't force 3 columns */
-/* Base styles for projects container */
-#projects-container {
-    max-width: min(90vw, 1200px);
-    margin-left: auto;
-    margin-right: auto;
-    width: 100%;
-    box-sizing: border-box;
-}
-
 @media screen and (min-width: 1900px) {
     #projects-container {
         max-width: min(90vw, 1200px);
     }
 }
-
-
 
 /* Ensure new project button spans full width in grid layout */
 #projects-container:has(.project) .new-project {
@@ -388,8 +411,8 @@
 .project {
     background-color: #ffffff;
     padding: 20px;
-    border-radius: 8px;
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
 }
 
 /* Tile menu styles */
@@ -430,8 +453,8 @@
     right: 4px;
     display: none;
     background-color: white;
-    border-radius: 4px;
-    box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-menu);
     z-index: 1002;
     min-width: 120px;
 }
@@ -447,15 +470,15 @@
     background: none;
     cursor: pointer;
     font-size: 14px;
-    color: #333;
+    color: var(--color-text);
     margin: 0;
     width: 100%;
     text-align: left;
 }
 
 .tile-menu button:hover {
-    background-color: #f0f0f0;
-    color: #333;
+    background-color: var(--color-bg-hover);
+    color: var(--color-text);
 }
 
 .tile-thumbnail {
@@ -543,8 +566,6 @@ body.dragging .add-tile-button {
     left: 0;
     right: 0;
     bottom: 0;
-    width: 100%;
-    height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
     justify-content: center;
     align-items: center;
@@ -555,7 +576,7 @@ body.dragging .add-tile-button {
 .modal-content {
     background-color: white;
     padding: 20px;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     width: 220px;
     text-align: center;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -619,12 +640,12 @@ button:disabled {
 }
 
 .done-button.enabled {
-    background-color: #4CAF50;
+    background-color: var(--color-success);
     cursor: pointer;
 }
 
 .done-button.enabled:hover {
-    background-color: #45a049;
+    background-color: var(--color-success-dark);
 }
 
 .tiles-container {
@@ -635,38 +656,38 @@ button:disabled {
     justify-content: center;
 }
 
-.tile, .add-tile-button {
-    width: 100%;
+.add-tile-button {
     max-width: 120px;
     justify-self: center;
 }
 
 .tile {
     width: 120px;
+    max-width: 120px;
+    justify-self: center;
     height: 150px;
-    background-color: #f0f0f0;
+    background-color: var(--color-bg-hover);
     border: 1px solid #ccc;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     display: flex;
     flex-direction: column;
     align-items: center;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform var(--transition), box-shadow var(--transition);
     overflow: hidden;
     position: relative;
     padding: 32px 8px 8px 8px;
-    /* Improve tooltip behavior */
     z-index: 10;
 }
 
 .project-title {
-    font-size: 28px; /* Increased base size */
-    font-weight: 600; /* Added medium-bold weight */
+    font-size: 28px;
+    font-weight: 600;
     margin: 0;
-    color: #333;
-    line-height: 1.2; /* Better spacing */
+    color: var(--color-text);
+    line-height: 1.2;
     text-align: center;
-    max-width: 85%; /* Prevent text from extending too close to menu buttons */
+    max-width: 85%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -713,7 +734,7 @@ button:disabled {
 
 .manage-dashboard-item.selected {
     background: #e8f0fe;
-    border-color: #1a73e8;
+    border-color: var(--color-brand);
 }
 
 .dashboard-checkbox {
@@ -726,9 +747,9 @@ button:disabled {
 .bulk-actions-bar {
     display: none;
     padding: 12px 16px;
-    background: #f8f9fa;
+    background: var(--color-bg-light);
     border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     margin-bottom: 16px;
     align-items: center;
     justify-content: space-between;
@@ -757,13 +778,13 @@ button:disabled {
 
 .bulk-action-btn {
     padding: 6px 12px;
-    border: 1px solid #dc3545;
+    border: 1px solid var(--color-danger);
     background: white;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 12px;
-    color: #dc3545;
-    transition: all 0.2s ease;
+    color: var(--color-danger);
+    transition: all var(--transition);
 }
 
 .bulk-action-btn:hover {
@@ -771,12 +792,12 @@ button:disabled {
 }
 
 .bulk-action-btn.primary {
-    background: #dc3545;
+    background: var(--color-danger);
     color: white;
 }
 
 .bulk-action-btn.primary:hover {
-    background: #c82333;
+    background: var(--color-danger-dark);
 }
 
 .select-controls {
@@ -787,34 +808,34 @@ button:disabled {
 .select-control-btn {
     background: none;
     border: none;
-    color: #1a73e8;
+    color: var(--color-brand);
     cursor: pointer;
     font-size: 12px;
     text-decoration: underline;
 }
 
 .select-control-btn:hover {
-    color: #1557b0;
+    color: var(--color-brand-dark);
 }
 
 .manage-dashboard-item:hover {
-    background: #f8f9fa;
+    background: var(--color-bg-light);
     border-color: #d0d0d0;
 }
 
 .manage-dashboard-item.editing {
-    border-color: #1a73e8;
+    border-color: var(--color-brand);
     background: #f8f9ff;
 }
 
 .dashboard-drag-handle {
     cursor: grab;
-    color: #666;
+    color: var(--color-text-muted);
     margin-right: 12px;
     font-size: 16px;
     padding: 4px;
-    border-radius: 4px;
-    transition: background-color 0.2s ease;
+    border-radius: var(--radius-sm);
+    transition: background-color var(--transition);
 }
 
 .dashboard-drag-handle:hover {
@@ -875,21 +896,21 @@ button:disabled {
     padding: 6px 12px;
     border: 1px solid #ddd;
     background: white;
-    border-radius: 4px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     font-size: 12px;
-    transition: all 0.2s ease;
-    color: #333;
+    transition: all var(--transition);
+    color: var(--color-text);
 }
 
 .manage-action-btn:hover {
-    background: #f0f0f0;
+    background: var(--color-bg-hover);
     border-color: #ccc;
 }
 
 .manage-action-btn.edit-btn {
-    color: #1a73e8;
-    border-color: #1a73e8;
+    color: var(--color-brand);
+    border-color: var(--color-brand);
 }
 
 .manage-action-btn.edit-btn:hover {
@@ -897,8 +918,8 @@ button:disabled {
 }
 
 .manage-action-btn.delete-btn {
-    color: #dc3545;
-    border-color: #dc3545;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
 }
 
 .manage-action-btn.delete-btn:hover {
@@ -906,13 +927,13 @@ button:disabled {
 }
 
 .manage-action-btn.save-btn {
-    background: #4CAF50;
+    background: var(--color-success);
     color: white;
-    border-color: #4CAF50;
+    border-color: var(--color-success);
 }
 
 .manage-action-btn.save-btn:hover {
-    background: #45a049;
+    background: var(--color-success-dark);
 }
 
 .manage-action-btn.cancel-btn {
@@ -943,71 +964,18 @@ button:disabled {
     border: 2px dashed #ccc;
 }
 
-/* --- Two independent scroll containers --- */
+/* --- Global scroll behavior --- */
 html, body {
-  margin: 0;     /* eliminate default 8px gap */
-  padding: 0; 
+  margin: 0;
+  padding: 0;
   height: 100%;
-  overflow: hidden;            /* 🔒 prevent body from scrolling */
-}
-
-.app-shell {
-  display: grid;
-  grid-template-columns: 260px 1fr; /* sidebar | main */
-  height: 100dvh;                   /* full viewport for the grid */
-}
-
-/* Sidebar: shell only (no scrollbar) */
-#sidebar,
-.sidebar {
-  overflow: hidden;         /* ensure the shell itself never scrolls */
-  height: 100dvh;           /* keep full-height column */
-  display: flex;
-  flex-direction: column;
-  position: sticky;
-  top: 0;
-}
-
-/* Sticky header stays outside the scroller */
-.sidebar-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  flex-shrink: 0;
-}
-
-/* List: the only scroll container */
-#sidebar-list,
-.sidebar-list {
-  flex: 1;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-gutter: stable; /* optional: reserves gutter, avoids overlay */
-}
-
-/* Main content scrolls by itself */
-#main {
-  height: 100dvh;
-  overflow: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
 /* Safety on modals/menus in case they sit at edges */
 .modal, .project-menu, .tile-menu, .dashboard-actions-menu {
   overscroll-behavior: contain;
 }
-
-
-  .settings-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 32px; height: 32px; padding: 0;
-    border: none; border-radius: 6px; background: none; cursor: pointer;
-    color: #555;
-  }
-  .settings-btn svg { width: 20px; height: 20px; display: block; }
-  .settings-btn:hover { background: rgba(0,0,0,0.06); color: #111; }
 
 /* Settings dropdown menu */
 .settings-menu {
@@ -1016,8 +984,8 @@ html, body {
   right: 0;
   display: none;
   background: #fff;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-menu);
   min-width: 220px;
   z-index: 1101;
   overflow: hidden;
@@ -1040,5 +1008,5 @@ html, body {
 }
 
 .settings-menu button:hover {
-  background: #f0f0f0;
+  background: var(--color-bg-hover);
 }
