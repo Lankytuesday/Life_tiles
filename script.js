@@ -2,6 +2,13 @@ const __ltOnsiteBlocked = new Set();
 
 let lifetilesBC = null;
 
+// Helper to trigger sync after data mutations
+function triggerSync() {
+    if (typeof LifetilesSync !== 'undefined') {
+        LifetilesSync.scheduleSync();
+    }
+}
+
 let __ltRefreshScheduled = false;
 
 function __ltScheduleRefresh() {
@@ -455,6 +462,24 @@ document.addEventListener("DOMContentLoaded", async function () {
     try {
         const db = await initDB();
         console.log('IndexedDB initialized successfully');
+
+        // Initialize sync after IndexedDB is ready
+        if (typeof LifetilesSync !== 'undefined') {
+            const syncResult = await LifetilesSync.init();
+            console.log('[Sync] Init result:', syncResult);
+            LifetilesSync.startListening();
+
+            // Listen for remote updates to refresh UI
+            window.addEventListener('lifetiles-sync', (e) => {
+                if (e.detail.type === 'remote_update' && e.detail.imported) {
+                    console.log('[Sync] Remote update received, refreshing UI');
+                    loadProjects(); // Refresh the UI
+                }
+                if (e.detail.type === 'quota_warning') {
+                    console.warn('[Sync] Quota warning:', e.detail.percentUsed + '% used');
+                }
+            });
+        }
     } catch (error) {
         console.error('Failed to initialize IndexedDB:', error);
     }
@@ -925,9 +950,10 @@ window.__lifetilesRefresh = () => loadDashboards();
                         };
                         request.onerror = () => reject(request.error);
                     });
-                    
+
                     labelEl.textContent = newName;
                     dashboard.name = newName;
+                    triggerSync();
                 } catch (error) {
                     console.error('Error updating dashboard name:', error);
                 }
@@ -965,9 +991,10 @@ window.__lifetilesRefresh = () => loadDashboards();
         if (confirm('Are you sure you want to delete this dashboard? All projects and tiles in it will be removed.')) {
             // Use existing deletion logic
             await deleteDashboardFromManage(dashboardId, null);
-            
+
             // Refresh sidebar
             const updatedDashboards = await loadDashboards();
+            triggerSync();
         }
     }
 
@@ -987,8 +1014,9 @@ window.__lifetilesRefresh = () => loadDashboards();
                     store.put(rec);
                 };
             });
-            
+
             await new Promise(res => tx.oncomplete = res);
+            triggerSync();
         } catch (error) {
             console.error('Error updating dashboard order:', error);
         }
@@ -1295,6 +1323,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             const request = store.add(projectData);
             request.onsuccess = () => {
                 createProjectElement(projectData);
+                triggerSync();
                 resolve();
             };
             request.onerror = () => reject(request.error);
@@ -1317,7 +1346,10 @@ window.__lifetilesRefresh = () => loadDashboards();
                 // ✅ keep the order assigned at creation (existingTiles.length)
                 order: Number.isFinite(+tileData.order) ? +tileData.order : 0
             });
-            request.onsuccess = () => resolve();
+            request.onsuccess = () => {
+                triggerSync();
+                resolve();
+            };
             request.onerror = () => reject(request.error);
         });
     }
@@ -1407,6 +1439,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     if (titleEl) titleEl.textContent = newName;
 
                     closeProjectModalHandler();
+                    triggerSync();
 
                     // Reset the submit button back to "create" mode
                     const oldBtn = submitProjectBtn;
@@ -1523,6 +1556,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             // Remove project from current view
             currentProjectEl.remove();
             modal.remove();
+            triggerSync();
         };
 
         buttons.appendChild(cancelBtn);
@@ -1645,6 +1679,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             }
 
             modal.remove();
+            triggerSync();
         };
 
         buttons.appendChild(cancelBtn);
@@ -1666,7 +1701,10 @@ window.__lifetilesRefresh = () => loadDashboards();
                 const tx = db.transaction(['projects'], 'readwrite');
                 const store = tx.objectStore('projects');
                 const request = store.delete(projectData.id);
-                request.onsuccess = () => project.remove();
+                request.onsuccess = () => {
+                    project.remove();
+                    triggerSync();
+                };
             }
         };
 
@@ -1949,6 +1987,7 @@ window.__lifetilesRefresh = () => loadDashboards();
           currentDashboardId = dashboardData.id;
           await loadDashboards();
           closeDashboardModalHandler();
+          triggerSync();
         };
       }
       
@@ -2234,6 +2273,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     }, 50);
                 }
 
+                triggerSync();
             } catch (error) {
                 console.error('Error bulk deleting dashboards:', error);
                 alert('Error deleting dashboards. Please try again.');
@@ -2337,6 +2377,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                         // Only update the dashboard selector without reloading projects
                         updateDashboardSelector().then(() => {
+                            triggerSync();
                             resolve();
                         });
                     };
@@ -2454,6 +2495,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     // Just update the selector since we're not on the deleted dashboard
                     await updateDashboardSelector();
                 }
+                triggerSync();
             }
         } catch (error) {
             console.error('Error deleting dashboard:', error);
@@ -2493,6 +2535,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Only update the dashboard selector without reloading projects
             await updateDashboardSelector();
+            triggerSync();
         } catch (error) {
             console.error('Error updating dashboard order:', error);
         }
@@ -2632,6 +2675,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                     tile.querySelector('.tile-name').textContent = newName;
                     closeTileModalHandler();
+                    triggerSync();
 
                     // Reset the submit button to create mode
                     const oldBtn = submitTileBtn;
@@ -2653,7 +2697,10 @@ window.__lifetilesRefresh = () => loadDashboards();
                 const tx = db.transaction(['tiles'], 'readwrite');
                 const store = tx.objectStore('tiles');
                 const deleteRequest = store.delete(tileData.id);
-                deleteRequest.onsuccess = () => tile.remove();
+                deleteRequest.onsuccess = () => {
+                    tile.remove();
+                    triggerSync();
+                };
             }
         };
 
@@ -2767,6 +2814,7 @@ function getOrderedTileIds(containerEl) {
         };
         getReq.onerror = () => reject(getReq.error);
       })));
+      triggerSync();
     } catch (e) {
       console.error('updateProjectOrder failed:', e);
     }
@@ -2804,6 +2852,7 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
                 button.classList.remove('hover');
             });
 
+            triggerSync();
         } catch (error) {
             console.error('Error updating tile order:', error);
         }
