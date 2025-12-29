@@ -1367,7 +1367,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Project edit button (refactored with fresh DB fetch)
         const editButton = document.createElement("button");
-        editButton.textContent = "Edit";
+        editButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`;
         editButton.onclick = async (e) => {
         e.stopPropagation();
         closeAllMenus();
@@ -1419,8 +1419,124 @@ window.__lifetilesRefresh = () => loadDashboards();
     };
 
 
+    // Move to Dashboard button
+    const moveButton = document.createElement("button");
+    moveButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Move to Dashboard`;
+    moveButton.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closeAllMenus();
+
+        const db = await initDB();
+        let tx = db.transaction(['dashboards'], 'readonly');
+        const dashboardStore = tx.objectStore('dashboards');
+
+        let dashboards = await new Promise((resolve, reject) => {
+            const request = dashboardStore.getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+        });
+
+        if (dashboards.length > 0) {
+            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+        }
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'flex';
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+        content.style.width = '280px';
+
+        const title = document.createElement('h2');
+        title.textContent = 'Move to Dashboard';
+
+        const select = document.createElement('select');
+        select.style.cssText = `
+            width: 100%;
+            margin-bottom: 20px;
+            padding: 8px;
+            font-size: 14px;
+        `;
+
+        dashboards.forEach(dashboard => {
+            if (dashboard.id !== currentDashboardId) {
+                const option = document.createElement('option');
+                option.value = dashboard.id;
+                option.textContent = dashboard.name;
+                select.appendChild(option);
+            }
+        });
+
+        const buttons = document.createElement('div');
+        buttons.className = 'modal-buttons';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'cancel-button';
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.onclick = () => modal.remove();
+
+        const moveBtn = document.createElement('button');
+        moveBtn.className = 'done-button enabled';
+        moveBtn.textContent = 'Move';
+        moveBtn.onclick = async () => {
+            const selectedDashboardId = select.value;
+            if (!selectedDashboardId) return;
+
+            const currentProjectEl = moveButton.closest('.project');
+            if (!currentProjectEl) return;
+
+            const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
+            if (!freshProject) return;
+
+            const db = await initDB();
+            const tx = db.transaction(['projects', 'tiles'], 'readwrite');
+            const projectStore = tx.objectStore('projects');
+            const tileStore = tx.objectStore('tiles');
+
+            // Get all tiles for this project
+            const tiles = await new Promise((resolve) => {
+                const request = tileStore.index('projectId').getAll(freshProject.id);
+                request.onsuccess = () => resolve(request.result || []);
+            });
+
+            // Update project's dashboardId
+            freshProject.dashboardId = selectedDashboardId;
+            await new Promise((resolve, reject) => {
+                const req = projectStore.put(freshProject);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+
+            // Update all tiles' dashboardId
+            for (const tile of tiles) {
+                tile.dashboardId = selectedDashboardId;
+                await new Promise((resolve, reject) => {
+                    const req = tileStore.put(tile);
+                    req.onsuccess = () => resolve();
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            // Remove project from current view
+            currentProjectEl.remove();
+            modal.remove();
+        };
+
+        buttons.appendChild(cancelBtn);
+        buttons.appendChild(moveBtn);
+
+        content.appendChild(title);
+        content.appendChild(select);
+        content.appendChild(buttons);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    };
+
     const copyButton = document.createElement("button");
-    copyButton.textContent = "Copy to Dashboard";
+    copyButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy to Dashboard`;
     copyButton.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1542,7 +1658,7 @@ window.__lifetilesRefresh = () => loadDashboards();
     };
 
         const removeButton = document.createElement("button");
-        removeButton.textContent = "Remove";
+        removeButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Remove`;
         removeButton.onclick = async (e) => {
             e.stopPropagation();
             if (confirm('Are you sure you want to remove this project?')) {
@@ -1555,6 +1671,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         };
 
         menu.appendChild(editButton);
+        menu.appendChild(moveButton);
         menu.appendChild(copyButton);
         menu.appendChild(removeButton);
 
@@ -2461,7 +2578,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
 
         const editButton = document.createElement("button");
-        editButton.textContent = "Edit";
+        editButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`;
         editButton.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -2527,7 +2644,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         };
 
         const removeButton = document.createElement("button");
-        removeButton.textContent = "Remove";
+        removeButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Remove`;
         removeButton.onclick = async (e) => {
             e.preventDefault();
             e.stopPropagation();

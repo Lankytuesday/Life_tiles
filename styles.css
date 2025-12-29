@@ -389,6 +389,13 @@
     margin: 0;
     width: 100%;
     text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.project-menu button svg {
+    flex-shrink: 0;
 }
 
 .project-menu button:hover {
@@ -572,6 +579,13 @@
     margin: 0;
     width: 100%;
     text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tile-menu button svg {
+    flex-shrink: 0;
 }
 
 .tile-menu button:hover {
