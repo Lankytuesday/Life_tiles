@@ -72,6 +72,101 @@
     color: var(--color-text);
 }
 
+/* Toolbar search */
+.toolbar-search-container {
+    position: relative;
+    flex: 1;
+    max-width: 400px;
+    margin-right: 12px;
+}
+
+.toolbar-search {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    outline: none;
+    background: var(--color-bg-light);
+    transition: border-color var(--transition), background-color var(--transition);
+}
+
+.toolbar-search:focus {
+    border-color: var(--color-brand);
+    background: white;
+}
+
+.toolbar-search::placeholder {
+    color: var(--color-text-muted);
+}
+
+/* Search results dropdown */
+.search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 350px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-menu);
+    z-index: 1000;
+    margin-top: 4px;
+}
+
+.search-results.hidden {
+    display: none;
+}
+
+.search-result-group {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    background: var(--color-bg-light);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.search-result-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.search-result-item:hover {
+    background: var(--color-bg-hover);
+}
+
+.search-result-item .result-context {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-left: auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+
+/* Search highlight animation - uses outline to avoid clipping */
+.search-highlight {
+    animation: highlight-pulse 2s ease-out;
+    position: relative;
+    z-index: 10;
+}
+
+@keyframes highlight-pulse {
+    0% { outline: 3px solid var(--color-brand); outline-offset: 2px; }
+    50% { outline: 3px solid var(--color-brand); outline-offset: 2px; }
+    100% { outline: 3px solid transparent; outline-offset: 2px; }
+}
+
 .icon-btn {
     appearance: none;
     border: none;

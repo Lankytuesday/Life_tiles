@@ -468,6 +468,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Setup sidebar
     setupSidebar();
 
+    // Setup search
+    setupSearch();
+
     // Project Modal Elements
     const newProjectBtn = document.getElementById("new-project");
     const projectModal = document.getElementById("project-modal");
@@ -1001,6 +1004,187 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
     }
 
+    // Setup search functionality
+    function setupSearch() {
+        const searchInput = document.getElementById('sidebar-search');
+        const searchResults = document.getElementById('search-results');
+        if (!searchInput || !searchResults) return;
+
+        let searchTimeout;
+        let dashboardsCache = [];
+
+        // Cache dashboards for name lookup
+        async function cacheDashboards() {
+            const db = await initDB();
+            const tx = db.transaction(['dashboards'], 'readonly');
+            const store = tx.objectStore('dashboards');
+            return new Promise((resolve) => {
+                const req = store.getAll();
+                req.onsuccess = () => {
+                    dashboardsCache = req.result || [];
+                    resolve(dashboardsCache);
+                };
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        function getDashboardName(dashboardId) {
+            const d = dashboardsCache.find(db => String(db.id) === String(dashboardId));
+            return d?.name || 'Unknown';
+        }
+
+        async function searchAll(query) {
+            if (!query || query.length < 2) return { dashboards: [], projects: [], tiles: [] };
+
+            const q = query.toLowerCase();
+            const db = await initDB();
+            const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readonly');
+
+            const dashboards = await new Promise((resolve) => {
+                const req = tx.objectStore('dashboards').getAll();
+                req.onsuccess = () => resolve((req.result || []).filter(d => d.name.toLowerCase().includes(q)));
+                req.onerror = () => resolve([]);
+            });
+
+            const projects = await new Promise((resolve) => {
+                const req = tx.objectStore('projects').getAll();
+                req.onsuccess = () => resolve((req.result || []).filter(p => p.name.toLowerCase().includes(q)));
+                req.onerror = () => resolve([]);
+            });
+
+            const tiles = await new Promise((resolve) => {
+                const req = tx.objectStore('tiles').getAll();
+                req.onsuccess = () => resolve((req.result || []).filter(t =>
+                    t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)
+                ));
+                req.onerror = () => resolve([]);
+            });
+
+            return { dashboards, projects, tiles };
+        }
+
+        function renderSearchResults(results) {
+            const { dashboards, projects, tiles } = results;
+
+            if (!dashboards.length && !projects.length && !tiles.length) {
+                searchResults.innerHTML = '<div class="search-result-item" style="color: var(--color-text-muted);">No results found</div>';
+                searchResults.classList.remove('hidden');
+                return;
+            }
+
+            let html = '';
+
+            if (dashboards.length) {
+                html += '<div class="search-result-group">Dashboards</div>';
+                dashboards.forEach(d => {
+                    html += `<div class="search-result-item" data-type="dashboard" data-id="${d.id}">${escapeHtml(d.name)}</div>`;
+                });
+            }
+
+            if (projects.length) {
+                html += '<div class="search-result-group">Projects</div>';
+                projects.forEach(p => {
+                    html += `<div class="search-result-item" data-type="project" data-id="${p.id}" data-dashboard-id="${p.dashboardId}">
+                        ${escapeHtml(p.name)}
+                        <span class="result-context">in ${escapeHtml(getDashboardName(p.dashboardId))}</span>
+                    </div>`;
+                });
+            }
+
+            if (tiles.length) {
+                html += '<div class="search-result-group">Tiles</div>';
+                tiles.forEach(t => {
+                    let hostname = '';
+                    try { hostname = new URL(t.url).hostname; } catch {}
+                    html += `<div class="search-result-item" data-type="tile" data-id="${t.id}" data-dashboard-id="${t.dashboardId}" data-project-id="${t.projectId}">
+                        ${escapeHtml(t.name)}
+                        <span class="result-context">${escapeHtml(hostname)}</span>
+                    </div>`;
+                });
+            }
+
+            searchResults.innerHTML = html;
+            searchResults.classList.remove('hidden');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        function highlightElement(el) {
+            el.classList.add('search-highlight');
+            setTimeout(() => el.classList.remove('search-highlight'), 2000);
+        }
+
+        // Debounced input handler
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(async () => {
+                const query = searchInput.value.trim();
+                if (query.length < 2) {
+                    searchResults.classList.add('hidden');
+                    return;
+                }
+                await cacheDashboards();
+                const results = await searchAll(query);
+                renderSearchResults(results);
+            }, 200);
+        });
+
+        // Handle result clicks
+        searchResults.addEventListener('click', async (e) => {
+            const item = e.target.closest('.search-result-item');
+            if (!item || !item.dataset.type) return;
+
+            const { type, id, dashboardId, projectId } = item.dataset;
+
+            // Clear search
+            searchInput.value = '';
+            searchResults.classList.add('hidden');
+
+            if (type === 'dashboard') {
+                await switchDashboard(id);
+            } else if (type === 'project') {
+                await switchDashboard(dashboardId);
+                // Wait for DOM to fully render, then scroll to project
+                setTimeout(() => {
+                    const projectEl = document.querySelector(`.project[data-project-id="${id}"]`);
+                    if (projectEl) {
+                        projectEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        highlightElement(projectEl);
+                    }
+                }, 100);
+            } else if (type === 'tile') {
+                await switchDashboard(dashboardId);
+                setTimeout(() => {
+                    const tileEl = document.querySelector(`.tile[data-tile-id="${id}"]`);
+                    if (tileEl) {
+                        tileEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        highlightElement(tileEl);
+                    }
+                }, 100);
+            }
+        });
+
+        // Close results on click outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.toolbar-search-container')) {
+                searchResults.classList.add('hidden');
+            }
+        });
+
+        // Close on Escape key
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                searchResults.classList.add('hidden');
+                searchInput.blur();
+            }
+        });
+    }
+
     async function switchDashboard(dashboardId) {
         // Update active sidebar item
         document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -1030,7 +1214,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         document.getElementById('projects-container').appendChild(newProjectButton);
 
         // Load projects for selected dashboard
-        loadProjectsForDashboard(dashboardId);
+        await loadProjectsForDashboard(dashboardId);
     }
 
     async function loadProjects(projects = []) {
