@@ -551,6 +551,7 @@
 @media screen and (min-width: 1900px) {
     #projects-container {
         max-width: min(90vw, 1200px);
+        margin: 0 auto;
     }
 }
 
