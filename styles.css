@@ -283,6 +283,31 @@
     }
 }
 
+/* Project controls (expand/collapse all) */
+.project-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: -8px;
+}
+
+.project-control-btn {
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #666;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.project-control-btn:hover {
+    background-color: #f5f5f5;
+    border-color: #ccc;
+    color: #333;
+}
+
 /* Project header and menu styles */
 .project-header {
     display: flex;
@@ -290,13 +315,11 @@
     justify-content: flex-start;
     position: relative;
     margin-bottom: 8px;
-    padding: 4px 0 4px 28px; /* Left padding for drag handle */
+    padding: 4px 0;
+    gap: 4px;
 }
 
 .project-drag-handle {
-    position: absolute;
-    left: 4px;
-    top: 4px;
     width: 24px;
     height: 24px;
     border: none;
@@ -307,6 +330,7 @@
     cursor: grab;
     opacity: 0;
     transition: opacity 0.2s ease, background-color 0.2s ease;
+    flex-shrink: 0;
 }
 
 .project-drag-handle:hover {
@@ -328,14 +352,11 @@
     background-repeat: repeat;
 }
 
-.project-header:hover .project-drag-handle {
+.project:hover .project-drag-handle {
     opacity: 1;
 }
 
 .project-menu-trigger {
-    position: absolute;
-    right: 4px;
-    top: 4px;
     width: 24px;
     height: 24px;
     border: none;
@@ -346,26 +367,29 @@
     padding: 0;
     opacity: 0;
     visibility: hidden;
+    display: flex;
     justify-content: center;
     align-items: center;
     border-radius: 50%;
     transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-left: auto;
 }
 
 .project-menu-trigger:hover {
     background-color: #f0f0f0;
 }
 
-.project-header:hover .project-menu-trigger {
+.project:hover .project-menu-trigger {
     opacity: 1;
     visibility: visible;
-    display: flex;
 }
 
 .project-menu {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: 100%;
+    right: 0;
     display: none;
     background-color: white;
     border-radius: var(--radius-sm);
@@ -401,6 +425,49 @@
 .project-menu button:hover {
     background-color: var(--color-bg-hover);
     color: var(--color-text);
+}
+
+/* Project collapse caret */
+.project-collapse-caret {
+    width: 18px;
+    height: 18px;
+    border: none;
+    background: transparent;
+    background-color: transparent;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 6px;
+    margin-top: 2px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    transition: color 0.2s ease;
+    flex-shrink: 0;
+    outline: none;
+}
+
+.project-collapse-caret:hover,
+.project-collapse-caret:focus {
+    color: #555;
+    background: transparent;
+    background-color: transparent;
+    outline: none;
+}
+
+.project-collapse-caret svg {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.2s ease;
+}
+
+/* Collapsed state */
+.project.collapsed .project-collapse-caret svg {
+    transform: rotate(-90deg);
+}
+
+.project.collapsed .tiles-container {
+    display: none;
 }
 
 .main-toolbar {
@@ -448,7 +515,7 @@
     padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     position: relative;
     max-width: 100%;
     box-sizing: border-box;
@@ -472,42 +539,19 @@
     color: white;
     border: none;
     border-radius: var(--radius-md);
-    transition: all 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out;
     box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     width: auto;
-    display: block !important;
     margin: 0 auto 24px;
     position: relative;
     z-index: 100;
 }
 
-/* Single column layout for projects */
-#projects-container:has(.project + .project) {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    max-width: 100%;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-/* Default for container with a single project - stay with flex column layout */
-#projects-container:has(.project:only-child) {
-    display: flex;
-    flex-direction: column;
-}
 
 @media screen and (min-width: 1900px) {
     #projects-container {
         max-width: min(90vw, 1200px);
     }
-}
-
-/* Ensure new project button spans full width in grid layout */
-#projects-container:has(.project) .new-project {
-    grid-column: 1 / -1;
-    order: -1; /* Force button to top */
-    margin-bottom: 24px;
 }
 
 .project {
@@ -649,16 +693,16 @@
 .add-tile-button {
     width: 94px;
     height: 94px;
-    border: 2px dashed #ccc;
+    border: 2px dashed transparent;
     background-color: transparent;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
-    color: #666;
+    color: #999;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: border-color 0.2s ease, color 0.2s ease, background-color 0.2s ease;
 }
 
 body.dragging .add-tile-button {
