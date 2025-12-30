@@ -287,10 +287,10 @@
 .project-header {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     position: relative;
-    margin-bottom: 10px;
-    padding: 8px 32px; /* Added horizontal padding to make room for menu and drag handle */
+    margin-bottom: 8px;
+    padding: 4px 0 4px 28px; /* Left padding for drag handle */
 }
 
 .project-drag-handle {
@@ -445,10 +445,10 @@
 
 /* Projects container layout */
 #projects-container {
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 12px;
     position: relative;
     max-width: 100%;
     box-sizing: border-box;
@@ -481,15 +481,12 @@
     z-index: 100;
 }
 
-/* Grid layout for multiple projects */
+/* Single column layout for projects */
 #projects-container:has(.project + .project) {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    align-items: start;
-    gap: 24px;
-    max-width: 90vw;
-    margin-left: auto;
-    margin-right: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 100%;
     width: 100%;
     box-sizing: border-box;
 }
@@ -514,10 +511,16 @@
 }
 
 .project {
-    background-color: #ffffff;
-    padding: 20px;
+    background-color: transparent;
+    padding: 12px;
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: none;
+    border: 1px solid transparent;
+    transition: border-color var(--transition);
+}
+
+.project:hover {
+    border-color: var(--color-border);
 }
 
 /* Tile menu styles */
@@ -561,7 +564,7 @@
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-menu);
     z-index: 1002;
-    min-width: 120px;
+    min-width: 90px;
 }
 
 .tile-menu-trigger.active + .tile-menu {
@@ -570,18 +573,18 @@
 }
 
 .tile-menu button {
-    padding: 8px 16px;
+    padding: 6px 10px;
     border: none;
     background: none;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     color: var(--color-text);
     margin: 0;
     width: 100%;
     text-align: left;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 .tile-menu button svg {
@@ -594,9 +597,9 @@
 }
 
 .tile-thumbnail {
-    width: 64px;
-    height: 64px;
-    background-size: 48px;
+    width: 48px;
+    height: 48px;
+    background-size: 40px;
     background-position: center;
     background-repeat: no-repeat;
     border-radius: 4px;
@@ -615,7 +618,7 @@
 }
 
 .tile-initials {
-    font-size: 20px; /* Changed back from 14px */
+    font-size: 16px;
     font-weight: bold;
     color: white;
     text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
@@ -624,26 +627,28 @@
 .tile:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-color: #ccc;
+    background-color: var(--color-bg-hover);
 }
 
 .tile-name {
-    font-size: 14px;
-    margin-top: 8px;
+    font-size: 12px;
+    margin-top: 4px;
     text-align: center;
-    padding: 0 8px;
+    padding: 0 2px 2px 2px;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     max-width: 100%;
     width: 100%;
-    line-height: 1.2;
-    max-height: 50px; /* Approx height for 3 lines */
+    line-height: 1.3;
+    max-height: 34px; /* Approx height for 2 lines with descenders */
 }
 
 .add-tile-button {
-    width: 120px;
-    height: 120px;
+    width: 94px;
+    height: 94px;
     border: 2px dashed #ccc;
     background-color: transparent;
     border-radius: 8px;
@@ -762,44 +767,44 @@ button:disabled {
 
 .tiles-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 140px));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(106px, 106px));
+    gap: 12px;
     align-items: start;
-    justify-content: center;
+    justify-content: start;
 }
 
 .add-tile-button {
-    max-width: 120px;
-    justify-self: center;
+    max-width: 94px;
+    justify-self: start;
 }
 
 .tile {
-    width: 120px;
-    max-width: 120px;
-    justify-self: center;
-    height: 150px;
-    background-color: var(--color-bg-hover);
-    border: 1px solid #ccc;
-    border-radius: var(--radius-lg);
+    width: 94px;
+    max-width: 94px;
+    justify-self: start;
+    height: 110px;
+    background-color: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
     align-items: center;
     cursor: pointer;
-    transition: transform var(--transition), box-shadow var(--transition);
-    overflow: hidden;
+    transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition), background-color var(--transition);
+    overflow: visible;
     position: relative;
-    padding: 32px 8px 8px 8px;
+    padding: 16px 4px 2px 4px;
     z-index: 10;
 }
 
 .project-title {
-    font-size: 28px;
+    font-size: 18px;
     font-weight: 600;
     margin: 0;
     color: var(--color-text);
     line-height: 1.2;
-    text-align: center;
-    max-width: 85%;
+    text-align: left;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

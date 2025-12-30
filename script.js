@@ -838,41 +838,41 @@ window.__lifetilesRefresh = () => loadDashboards();
     function renderSidebar(dashboards, currentId) {
         const list = document.getElementById('sidebar-list');
         if (!list) return;
-        
+
         list.innerHTML = '';
-        
+
         // Sort dashboards by order
         const sortedDashboards = dashboards.slice().sort((a, b) => {
             const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
             const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
             return ao - bo || String(a.id).localeCompare(String(b.id));
         });
-        
+
         sortedDashboards.forEach(dashboard => {
             const li = createSidebarItem(dashboard);
             li.setAttribute('aria-selected', String(dashboard.id === currentId));
             li.tabIndex = dashboard.id === currentId ? 0 : -1;
-            
+
             // Click to select dashboard
             li.addEventListener('click', (e) => {
                 if (e.target.closest('.actions')) return; // Don't select if clicking action buttons
                 switchDashboard(dashboard.id);
             });
-            
+
             // Edit button
             const editBtn = li.querySelector('.edit-btn');
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 editDashboardInline(dashboard, li);
             });
-            
+
             // Delete button
             const deleteBtn = li.querySelector('.delete-btn');
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 deleteDashboardFromSidebar(dashboard.id);
             });
-            
+
             list.appendChild(li);
         });
 
