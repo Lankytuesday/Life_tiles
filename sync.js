@@ -266,9 +266,17 @@ const LifetilesSync = (function() {
                                 localData.tiles.length > 0;
 
                 if (hasLocal) {
-                    console.log('[Sync] No sync data, pushing local data...');
-                    const result = await pushToSync(localData);
-                    return { status: 'pushed', ...result };
+                    // Only push if we have substantial data (prevent empty overwrites)
+                    const dataSize = JSON.stringify(localData).length;
+                    if (dataSize > 500) {
+                        console.log(`[Sync] No sync data, pushing local data (${dataSize} bytes)...`);
+                        const result = await pushToSync(localData);
+                        return { status: 'pushed', ...result };
+                    } else {
+                        console.log(`[Sync] Local data too small (${dataSize} bytes), skipping auto-push`);
+                        console.log('[Sync] Sync data may still be propagating. Use LifetilesSync.forceSync() to push manually.');
+                        return { status: 'waiting' };
+                    }
                 } else {
                     console.log('[Sync] No data anywhere, fresh start');
                     return { status: 'empty' };
