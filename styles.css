@@ -542,17 +542,9 @@
     transition: background-color 0.2s ease-in-out;
     box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     width: auto;
-    margin: 0 auto 24px;
+    margin: 0 auto 10px;
     position: relative;
     z-index: 100;
-}
-
-
-@media screen and (min-width: 1900px) {
-    #projects-container {
-        max-width: min(90vw, 1200px);
-        margin: 0 auto;
-    }
 }
 
 .project {
@@ -560,12 +552,7 @@
     padding: 12px;
     border-radius: var(--radius-lg);
     box-shadow: none;
-    border: 1px solid transparent;
-    transition: border-color var(--transition);
-}
-
-.project:hover {
-    border-color: var(--color-border);
+    border: 1px solid var(--color-border);
 }
 
 /* Tile menu styles */
