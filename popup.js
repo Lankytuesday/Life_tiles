@@ -211,12 +211,9 @@ async function getTargetWindowId() {
         localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
         localStorage.setItem('lifetiles_lastDashboard', String(projectData.dashboardId));
 
-        // Update lastProject variable and Quick Save button
+        // Update lastProject variable and hide Quick Save button (user is in full flow now)
         lastProject = savedProject;
-        if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
-            quickSaveBtn.style.display = 'block';
-            quickSaveBtn.querySelector('.quick-save-project-name').textContent = projectName;
-        }
+        quickSaveBtn.style.display = 'none';
 
         tileDetails.style.display = 'block';
         validateInputs();
@@ -332,19 +329,15 @@ async function getTargetWindowId() {
         newProjectButton.textContent = '+ New Project';
         dropdownOptions.appendChild(newProjectButton);
 
-        // Auto-select last used project if available and valid
+        // Mark last used project as selected (visually) but DON'T expand tile details
+        // Quick Save button is already shown - this just pre-selects in the dropdown
         if (lastProject && lastProject.value && lastProject.name) {
             // Verify the project still exists
             const projectOption = document.querySelector(`.dropdown-option[data-value='${lastProject.value}']`);
             if (projectOption) {
-                selectProject(lastProject.value, lastProject.name);
-
-                // Update Quick Save button if present
-                const quickSaveBtn = document.getElementById('quick-save-btn');
-                if (quickSaveBtn) {
-                    quickSaveBtn.style.display = 'block';
-                    quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
-                }
+                projectOption.classList.add('selected');
+                selectedProjectValue = lastProject.value;
+                selectedProjectName = lastProject.name;
             }
         }
 
