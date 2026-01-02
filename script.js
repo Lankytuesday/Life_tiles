@@ -561,20 +561,38 @@ document.addEventListener("DOMContentLoaded", async function () {
     // Move a project to a different dashboard
     async function moveProjectToDashboard(projectId, newDashboardId) {
         if (!projectId || !newDashboardId) return;
-        if (newDashboardId === currentDashboardId) return; // Already on this dashboard
+
+        // Normalize dashboardId to match how it's stored in IndexedDB
+        // Dataset values are always strings, but we need to match the stored type
+        const normalizedNewId = String(newDashboardId);
+        if (normalizedNewId === String(currentDashboardId)) return; // Already on this dashboard
 
         const db = await initDB();
 
         // First, find the max order in the target dashboard to add at the end
+        // Try both string and number versions to handle type mismatches
         const readTx = db.transaction(['projects'], 'readonly');
         const readStore = readTx.objectStore('projects');
         const projectIndex = readStore.index('dashboardId');
 
-        const existingProjects = await new Promise(resolve => {
-            const req = projectIndex.getAll(newDashboardId);
+        // Query with string version first, then try number if needed
+        let existingProjects = await new Promise(resolve => {
+            const req = projectIndex.getAll(normalizedNewId);
             req.onsuccess = () => resolve(req.result || []);
             req.onerror = () => resolve([]);
         });
+
+        // If no results and it looks like a number, try querying with number type
+        if (existingProjects.length === 0 && !isNaN(normalizedNewId)) {
+            const readTx2 = db.transaction(['projects'], 'readonly');
+            const readStore2 = readTx2.objectStore('projects');
+            const projectIndex2 = readStore2.index('dashboardId');
+            existingProjects = await new Promise(resolve => {
+                const req = projectIndex2.getAll(Number(normalizedNewId));
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            });
+        }
 
         // Calculate the new order (max + 1, or 0 if no projects)
         let maxOrder = -1;
@@ -583,6 +601,11 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (order > maxOrder) maxOrder = order;
         });
         const newOrder = maxOrder + 1;
+
+        // Determine the correct type to store (match existing projects or use currentDashboardId's type)
+        const dashboardIdToStore = existingProjects.length > 0
+            ? existingProjects[0].dashboardId
+            : (typeof currentDashboardId === 'number' ? Number(normalizedNewId) : normalizedNewId);
 
         const tx = db.transaction(['projects', 'tiles'], 'readwrite');
         const projectStore = tx.objectStore('projects');
@@ -593,7 +616,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         projectReq.onsuccess = async () => {
             const project = projectReq.result;
             if (project) {
-                project.dashboardId = newDashboardId;
+                project.dashboardId = dashboardIdToStore;
                 project.order = newOrder; // Add to end of new dashboard
                 projectStore.put(project);
 
@@ -603,7 +626,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 tilesReq.onsuccess = () => {
                     const tiles = tilesReq.result;
                     tiles.forEach(tile => {
-                        tile.dashboardId = newDashboardId;
+                        tile.dashboardId = dashboardIdToStore;
                         tileStore.put(tile);
                     });
                 };
