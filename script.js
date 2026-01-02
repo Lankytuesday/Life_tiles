@@ -556,11 +556,88 @@ document.addEventListener("DOMContentLoaded", async function () {
     let currentProjectContainer = null;
     let currentProjectId = null;
     let currentDashboardId = null;
+    let draggedProjectId = null; // Track project being dragged to sidebar
+
+    // Move a project to a different dashboard
+    async function moveProjectToDashboard(projectId, newDashboardId) {
+        if (!projectId || !newDashboardId) return;
+        if (newDashboardId === currentDashboardId) return; // Already on this dashboard
+
+        const db = await initDB();
+
+        // First, find the max order in the target dashboard to add at the end
+        const readTx = db.transaction(['projects'], 'readonly');
+        const readStore = readTx.objectStore('projects');
+        const projectIndex = readStore.index('dashboardId');
+
+        const existingProjects = await new Promise(resolve => {
+            const req = projectIndex.getAll(newDashboardId);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+
+        // Calculate the new order (max + 1, or 0 if no projects)
+        let maxOrder = -1;
+        existingProjects.forEach(p => {
+            const order = Number.isFinite(+p.order) ? +p.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+        const newOrder = maxOrder + 1;
+
+        const tx = db.transaction(['projects', 'tiles'], 'readwrite');
+        const projectStore = tx.objectStore('projects');
+        const tileStore = tx.objectStore('tiles');
+
+        // Update project's dashboardId and order
+        const projectReq = projectStore.get(projectId);
+        projectReq.onsuccess = async () => {
+            const project = projectReq.result;
+            if (project) {
+                project.dashboardId = newDashboardId;
+                project.order = newOrder; // Add to end of new dashboard
+                projectStore.put(project);
+
+                // Also update all tiles in this project
+                const tileIndex = tileStore.index('projectId');
+                const tilesReq = tileIndex.getAll(projectId);
+                tilesReq.onsuccess = () => {
+                    const tiles = tilesReq.result;
+                    tiles.forEach(tile => {
+                        tile.dashboardId = newDashboardId;
+                        tileStore.put(tile);
+                    });
+                };
+            }
+        };
+
+        await new Promise(resolve => {
+            tx.oncomplete = resolve;
+        });
+
+        // Note: We don't reload here - the DOM element is already removed by the caller
+    }
 
     // Load dashboards and projects on startup
     loadDashboards().catch(error => {
         console.error('Error loading dashboards:', error);
     });
+
+// Track last known mouse position during drag
+let lastDragMouseX = 0;
+let lastDragMouseY = 0;
+
+function handleDragMouseMove(e) {
+    lastDragMouseX = e.clientX;
+    lastDragMouseY = e.clientY;
+
+    // Highlight sidebar item if mouse is over it
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        const rect = item.getBoundingClientRect();
+        const isOver = lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
+                       lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom;
+        item.classList.toggle('drag-hover', isOver);
+    });
+}
 
 // Initialize project sorting
 new Sortable(document.getElementById('projects-container'), {
@@ -570,15 +647,50 @@ new Sortable(document.getElementById('projects-container'), {
     ghostClass: 'sortable-ghost',
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    onStart: function () {
+    forceFallback: true,  // Use fallback for better cross-container dragging
+    fallbackOnBody: true, // Append ghost to body so it can move outside container
+    fallbackTolerance: 3,
+    onStart: function (evt) {
       document.body.classList.add('dragging');
       document.body.style.cursor = 'grabbing';
+      draggedProjectId = evt.item.dataset.projectId;
+
+      // Track mouse movement during drag
+      document.addEventListener('mousemove', handleDragMouseMove);
     },
     onEnd: function (evt) {
-      // ✅ Persist PROJECT order (not tiles)
       document.body.classList.remove('dragging');
       document.body.style.cursor = '';
-      updateProjectOrder(evt);
+
+      // Stop tracking mouse movement
+      document.removeEventListener('mousemove', handleDragMouseMove);
+
+      // Check if dropped over a sidebar item using last known mouse position
+      let droppedOnDashboard = null;
+
+      document.querySelectorAll('.sidebar-item').forEach(item => {
+        const rect = item.getBoundingClientRect();
+        if (lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
+            lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom) {
+          droppedOnDashboard = item.dataset.dashboardId;
+        }
+        item.classList.remove('drag-hover');
+      });
+
+      if (droppedOnDashboard && draggedProjectId) {
+        // Move project to new dashboard
+        // Remove the project element from DOM immediately
+        const projectEl = document.querySelector(`.project[data-project-id="${draggedProjectId}"]`);
+        if (projectEl) {
+          projectEl.remove();
+        }
+        moveProjectToDashboard(draggedProjectId, droppedOnDashboard);
+      } else {
+        // Normal reorder within same dashboard
+        updateProjectOrder(evt);
+      }
+
+      draggedProjectId = null;
     }
   });
 

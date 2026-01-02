@@ -272,6 +272,19 @@
     color: var(--color-text);
 }
 
+/* Drag-to-dashboard visual feedback */
+.sidebar-item.drag-hover {
+    outline: 2px dashed var(--color-brand);
+    outline-offset: -2px;
+    background: rgba(26, 115, 232, 0.15);
+}
+
+/* Prevent text selection during drag */
+body.dragging {
+    user-select: none;
+    -webkit-user-select: none;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 900px) {
     .app-shell {
