@@ -424,6 +424,12 @@ async function getTargetWindowId() {
 
                         // Skip creating the initial tile if current tab is internal (chrome://, etc.)
                         if (!currentTab?.url || isInternalUrl(currentTab.url)) {
+                          // Notify dashboard of changes
+                          try {
+                              const bc = new BroadcastChannel('lifetiles');
+                              bc.postMessage({ type: 'tiles:changed' });
+                              bc.close();
+                          } catch {}
                           projectModal.style.display = 'none';
                           window.location.reload();
                           resolve();
@@ -437,6 +443,12 @@ async function getTargetWindowId() {
                             dashboardId: selectedDashboardId
                         };
                         tileStore.add(tileData).onsuccess = () => {
+                            // Notify dashboard of changes
+                            try {
+                                const bc = new BroadcastChannel('lifetiles');
+                                bc.postMessage({ type: 'tiles:changed' });
+                                bc.close();
+                            } catch {}
                             projectModal.style.display = 'none';
                             window.location.reload();
                             resolve();
