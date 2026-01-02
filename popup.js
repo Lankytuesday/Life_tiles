@@ -361,18 +361,32 @@ async function getTargetWindowId() {
             dashboardSelect.removeAttribute('disabled');
         }
 
-        // Show/hide create button based on input
+        // Disable save button by default, enable when text is entered
+        createProjectBtn.disabled = true;
         projectNameInput.addEventListener('input', () => {
-            const hasValue = projectNameInput.value.trim() !== '';
-            createProjectBtn.style.display = hasValue ? 'flex' : 'none';
+            createProjectBtn.disabled = projectNameInput.value.trim() === '';
+        });
+
+        // Handle Enter key in project name input
+        projectNameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !createProjectBtn.disabled) {
+                createProjectBtn.click();
+            }
         });
 
         newProjectButton.addEventListener('click', () => {
             projectModal.style.display = 'flex';
             projectNameInput.value = '';
-            createProjectBtn.style.display = 'none';
+            createProjectBtn.disabled = true;
             projectNameInput.focus();
             dropdownOptions.classList.add('dropdown-hidden');
+        });
+
+        // Close modal when clicking outside
+        projectModal.addEventListener('click', (e) => {
+            if (e.target === projectModal) {
+                projectModal.style.display = 'none';
+            }
         });
 
         // Create new project
@@ -395,6 +409,19 @@ async function getTargetWindowId() {
                 await new Promise(resolve => {
                     const request = projectStore.add(projectData);
                     request.onsuccess = () => {
+                        // Save newly created project as last used for Quick Save
+                        const projectValue = JSON.stringify({
+                            dashboardId: selectedDashboardId,
+                            projectId: projectData.id
+                        });
+                        const savedProject = {
+                            value: projectValue,
+                            name: projectName,
+                            dashboardId: selectedDashboardId
+                        };
+                        localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
+                        localStorage.setItem('lifetiles_lastDashboard', String(selectedDashboardId));
+
                         // Skip creating the initial tile if current tab is internal (chrome://, etc.)
                         if (!currentTab?.url || isInternalUrl(currentTab.url)) {
                           projectModal.style.display = 'none';

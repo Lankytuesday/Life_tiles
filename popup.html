@@ -152,15 +152,10 @@
 
     <div id="project-modal" class="project-modal">
         <div class="project-modal-content">
-            <div class="compact-input-container">
-                <input type="text" id="project-name-input" placeholder="Project Name">
-                <div class="input-icon-button" id="create-project" role="button" tabindex="0" aria-label="Create project">
-                    <svg width="16" height="16" viewBox="0 0 16 16">
-                        <path d="M8 2a1 1 0 0 1 1 1v4h4a1 1 0 1 1 0 2h-4v4a1 1 0 1 1-2 0V9H3a1 1 0 1 1 0-2h4V3a1 1 0 0 1 1-1z" fill="currentColor"/>
-                    </svg>
-                </div>
-            </div>
+            <input type="text" id="project-name-input" placeholder="Project Name">
+            <label for="dashboard-select" style="font-size: 12px; color: #666; margin-top: 8px; display: block;">Select a dashboard</label>
             <select id="dashboard-select"></select>
+            <button id="create-project">Save</button>
         </div>
     </div>
 
