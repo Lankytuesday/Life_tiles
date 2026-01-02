@@ -880,9 +880,22 @@ new Sortable(document.getElementById('projects-container'), {
                 if (projectsContainer) {
                   projectsContainer.innerHTML = '';
 
-                  // Add expand/collapse all controls
+                  // Add project controls bar with New Project button and expand/collapse
                   const projectControls = document.createElement('div');
                   projectControls.className = 'project-controls';
+
+                  const newProjectButton = document.createElement('button');
+                  newProjectButton.id = 'new-project';
+                  newProjectButton.className = 'new-project';
+                  newProjectButton.textContent = '+ New Project';
+                  newProjectButton.addEventListener('click', function () {
+                    projectModal.style.display = "flex";
+                    projectNameInput.focus();
+                  });
+
+                  const controlsRight = document.createElement('div');
+                  controlsRight.className = 'project-controls-right';
+
                   const expandAllBtn = document.createElement('button');
                   expandAllBtn.className = 'project-control-btn';
                   expandAllBtn.textContent = '+ Expand All';
@@ -911,18 +924,11 @@ new Sortable(document.getElementById('projects-container'), {
                           req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
                       });
                   });
-                  projectControls.appendChild(expandAllBtn);
-                  projectControls.appendChild(collapseAllBtn);
 
-                  const newProjectButton = document.createElement('button');
-                  newProjectButton.id = 'new-project';
-                  newProjectButton.className = 'new-project';
-                  newProjectButton.textContent = 'New Project';
-                  newProjectButton.addEventListener('click', function () {
-                    projectModal.style.display = "flex";
-                    projectNameInput.focus();
-                  });
-                  projectsContainer.appendChild(newProjectButton);
+                  controlsRight.appendChild(expandAllBtn);
+                  controlsRight.appendChild(collapseAllBtn);
+                  projectControls.appendChild(newProjectButton);
+                  projectControls.appendChild(controlsRight);
                   projectsContainer.appendChild(projectControls);
                 }
               
@@ -947,9 +953,22 @@ new Sortable(document.getElementById('projects-container'), {
             const projectsContainer = document.getElementById('projects-container');
             projectsContainer.innerHTML = '';
 
-            // Add expand/collapse all controls
+            // Add project controls bar with New Project button and expand/collapse
             const projectControls = document.createElement('div');
             projectControls.className = 'project-controls';
+
+            const newProjectButton = document.createElement('button');
+            newProjectButton.id = 'new-project';
+            newProjectButton.className = 'new-project';
+            newProjectButton.textContent = '+ New Project';
+            newProjectButton.addEventListener('click', function() {
+                projectModal.style.display = "flex";
+                projectNameInput.focus();
+            });
+
+            const controlsRight = document.createElement('div');
+            controlsRight.className = 'project-controls-right';
+
             const expandAllBtn = document.createElement('button');
             expandAllBtn.className = 'project-control-btn';
             expandAllBtn.textContent = '+ Expand All';
@@ -978,19 +997,11 @@ new Sortable(document.getElementById('projects-container'), {
                     req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
                 });
             });
-            projectControls.appendChild(expandAllBtn);
-            projectControls.appendChild(collapseAllBtn);
 
-            // Add the New Project button
-            const newProjectButton = document.createElement('button');
-            newProjectButton.id = 'new-project';
-            newProjectButton.className = 'new-project';
-            newProjectButton.textContent = 'New Project';
-            newProjectButton.addEventListener('click', function() {
-                projectModal.style.display = "flex";
-                projectNameInput.focus();
-            });
-            projectsContainer.appendChild(newProjectButton);
+            controlsRight.appendChild(expandAllBtn);
+            controlsRight.appendChild(collapseAllBtn);
+            projectControls.appendChild(newProjectButton);
+            projectControls.appendChild(controlsRight);
             projectsContainer.appendChild(projectControls);
 
             // Load projects for current dashboard
@@ -1409,9 +1420,21 @@ window.__lifetilesRefresh = () => loadDashboards();
         const projectsContainer = document.getElementById('projects-container');
         projectsContainer.innerHTML = '';
 
-        // Add expand/collapse all controls
+        // Add project controls bar with New Project button and expand/collapse
         const projectControls = document.createElement('div');
         projectControls.className = 'project-controls';
+
+        const newProjectButton = document.createElement('button');
+        newProjectButton.id = 'new-project';
+        newProjectButton.className = 'new-project';
+        newProjectButton.textContent = '+ New Project';
+        newProjectButton.addEventListener('click', function() {
+            projectModal.style.display = "flex";
+            projectNameInput.focus();
+        });
+
+        const controlsRight = document.createElement('div');
+        controlsRight.className = 'project-controls-right';
 
         const expandAllBtn = document.createElement('button');
         expandAllBtn.className = 'project-control-btn';
@@ -1455,19 +1478,10 @@ window.__lifetilesRefresh = () => loadDashboards();
             });
         });
 
-        projectControls.appendChild(expandAllBtn);
-        projectControls.appendChild(collapseAllBtn);
-
-        // Add the New Project button again
-        const newProjectButton = document.createElement('button');
-        newProjectButton.id = 'new-project';
-        newProjectButton.className = 'new-project';
-        newProjectButton.textContent = 'New Project';
-        newProjectButton.addEventListener('click', function() {
-            projectModal.style.display = "flex";
-            projectNameInput.focus();
-        });
-        projectsContainer.appendChild(newProjectButton);
+        controlsRight.appendChild(expandAllBtn);
+        controlsRight.appendChild(collapseAllBtn);
+        projectControls.appendChild(newProjectButton);
+        projectControls.appendChild(controlsRight);
         projectsContainer.appendChild(projectControls);
 
         // Load projects for selected dashboard
