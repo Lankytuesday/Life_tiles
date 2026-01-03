@@ -38,7 +38,40 @@ async function getTargetWindowId() {
     try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
     catch { return true; }
   }
-  
+
+  // Helper: Get the next available order for a new project in a dashboard
+  async function getNextProjectOrder(db, dashboardId) {
+    const normalizedId = String(dashboardId);
+    const readTx = db.transaction(['projects'], 'readonly');
+    const projectIndex = readTx.objectStore('projects').index('dashboardId');
+
+    // Query with string version first
+    let existingProjects = await new Promise(resolve => {
+      const req = projectIndex.getAll(normalizedId);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+
+    // If no results and it looks like a number, try querying with number type
+    if (existingProjects.length === 0 && !isNaN(normalizedId)) {
+      const readTx2 = db.transaction(['projects'], 'readonly');
+      const projectIndex2 = readTx2.objectStore('projects').index('dashboardId');
+      existingProjects = await new Promise(resolve => {
+        const req = projectIndex2.getAll(Number(normalizedId));
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    }
+
+    // Calculate max order + 1
+    let maxOrder = -1;
+    existingProjects.forEach(p => {
+      const order = Number.isFinite(+p.order) ? +p.order : -1;
+      if (order > maxOrder) maxOrder = order;
+    });
+    return maxOrder + 1;
+  }
+
 
   document.addEventListener('DOMContentLoaded', async function() {
       // ✅ Replaced: Session Buddy–style “Go to dashboard”
@@ -396,10 +429,14 @@ async function getTargetWindowId() {
             const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
             if (projectName && selectedDashboardId) {
+                // Get the next order before opening readwrite transaction
+                const nextOrder = await getNextProjectOrder(db, selectedDashboardId);
+
                 const projectData = {
                     id: Date.now().toString(),
                     name: projectName,
-                    dashboardId: selectedDashboardId
+                    dashboardId: selectedDashboardId,
+                    order: nextOrder
                 };
 
                 const tx = db.transaction(['projects', 'tiles'], 'readwrite');

@@ -558,6 +558,39 @@ document.addEventListener("DOMContentLoaded", async function () {
     let currentDashboardId = null;
     let draggedProjectId = null; // Track project being dragged to sidebar
 
+    // Helper: Get the next available order for a new project in a dashboard
+    async function getNextProjectOrder(db, dashboardId) {
+        const normalizedId = String(dashboardId);
+        const readTx = db.transaction(['projects'], 'readonly');
+        const projectIndex = readTx.objectStore('projects').index('dashboardId');
+
+        // Query with string version first
+        let existingProjects = await new Promise(resolve => {
+            const req = projectIndex.getAll(normalizedId);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+
+        // If no results and it looks like a number, try querying with number type
+        if (existingProjects.length === 0 && !isNaN(normalizedId)) {
+            const readTx2 = db.transaction(['projects'], 'readonly');
+            const projectIndex2 = readTx2.objectStore('projects').index('dashboardId');
+            existingProjects = await new Promise(resolve => {
+                const req = projectIndex2.getAll(Number(normalizedId));
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        // Calculate max order + 1
+        let maxOrder = -1;
+        existingProjects.forEach(p => {
+            const order = Number.isFinite(+p.order) ? +p.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+        return maxOrder + 1;
+    }
+
     // Move a project to a different dashboard
     async function moveProjectToDashboard(projectId, newDashboardId) {
         if (!projectId || !newDashboardId) return;
@@ -1557,10 +1590,13 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function saveProject(projectData) {
         const db = await initDB();
-        const tx = db.transaction(['projects'], 'readwrite');
-        const store = tx.objectStore('projects');
 
         projectData.dashboardId = currentDashboardId;
+        // Assign order so project appears at end of list
+        projectData.order = await getNextProjectOrder(db, currentDashboardId);
+
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
 
         return new Promise((resolve, reject) => {
             const request = store.add(projectData);
@@ -1790,6 +1826,10 @@ window.__lifetilesRefresh = () => loadDashboards();
             if (!freshProject) return;
 
             const db = await initDB();
+
+            // Get the next order for the target dashboard before opening readwrite transaction
+            const newOrder = await getNextProjectOrder(db, selectedDashboardId);
+
             const tx = db.transaction(['projects', 'tiles'], 'readwrite');
             const projectStore = tx.objectStore('projects');
             const tileStore = tx.objectStore('tiles');
@@ -1800,8 +1840,9 @@ window.__lifetilesRefresh = () => loadDashboards();
                 request.onsuccess = () => resolve(request.result || []);
             });
 
-            // Update project's dashboardId
+            // Update project's dashboardId and order
             freshProject.dashboardId = selectedDashboardId;
+            freshProject.order = newOrder;
             await new Promise((resolve, reject) => {
                 const req = projectStore.put(freshProject);
                 req.onsuccess = () => resolve();
@@ -3396,11 +3437,14 @@ async function importDashboardsJSON() {
 
                     // Update project references to new dashboard ID
                     const dashboardProjects = importData.projects.filter(p => p.dashboardId === dashboard.id);
+                    let projectOrder = 0;
                     for (const project of dashboardProjects) {
                         const newProject = {
                             ...project,
                             id: Date.now().toString() + Math.random(),
-                            dashboardId: newDashboard.id
+                            dashboardId: newDashboard.id,
+                            // Preserve imported order if present, otherwise assign incrementally
+                            order: Number.isFinite(+project.order) ? project.order : projectOrder++
                         };
                         await tx.objectStore('projects').add(newProject);
 
@@ -3543,15 +3587,24 @@ async function importGoogleBookmarks() {
                 const projectStore = tx.objectStore('projects');
                 const tileStore = tx.objectStore('tiles');
 
-                // Get existing projects to determine order
+                // Get existing projects to determine starting order
                 const existingProjects = await new Promise((resolve) => {
                     const request = projectStore.index('dashboardId').getAll(selectedDashboardId);
                     request.onsuccess = () => resolve(request.result || []);
                 });
 
+                // Calculate next order value from existing projects
+                let maxOrder = -1;
+                existingProjects.forEach(p => {
+                    const order = Number.isFinite(+p.order) ? +p.order : -1;
+                    if (order > maxOrder) maxOrder = order;
+                });
+                let nextOrder = maxOrder + 1;
+
                 // Add each project and its tiles
                 for (const project of projects) {
                     project.dashboardId = selectedDashboardId;
+                    project.order = nextOrder++;
                     // Save project
                     await projectStore.add(project);
 
