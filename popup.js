@@ -146,10 +146,25 @@ async function getTargetWindowId() {
     if (lastProjectData) {
         try {
             lastProject = JSON.parse(lastProjectData);
-            // Show quick save button if we have a last project and valid current tab
-            if (lastProject && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
-                quickSaveBtn.style.display = 'block';
-                quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
+            // Verify the project still exists in IndexedDB before showing Quick Save
+            if (lastProject && lastProject.value) {
+                const { projectId } = JSON.parse(lastProject.value);
+                const tx = db.transaction(['projects'], 'readonly');
+                const projectStore = tx.objectStore('projects');
+                const projectExists = await new Promise(resolve => {
+                    const req = projectStore.get(projectId);
+                    req.onsuccess = () => resolve(!!req.result);
+                    req.onerror = () => resolve(false);
+                });
+
+                if (projectExists && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
+                    quickSaveBtn.style.display = 'block';
+                    quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
+                } else if (!projectExists) {
+                    // Clear stale reference
+                    localStorage.removeItem('lifetiles_lastProject');
+                    lastProject = null;
+                }
             }
         } catch (e) {
             console.error('Failed to parse last project:', e);
