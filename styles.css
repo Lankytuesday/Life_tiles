@@ -541,6 +541,12 @@ body.dragging {
     width: 100%;
 }
 
+#projects-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
 #main {
     height: 100dvh;
     overflow: auto;
