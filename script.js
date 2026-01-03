@@ -1067,28 +1067,33 @@ window.__lifetilesRefresh = () => loadDashboards();
     async function editDashboardInline(dashboard, listItem) {
         const labelEl = listItem.querySelector('.label');
         const actionsEl = listItem.querySelector('.actions');
-        
+
         // Create input
         const input = document.createElement('input');
         input.type = 'text';
         input.value = dashboard.name;
         input.style.cssText = 'border:1px solid #ddd; border-radius:4px; padding:2px 6px; font-size:14px; width:100%;';
-        
+
         // Replace label with input
         labelEl.style.display = 'none';
         actionsEl.style.display = 'none';
         listItem.insertBefore(input, actionsEl);
         input.focus();
         input.select();
-        
+
+        let editFinished = false; // Guard against double-call from blur after Enter/Escape
+
         const finishEdit = async (save = false) => {
+            if (editFinished) return; // Prevent double-call
+            editFinished = true;
+
             const newName = input.value.trim();
             if (save && newName && newName !== dashboard.name) {
                 try {
                     const db = await initDB();
                     const tx = db.transaction(['dashboards'], 'readwrite');
                     const store = tx.objectStore('dashboards');
-                    
+
                     await new Promise((resolve, reject) => {
                         const request = store.get(dashboard.id);
                         request.onsuccess = () => {
@@ -1100,24 +1105,31 @@ window.__lifetilesRefresh = () => loadDashboards();
                         };
                         request.onerror = () => reject(request.error);
                     });
-                    
+
                     labelEl.textContent = newName;
                     dashboard.name = newName;
+
+                    // Notify popup of dashboard change
+                    try {
+                        const bc = new BroadcastChannel('lifetiles');
+                        bc.postMessage({ type: 'dashboards:changed' });
+                        bc.close();
+                    } catch {}
                 } catch (error) {
                     console.error('Error updating dashboard name:', error);
                 }
             }
-            
+
             input.remove();
             labelEl.style.display = '';
             actionsEl.style.display = '';
         };
-        
+
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') finishEdit(true);
             if (e.key === 'Escape') finishEdit(false);
         });
-        
+
         input.addEventListener('blur', () => finishEdit(true));
     }
 
