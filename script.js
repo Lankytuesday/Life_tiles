@@ -3264,8 +3264,29 @@ async function importDashboardsJSON() {
             try {
                 const importData = JSON.parse(e.target.result);
                 const db = await initDB();
+
+                // Check for and remove empty default "My Dashboard" before importing
+                const checkTx = db.transaction(['dashboards', 'projects'], 'readwrite');
+                const existingDashboards = await new Promise(resolve => {
+                    const req = checkTx.objectStore('dashboards').getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                });
+
+                for (const dash of existingDashboards) {
+                    if (dash.name === 'My Dashboard') {
+                        const projects = await new Promise(resolve => {
+                            const req = checkTx.objectStore('projects').index('dashboardId').getAll(dash.id);
+                            req.onsuccess = () => resolve(req.result || []);
+                        });
+                        // Delete if empty
+                        if (projects.length === 0) {
+                            checkTx.objectStore('dashboards').delete(dash.id);
+                        }
+                    }
+                }
+
                 const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-                
+
                 // Import new data while preserving existing
                 for (const dashboard of importData.dashboards) {
                     const newDashboard = {
