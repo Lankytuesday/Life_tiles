@@ -166,6 +166,15 @@ select, button:not(.create-round-button), input, #custom-dropdown-container, .cu
     cursor: default;
 }
 
+.inline-new-project {
+    color: #1a73e8;
+    font-style: italic;
+}
+
+.inline-new-project:hover {
+    background-color: rgba(26, 115, 232, 0.1);
+}
+
 .new-project-button {
     width: 100%;
     padding: 8px;

@@ -299,8 +299,11 @@ async function getTargetWindowId() {
         const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
         console.log('Last used dashboard from localStorage:', lastUsedDashboardId);
 
-        // Create groups for each dashboard
+        // Create groups for each dashboard (including empty ones)
         let firstDashboardId = null;
+
+        // Store references for inline new project buttons
+        const inlineNewProjectButtons = [];
 
         for (const dashboard of dashboards) {
             const projectsRequest = projectStore.index('dashboardId').getAll(dashboard.id);
@@ -308,47 +311,47 @@ async function getTargetWindowId() {
                 projectsRequest.onsuccess = () => resolve(projectsRequest.result);
             });
 
-            if (projects.length > 0) {
-                // Track first dashboard with projects
-                if (!firstDashboardId) {
-                    firstDashboardId = String(dashboard.id);
-                }
+            // Track first dashboard with projects
+            if (projects.length > 0 && !firstDashboardId) {
+                firstDashboardId = String(dashboard.id);
+            }
 
+            // Determine if this dashboard should be expanded
+            const dashboardIdStr = String(dashboard.id);
+            const shouldExpand = lastUsedDashboardId
+                ? lastUsedDashboardId === dashboardIdStr
+                : (projects.length > 0 && dashboardIdStr === firstDashboardId);
+
+            // Add dashboard label (clickable for collapse/expand)
+            const dashboardLabel = document.createElement('div');
+            dashboardLabel.className = 'dropdown-group-label';
+            if (!shouldExpand) {
+                dashboardLabel.classList.add('collapsed');
+            }
+            dashboardLabel.textContent = dashboard.name;
+            dashboardLabel.title = "Click to expand/collapse";
+            dashboardLabel.dataset.dashboardId = dashboard.id;
+            scrollArea.appendChild(dashboardLabel);
+
+            // Create collapsible container for projects
+            const projectsContainer = document.createElement('div');
+            projectsContainer.className = 'dashboard-projects';
+            if (!shouldExpand) {
+                projectsContainer.classList.add('collapsed');
+            }
+            projectsContainer.dataset.dashboardId = dashboard.id;
+
+            // Add click handler to toggle collapse
+            dashboardLabel.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dashboardLabel.classList.toggle('collapsed');
+                projectsContainer.classList.toggle('collapsed');
+            });
+
+            if (projects.length > 0) {
                 // Sort projects by order property to match dashboard order
                 const ord = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
                 projects.sort((a, b) => ord(a) - ord(b) || String(a.id).localeCompare(String(b.id)));
-
-                // Determine if this dashboard should be expanded
-                const dashboardIdStr = String(dashboard.id);
-                const shouldExpand = lastUsedDashboardId
-                    ? lastUsedDashboardId === dashboardIdStr
-                    : dashboardIdStr === firstDashboardId;
-
-                // Add dashboard label (clickable for collapse/expand)
-                const dashboardLabel = document.createElement('div');
-                dashboardLabel.className = 'dropdown-group-label';
-                if (!shouldExpand) {
-                    dashboardLabel.classList.add('collapsed');
-                }
-                dashboardLabel.textContent = dashboard.name;
-                dashboardLabel.title = "Click to expand/collapse";
-                dashboardLabel.dataset.dashboardId = dashboard.id;
-                scrollArea.appendChild(dashboardLabel);
-
-                // Create collapsible container for projects
-                const projectsContainer = document.createElement('div');
-                projectsContainer.className = 'dashboard-projects';
-                if (!shouldExpand) {
-                    projectsContainer.classList.add('collapsed');
-                }
-                projectsContainer.dataset.dashboardId = dashboard.id;
-
-                // Add click handler to toggle collapse
-                dashboardLabel.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    dashboardLabel.classList.toggle('collapsed');
-                    projectsContainer.classList.toggle('collapsed');
-                });
 
                 // Add projects from this dashboard
                 projects.forEach(project => {
@@ -366,9 +369,17 @@ async function getTargetWindowId() {
 
                     projectsContainer.appendChild(projectOption);
                 });
-
-                scrollArea.appendChild(projectsContainer);
+            } else {
+                // Empty dashboard - show inline "+ New Project" button
+                const inlineNewProject = document.createElement('div');
+                inlineNewProject.className = 'dropdown-option inline-new-project';
+                inlineNewProject.textContent = '+ New Project';
+                inlineNewProject.dataset.dashboardId = dashboard.id;
+                inlineNewProjectButtons.push(inlineNewProject);
+                projectsContainer.appendChild(inlineNewProject);
             }
+
+            scrollArea.appendChild(projectsContainer);
         }
 
         // Add new project button
@@ -428,6 +439,20 @@ async function getTargetWindowId() {
             createProjectBtn.disabled = true;
             projectNameInput.focus();
             dropdownOptions.classList.add('dropdown-hidden');
+        });
+
+        // Add click handlers for inline new project buttons (pre-select dashboard)
+        inlineNewProjectButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const targetDashboardId = btn.dataset.dashboardId;
+                dashboardSelect.value = targetDashboardId;
+                projectModal.style.display = 'flex';
+                projectNameInput.value = '';
+                createProjectBtn.disabled = true;
+                projectNameInput.focus();
+                dropdownOptions.classList.add('dropdown-hidden');
+            });
         });
 
         // Close modal when clicking outside
