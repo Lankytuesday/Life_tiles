@@ -478,6 +478,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     let submitProjectBtn = document.getElementById("submit-project-name");
     const closeProjectModal = document.getElementById("close-modal");
 
+    // Project Controls
+    const projectsList = document.getElementById("projects-list");
+    const expandAllBtn = document.getElementById("expand-all");
+    const collapseAllBtn = document.getElementById("collapse-all");
+
     // Tile Modal Elements
     const tileModal = document.getElementById("tile-modal");
     const tileNameInput = document.getElementById("tile-name-input");
@@ -696,7 +701,7 @@ function handleDragMouseMove(e) {
 }
 
 // Initialize project sorting
-new Sortable(document.getElementById('projects-container'), {
+new Sortable(document.getElementById('projects-list'), {
     animation: 150,
     draggable: '.project',
     handle: '.project-drag-handle',
@@ -767,6 +772,31 @@ new Sortable(document.getElementById('projects-container'), {
 
     submitProjectBtn.addEventListener("click", createNewProject);
     closeProjectModal.addEventListener("click", closeProjectModalHandler);
+
+    // Expand/Collapse All Event Listeners
+    expandAllBtn.addEventListener('click', async () => {
+        const projects = projectsList.querySelectorAll('.project.collapsed');
+        const db = await initDB();
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
+        projects.forEach(proj => {
+            proj.classList.remove('collapsed');
+            const req = store.get(proj.dataset.projectId);
+            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = false; store.put(p); } };
+        });
+    });
+
+    collapseAllBtn.addEventListener('click', async () => {
+        const projects = projectsList.querySelectorAll('.project:not(.collapsed)');
+        const db = await initDB();
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
+        projects.forEach(proj => {
+            proj.classList.add('collapsed');
+            const req = store.get(proj.dataset.projectId);
+            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
+        });
+    });
 
     // Tile Modal Event Listeners
     tileNameInput.addEventListener("input", validateTileInputs);
@@ -908,63 +938,10 @@ new Sortable(document.getElementById('projects-container'), {
               
                 // ✅ Paint the UI immediately (sidebar + empty projects area)
                 renderSidebar([defaultDashboard], defaultDashboard.id);
-              
-                const projectsContainer = document.getElementById('projects-container');
-                if (projectsContainer) {
-                  projectsContainer.innerHTML = '';
 
-                  // Add project controls bar with New Project button and expand/collapse
-                  const projectControls = document.createElement('div');
-                  projectControls.className = 'project-controls';
+                // Clear projects list
+                projectsList.innerHTML = '';
 
-                  const newProjectButton = document.createElement('button');
-                  newProjectButton.id = 'new-project';
-                  newProjectButton.className = 'new-project';
-                  newProjectButton.textContent = '+ New Project';
-                  newProjectButton.addEventListener('click', function () {
-                    projectModal.style.display = "flex";
-                    projectNameInput.focus();
-                  });
-
-                  const controlsRight = document.createElement('div');
-                  controlsRight.className = 'project-controls-right';
-
-                  const expandAllBtn = document.createElement('button');
-                  expandAllBtn.className = 'project-control-btn';
-                  expandAllBtn.textContent = '+ Expand All';
-                  expandAllBtn.addEventListener('click', async () => {
-                      const projects = projectsContainer.querySelectorAll('.project.collapsed');
-                      const db = await initDB();
-                      const tx = db.transaction(['projects'], 'readwrite');
-                      const store = tx.objectStore('projects');
-                      projects.forEach(proj => {
-                          proj.classList.remove('collapsed');
-                          const req = store.get(proj.dataset.projectId);
-                          req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = false; store.put(p); } };
-                      });
-                  });
-                  const collapseAllBtn = document.createElement('button');
-                  collapseAllBtn.className = 'project-control-btn';
-                  collapseAllBtn.textContent = '− Collapse All';
-                  collapseAllBtn.addEventListener('click', async () => {
-                      const projects = projectsContainer.querySelectorAll('.project:not(.collapsed)');
-                      const db = await initDB();
-                      const tx = db.transaction(['projects'], 'readwrite');
-                      const store = tx.objectStore('projects');
-                      projects.forEach(proj => {
-                          proj.classList.add('collapsed');
-                          const req = store.get(proj.dataset.projectId);
-                          req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
-                      });
-                  });
-
-                  controlsRight.appendChild(expandAllBtn);
-                  controlsRight.appendChild(collapseAllBtn);
-                  projectControls.appendChild(newProjectButton);
-                  projectControls.appendChild(controlsRight);
-                  projectsContainer.appendChild(projectControls);
-                }
-              
                 // Nothing else to load yet
                 return [defaultDashboard];
               }
@@ -983,59 +960,7 @@ new Sortable(document.getElementById('projects-container'), {
             renderSidebar(dashboards, validCurrentId);
 
             // Clear existing projects before loading new ones to prevent duplication
-            const projectsContainer = document.getElementById('projects-container');
-            projectsContainer.innerHTML = '';
-
-            // Add project controls bar with New Project button and expand/collapse
-            const projectControls = document.createElement('div');
-            projectControls.className = 'project-controls';
-
-            const newProjectButton = document.createElement('button');
-            newProjectButton.id = 'new-project';
-            newProjectButton.className = 'new-project';
-            newProjectButton.textContent = '+ New Project';
-            newProjectButton.addEventListener('click', function() {
-                projectModal.style.display = "flex";
-                projectNameInput.focus();
-            });
-
-            const controlsRight = document.createElement('div');
-            controlsRight.className = 'project-controls-right';
-
-            const expandAllBtn = document.createElement('button');
-            expandAllBtn.className = 'project-control-btn';
-            expandAllBtn.textContent = '+ Expand All';
-            expandAllBtn.addEventListener('click', async () => {
-                const projects = projectsContainer.querySelectorAll('.project.collapsed');
-                const db = await initDB();
-                const tx = db.transaction(['projects'], 'readwrite');
-                const store = tx.objectStore('projects');
-                projects.forEach(proj => {
-                    proj.classList.remove('collapsed');
-                    const req = store.get(proj.dataset.projectId);
-                    req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = false; store.put(p); } };
-                });
-            });
-            const collapseAllBtn = document.createElement('button');
-            collapseAllBtn.className = 'project-control-btn';
-            collapseAllBtn.textContent = '− Collapse All';
-            collapseAllBtn.addEventListener('click', async () => {
-                const projects = projectsContainer.querySelectorAll('.project:not(.collapsed)');
-                const db = await initDB();
-                const tx = db.transaction(['projects'], 'readwrite');
-                const store = tx.objectStore('projects');
-                projects.forEach(proj => {
-                    proj.classList.add('collapsed');
-                    const req = store.get(proj.dataset.projectId);
-                    req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
-                });
-            });
-
-            controlsRight.appendChild(expandAllBtn);
-            controlsRight.appendChild(collapseAllBtn);
-            projectControls.appendChild(newProjectButton);
-            projectControls.appendChild(controlsRight);
-            projectsContainer.appendChild(projectControls);
+            projectsList.innerHTML = '';
 
             // Load projects for current dashboard
             const tx2 = db.transaction(['projects', 'tiles'], 'readonly');
@@ -1447,75 +1372,8 @@ window.__lifetilesRefresh = () => loadDashboards();
         localStorage.setItem('currentDashboardId', dashboardId);
         currentDashboardId = dashboardId;
 
-        
-
-        // Clear projects
-        const projectsContainer = document.getElementById('projects-container');
-        projectsContainer.innerHTML = '';
-
-        // Add project controls bar with New Project button and expand/collapse
-        const projectControls = document.createElement('div');
-        projectControls.className = 'project-controls';
-
-        const newProjectButton = document.createElement('button');
-        newProjectButton.id = 'new-project';
-        newProjectButton.className = 'new-project';
-        newProjectButton.textContent = '+ New Project';
-        newProjectButton.addEventListener('click', function() {
-            projectModal.style.display = "flex";
-            projectNameInput.focus();
-        });
-
-        const controlsRight = document.createElement('div');
-        controlsRight.className = 'project-controls-right';
-
-        const expandAllBtn = document.createElement('button');
-        expandAllBtn.className = 'project-control-btn';
-        expandAllBtn.textContent = '+ Expand All';
-        expandAllBtn.addEventListener('click', async () => {
-            const projects = projectsContainer.querySelectorAll('.project.collapsed');
-            const db = await initDB();
-            const tx = db.transaction(['projects'], 'readwrite');
-            const store = tx.objectStore('projects');
-            projects.forEach(proj => {
-                proj.classList.remove('collapsed');
-                const req = store.get(proj.dataset.projectId);
-                req.onsuccess = () => {
-                    const p = req.result;
-                    if (p) {
-                        p.collapsed = false;
-                        store.put(p);
-                    }
-                };
-            });
-        });
-
-        const collapseAllBtn = document.createElement('button');
-        collapseAllBtn.className = 'project-control-btn';
-        collapseAllBtn.textContent = '− Collapse All';
-        collapseAllBtn.addEventListener('click', async () => {
-            const projects = projectsContainer.querySelectorAll('.project:not(.collapsed)');
-            const db = await initDB();
-            const tx = db.transaction(['projects'], 'readwrite');
-            const store = tx.objectStore('projects');
-            projects.forEach(proj => {
-                proj.classList.add('collapsed');
-                const req = store.get(proj.dataset.projectId);
-                req.onsuccess = () => {
-                    const p = req.result;
-                    if (p) {
-                        p.collapsed = true;
-                        store.put(p);
-                    }
-                };
-            });
-        });
-
-        controlsRight.appendChild(expandAllBtn);
-        controlsRight.appendChild(collapseAllBtn);
-        projectControls.appendChild(newProjectButton);
-        projectControls.appendChild(controlsRight);
-        projectsContainer.appendChild(projectControls);
+        // Clear projects list
+        projectsList.innerHTML = '';
 
         // Load projects for selected dashboard
         await loadProjectsForDashboard(dashboardId);
@@ -2124,7 +1982,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         project.appendChild(tilesContainer);
         tilesContainer.appendChild(addTileButton);
 
-        document.getElementById("projects-container").appendChild(project);
+        document.getElementById("projects-list").appendChild(project);
     }
 
     // Tile Creation
@@ -2486,18 +2344,8 @@ window.__lifetilesRefresh = () => loadDashboards();
                         localStorage.setItem('currentDashboardId', newCurrentId);
                         currentDashboardId = newCurrentId;
 
-                        // Clear projects container completely
-                        const projectsContainer = document.getElementById('projects-container');
-                        projectsContainer.innerHTML = '';
-                        const newProjectButton = document.createElement('button');
-                        newProjectButton.id = 'new-project';
-                        newProjectButton.className = 'new-project';
-                        newProjectButton.textContent = 'New Project';
-                        newProjectButton.addEventListener('click', function() {
-                            projectModal.style.display = "flex";
-                            projectNameInput.focus();
-                        });
-                        projectsContainer.appendChild(newProjectButton);
+                        // Clear projects list
+                        projectsList.innerHTML = '';
                     }
                 }
 
@@ -2775,17 +2623,8 @@ window.__lifetilesRefresh = () => loadDashboards();
                         localStorage.setItem('currentDashboardId', newCurrentId);
                         currentDashboardId = newCurrentId;
 
-                        // Clear projects container first
-                        document.getElementById('projects-container').innerHTML = '';
-                        const newProjectButton = document.createElement('button');
-                        newProjectButton.id = 'new-project';
-                        newProjectButton.className = 'new-project';
-                        newProjectButton.textContent = 'New Project';
-                        newProjectButton.addEventListener('click', function() {
-                            projectModal.style.display = "flex";
-                            projectNameInput.focus();
-                        });
-                        document.getElementById('projects-container').appendChild(newProjectButton);
+                        // Clear projects list
+                        projectsList.innerHTML = '';
 
                         // Only call loadDashboards to update the selector, it will load projects automatically
                         loadDashboards();
@@ -3088,8 +2927,8 @@ function getOrderedTileIds(containerEl) {
   }
   async function updateProjectOrder(evt) {
     try {
-      const container = document.getElementById('projects-container');
-      const projectEls = Array.from(container.querySelectorAll('.project')); // skips the "New Project" button
+      const container = document.getElementById('projects-list');
+      const projectEls = Array.from(container.querySelectorAll('.project'));
       const db = await initDB();
       const tx = db.transaction(['projects'], 'readwrite');
       const store = tx.objectStore('projects');
