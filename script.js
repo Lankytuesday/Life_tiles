@@ -4347,6 +4347,10 @@ function showStatus(message) {
                 }
             }
 
+            // Refresh to show newly copied projects
+            if (window.__lifetilesRefresh) {
+                await window.__lifetilesRefresh();
+            }
             exitBulkMode();
             showStatus(`Copied ${projects.length} project${projects.length > 1 ? 's' : ''} to ${targetDashboard.name}`);
         });
