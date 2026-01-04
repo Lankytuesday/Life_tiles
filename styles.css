@@ -25,6 +25,11 @@
   --transition: 0.2s ease;
 }
 
+/* Utility classes */
+.hidden {
+    display: none !important;
+}
+
 /* App shell layout */
 .app-shell {
     display: grid;
@@ -1181,4 +1186,247 @@ html, body {
 
 .settings-menu button:hover {
   background: var(--color-bg-hover);
+}
+
+/* ===== Bulk Actions Mode ===== */
+
+/* Bulk action bar */
+.bulk-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--color-bg-light);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+}
+
+.bulk-action-bar.hidden {
+    display: none;
+}
+
+#selection-count {
+    font-size: 14px;
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.bulk-action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.bulk-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: white;
+    cursor: pointer;
+    transition: all var(--transition);
+    color: var(--color-text);
+}
+
+.bulk-btn:hover:not(:disabled) {
+    background: var(--color-bg-hover);
+    border-color: #ccc;
+}
+
+.bulk-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.bulk-btn.bulk-delete {
+    color: var(--color-danger);
+    border-color: var(--color-danger);
+}
+
+.bulk-btn.bulk-delete:hover:not(:disabled) {
+    background: #fff5f5;
+}
+
+/* Bulk mode: Select button becomes Cancel */
+body.bulk-mode #bulk-select {
+    background: var(--color-brand);
+    color: white;
+    border-color: var(--color-brand);
+}
+
+/* Hide expand/collapse when in bulk mode */
+body.bulk-mode #expand-all,
+body.bulk-mode #collapse-all,
+body.bulk-mode #new-project {
+    display: none;
+}
+
+/* Bulk selection checkboxes */
+.bulk-checkbox {
+    display: none;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    flex-shrink: 0;
+    accent-color: var(--color-brand);
+}
+
+body.bulk-mode .bulk-checkbox {
+    display: block;
+}
+
+/* Project checkbox positioning */
+.project-header .bulk-checkbox {
+    margin-right: 8px;
+}
+
+/* Tile checkbox positioning */
+.tile .bulk-checkbox {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 1001;
+}
+
+/* Hide drag handles in bulk mode */
+body.bulk-mode .project-drag-handle,
+body.bulk-mode .tile-menu-trigger,
+body.bulk-mode .project-menu-trigger {
+    display: none !important;
+}
+
+/* Selected state for projects */
+.project.bulk-selected {
+    background: rgba(26, 115, 232, 0.08);
+    border-color: var(--color-brand);
+}
+
+/* Selected state for tiles */
+.tile.bulk-selected {
+    background: rgba(26, 115, 232, 0.15);
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.3);
+}
+
+/* Prevent tile hover effects in bulk mode */
+body.bulk-mode .tile:hover {
+    transform: none;
+}
+
+/* Target tree for tile move/copy */
+.target-tree {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    margin: 10px 0;
+}
+
+.target-tree-dashboard {
+    border-bottom: 1px solid var(--color-border);
+}
+
+.target-tree-dashboard:last-child {
+    border-bottom: none;
+}
+
+.target-tree-dashboard-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--color-bg-light);
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 13px;
+    gap: 8px;
+    user-select: none;
+}
+
+.target-tree-dashboard-header:hover {
+    background: #e8eef6;
+}
+
+.target-tree-caret {
+    width: 12px;
+    height: 12px;
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.target-tree-dashboard.collapsed .target-tree-caret {
+    transform: rotate(-90deg);
+}
+
+.target-tree-dashboard-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.target-tree-projects {
+    display: flex;
+    flex-direction: column;
+}
+
+.target-tree-dashboard.collapsed .target-tree-projects {
+    display: none;
+}
+
+.target-tree-project {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px 8px 32px;
+    cursor: pointer;
+    font-size: 13px;
+    gap: 8px;
+    transition: background-color 0.15s ease;
+}
+
+.target-tree-project:hover {
+    background: var(--color-bg-hover);
+}
+
+.target-tree-project.selected {
+    background: #e8f0fe;
+    color: var(--color-brand);
+}
+
+.target-tree-project-icon {
+    width: 16px;
+    height: 16px;
+    color: var(--color-text-muted);
+}
+
+.target-tree-project.selected .target-tree-project-icon {
+    color: var(--color-brand);
+}
+
+.target-tree-new-project {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px 8px 32px;
+    cursor: pointer;
+    font-size: 13px;
+    gap: 8px;
+    color: var(--color-brand);
+    font-style: italic;
+    transition: background-color 0.15s ease;
+}
+
+.target-tree-new-project:hover {
+    background: rgba(26, 115, 232, 0.1);
+}
+
+.target-tree-new-project-input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid var(--color-brand);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    outline: none;
+}
+
+.target-tree-new-project-input:focus {
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
