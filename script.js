@@ -3988,7 +3988,7 @@ function showStatus(message) {
                 .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
             const dashEl = document.createElement('div');
-            dashEl.className = 'target-tree-dashboard';
+            dashEl.className = 'target-tree-dashboard collapsed';
 
             const headerEl = document.createElement('div');
             headerEl.className = 'target-tree-dashboard-header';
@@ -4257,8 +4257,12 @@ function showStatus(message) {
                     }
                 });
             } else {
-                // Target is on different dashboard - just remove from current view
+                // Target is on different dashboard or newly created - remove tiles and refresh
                 tiles.forEach(t => t.element?.remove());
+                // Refresh to show newly created project if on same dashboard
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
+                }
             }
             exitBulkMode();
             showStatus(`Moved ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
@@ -4385,6 +4389,11 @@ function showStatus(message) {
             if (targetContainer) {
                 for (const tileData of newTiles) {
                     await createTileElement(targetContainer, tileData);
+                }
+            } else {
+                // Target project might be newly created - refresh to show it
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
                 }
             }
             exitBulkMode();
