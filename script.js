@@ -479,6 +479,17 @@ document.addEventListener("DOMContentLoaded", async function () {
                     console.warn('[Sync] Quota warning:', e.detail.percentUsed + '% used');
                 }
             });
+
+            // Push on page unload to ensure changes are saved
+            window.addEventListener('beforeunload', () => {
+                LifetilesSync.forceSync();
+            });
+
+            // Periodic sync every 5 minutes while page is open
+            setInterval(() => {
+                console.log('[Sync] Periodic sync check...');
+                LifetilesSync.scheduleSync();
+            }, 5 * 60 * 1000);
         }
     } catch (error) {
         console.error('Failed to initialize IndexedDB:', error);
