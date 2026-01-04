@@ -291,6 +291,35 @@ const LifetilesSync = (function() {
     }
 
     /**
+     * Convert full keys to short keys for sync storage
+     * i=id, n=name, u=url, o=order, p=projectId, d=dashboardId
+     */
+    function toShortKeys(obj, type) {
+        if (type === 'dashboard') {
+            return { i: obj.id, n: obj.name, o: obj.order };
+        } else if (type === 'project') {
+            return { i: obj.id, n: obj.name, d: obj.dashboardId, o: obj.order };
+        } else if (type === 'tile') {
+            return { i: obj.id, n: obj.name, u: obj.url, p: obj.projectId, d: obj.dashboardId, o: obj.order };
+        }
+        return obj;
+    }
+
+    /**
+     * Convert short keys back to full keys for IndexedDB
+     */
+    function toFullKeys(obj, type) {
+        if (type === 'dashboard') {
+            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, order: obj.o ?? obj.order };
+        } else if (type === 'project') {
+            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order };
+        } else if (type === 'tile') {
+            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, url: obj.u ?? obj.url, projectId: obj.p ?? obj.projectId, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order };
+        }
+        return obj;
+    }
+
+    /**
      * Get local data from IndexedDB
      */
     async function getLocalData() {
@@ -308,12 +337,12 @@ const LifetilesSync = (function() {
             getData('tiles')
         ]);
 
-        // Strip unnecessary fields from tiles
-        const cleanTiles = tiles.map(({ id, name, url, projectId, dashboardId, order }) => ({
-            id, name, url, projectId, dashboardId, order
-        }));
-
-        return { dashboards, projects, tiles: cleanTiles };
+        // Convert to short keys for smaller sync payload
+        return {
+            dashboards: dashboards.map(d => toShortKeys(d, 'dashboard')),
+            projects: projects.map(p => toShortKeys(p, 'project')),
+            tiles: tiles.map(t => toShortKeys(t, 'tile'))
+        };
     }
 
     /**
@@ -324,7 +353,7 @@ const LifetilesSync = (function() {
 
         try {
             const json = JSON.stringify({
-                v: 3,
+                v: 4, // v4: short keys (i,n,u,o,p,d)
                 ts: Date.now(),
                 d: data.dashboards,
                 p: data.projects,
@@ -431,6 +460,11 @@ const LifetilesSync = (function() {
     async function importToIndexedDB(data) {
         const db = await initDB();
 
+        // Convert short keys back to full keys (handles both old and new format)
+        const dashboards = data.dashboards.map(d => toFullKeys(d, 'dashboard'));
+        const projects = data.projects.map(p => toFullKeys(p, 'project'));
+        const tiles = data.tiles.map(t => toFullKeys(t, 'tile'));
+
         // First transaction: clear all stores
         const clearTx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
         clearTx.objectStore('dashboards').clear();
@@ -446,9 +480,9 @@ const LifetilesSync = (function() {
 
         // Second transaction: add new data
         const addTx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-        for (const d of data.dashboards) addTx.objectStore('dashboards').put(d);
-        for (const p of data.projects) addTx.objectStore('projects').put(p);
-        for (const t of data.tiles) addTx.objectStore('tiles').put(t);
+        for (const d of dashboards) addTx.objectStore('dashboards').put(d);
+        for (const p of projects) addTx.objectStore('projects').put(p);
+        for (const t of tiles) addTx.objectStore('tiles').put(t);
 
         await new Promise((resolve, reject) => {
             addTx.oncomplete = resolve;
@@ -456,9 +490,9 @@ const LifetilesSync = (function() {
         });
 
         console.log('[Sync] Imported to IndexedDB:', {
-            dashboards: data.dashboards.length,
-            projects: data.projects.length,
-            tiles: data.tiles.length
+            dashboards: dashboards.length,
+            projects: projects.length,
+            tiles: tiles.length
         });
     }
 
