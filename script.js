@@ -3671,13 +3671,20 @@ function showStatus(message) {
             if (projectEl) {
                 const projectCheckbox = projectEl.querySelector('.project-header .bulk-checkbox');
                 const allTileCheckboxes = projectEl.querySelectorAll('.tile .bulk-checkbox');
+                const tileCount = allTileCheckboxes.length;
                 const allChecked = Array.from(allTileCheckboxes).every(cb => cb.checked);
-                const anyChecked = Array.from(allTileCheckboxes).some(cb => cb.checked);
 
                 if (projectCheckbox) {
-                    // Check project if all tiles checked, uncheck if any tile unchecked
-                    projectCheckbox.checked = allChecked;
-                    projectEl.classList.toggle('bulk-selected', allChecked);
+                    // Only auto-check project if 2+ tiles and all are checked
+                    // For 1-tile projects, don't auto-check (allows selecting just the tile)
+                    // Always uncheck project if any tile is unchecked
+                    if (allChecked && tileCount >= 2) {
+                        projectCheckbox.checked = true;
+                        projectEl.classList.add('bulk-selected');
+                    } else if (!allChecked) {
+                        projectCheckbox.checked = false;
+                        projectEl.classList.remove('bulk-selected');
+                    }
                 }
             }
         }
