@@ -220,6 +220,9 @@ const LifetilesSync = (function() {
     const CHUNK_SIZE = 7500; // Safe size per chunk
     const DEBOUNCE_MS = 2000;
     const IGNORE_WINDOW_MS = 3000; // Ignore onChanged events for 3s after push
+    const QUOTA_BYTES = 102400; // chrome.storage.sync limit (100 KB)
+    const QUOTA_WARNING_THRESHOLD = 0.8; // Warn at 80%
+    const QUOTA_ERROR_THRESHOLD = 0.95; // Block at 95%
 
     let debounceTimer = null;
     let syncEnabled = true;
@@ -361,7 +364,27 @@ const LifetilesSync = (function() {
             });
 
             const compressed = LZ.compress(json);
+            const estimatedSize = compressed.length + 100; // Add overhead for keys
+            const percentUsed = estimatedSize / QUOTA_BYTES;
+
             console.log(`[Sync] Compressed ${json.length} -> ${compressed.length} bytes (${Math.round(compressed.length/json.length*100)}%)`);
+            console.log(`[Sync] Quota: ${(estimatedSize/1024).toFixed(1)} KB / ${(QUOTA_BYTES/1024).toFixed(0)} KB (${Math.round(percentUsed*100)}%)`);
+
+            // Check quota thresholds
+            if (percentUsed >= QUOTA_ERROR_THRESHOLD) {
+                console.error('[Sync] Data too large! Would exceed quota.');
+                window.dispatchEvent(new CustomEvent('lifetiles-sync', {
+                    detail: { type: 'quota_exceeded', percentUsed: Math.round(percentUsed * 100), size: estimatedSize }
+                }));
+                return { success: false, reason: 'quota_exceeded', percentUsed: Math.round(percentUsed * 100) };
+            }
+
+            if (percentUsed >= QUOTA_WARNING_THRESHOLD) {
+                console.warn(`[Sync] Approaching quota limit: ${Math.round(percentUsed * 100)}%`);
+                window.dispatchEvent(new CustomEvent('lifetiles-sync', {
+                    detail: { type: 'quota_warning', percentUsed: Math.round(percentUsed * 100), size: estimatedSize }
+                }));
+            }
 
             // Split into chunks if needed
             const chunks = [];
@@ -389,9 +412,18 @@ const LifetilesSync = (function() {
             lastPushTime = Date.now(); // Track push time to ignore our own onChanged events
 
             console.log('[Sync] Push successful');
-            return { success: true, chunks: chunks.length, size: compressed.length };
+            return { success: true, chunks: chunks.length, size: compressed.length, percentUsed: Math.round(percentUsed * 100) };
         } catch (error) {
+            const isQuotaError = error.message?.includes('QUOTA') || error.message?.includes('quota');
             console.error('[Sync] Push failed:', error.message);
+
+            if (isQuotaError) {
+                window.dispatchEvent(new CustomEvent('lifetiles-sync', {
+                    detail: { type: 'quota_exceeded', error: error.message }
+                }));
+                return { success: false, reason: 'quota_exceeded', error: error.message };
+            }
+
             return { success: false, error: error.message };
         }
     }
@@ -548,7 +580,16 @@ const LifetilesSync = (function() {
         if (!syncEnabled) return { enabled: false };
         try {
             const bytes = await new Promise(r => chrome.storage.sync.getBytesInUse(null, r));
-            return { enabled: true, bytesUsed: bytes, lastSynced: lastSyncedTimestamp };
+            const percentUsed = Math.round((bytes / QUOTA_BYTES) * 100);
+            const quotaStatus = percentUsed >= 95 ? 'critical' : percentUsed >= 80 ? 'warning' : 'ok';
+            return {
+                enabled: true,
+                bytesUsed: bytes,
+                bytesTotal: QUOTA_BYTES,
+                percentUsed,
+                quotaStatus,
+                lastSynced: lastSyncedTimestamp
+            };
         } catch (e) {
             return { enabled: false, error: e.message };
         }

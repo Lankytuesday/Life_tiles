@@ -477,6 +477,11 @@ document.addEventListener("DOMContentLoaded", async function () {
                 }
                 if (e.detail.type === 'quota_warning') {
                     console.warn('[Sync] Quota warning:', e.detail.percentUsed + '% used');
+                    alert(`⚠️ Sync storage is ${e.detail.percentUsed}% full.\n\nYou're approaching the 100 KB limit. Consider removing unused tiles or projects.`);
+                }
+                if (e.detail.type === 'quota_exceeded') {
+                    console.error('[Sync] Quota exceeded!');
+                    alert(`❌ Sync failed: Storage limit exceeded!\n\nYour data is safe locally, but won't sync to other devices until you free up space.\n\nTry removing unused dashboards, projects, or tiles.`);
                 }
             });
 
@@ -538,6 +543,10 @@ document.addEventListener("DOMContentLoaded", async function () {
             <div class="settings-section">
                 <div class="settings-section-label">Sync</div>
                 <div id="sync-status" class="sync-status">Checking...</div>
+                <div class="sync-quota-bar">
+                    <div id="sync-quota-fill" class="sync-quota-fill"></div>
+                </div>
+                <div id="sync-quota-text" class="sync-quota-text"></div>
                 <button type="button" data-action="sync-now">Sync now</button>
                 <button type="button" data-action="sync-pull">Pull from cloud</button>
             </div>
@@ -551,6 +560,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         // Update sync status when menu opens
         async function updateSyncStatus() {
             const statusEl = document.getElementById('sync-status');
+            const quotaFill = document.getElementById('sync-quota-fill');
+            const quotaText = document.getElementById('sync-quota-text');
             if (!statusEl) return;
             if (typeof LifetilesSync === 'undefined') {
                 statusEl.textContent = 'Sync unavailable';
@@ -559,12 +570,21 @@ document.addEventListener("DOMContentLoaded", async function () {
             }
             const status = await LifetilesSync.getStatus();
             if (status.enabled) {
-                const kb = (status.bytesUsed / 1024).toFixed(1);
                 const lastSync = status.lastSynced
                     ? new Date(status.lastSynced).toLocaleTimeString()
                     : 'never';
-                statusEl.textContent = `${kb} KB used · Last: ${lastSync}`;
+                statusEl.textContent = `Last synced: ${lastSync}`;
                 statusEl.className = 'sync-status sync-ok';
+
+                // Update quota bar
+                if (quotaFill && quotaText) {
+                    const kb = (status.bytesUsed / 1024).toFixed(1);
+                    const totalKb = (status.bytesTotal / 1024).toFixed(0);
+                    quotaFill.style.width = `${status.percentUsed}%`;
+                    quotaFill.className = `sync-quota-fill sync-quota-${status.quotaStatus}`;
+                    quotaText.textContent = `${kb} KB / ${totalKb} KB (${status.percentUsed}%)`;
+                    quotaText.className = `sync-quota-text sync-quota-${status.quotaStatus}`;
+                }
             } else {
                 statusEl.textContent = status.error || 'Sync disabled';
                 statusEl.className = 'sync-status sync-error';

@@ -1158,6 +1158,48 @@ html, body {
   color: #c62828;
 }
 
+/* Sync quota bar */
+.sync-quota-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 8px 0 4px;
+}
+
+.sync-quota-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.sync-quota-fill.sync-quota-ok {
+  background: #4caf50;
+}
+
+.sync-quota-fill.sync-quota-warning {
+  background: #ff9800;
+}
+
+.sync-quota-fill.sync-quota-critical {
+  background: #f44336;
+}
+
+.sync-quota-text {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.sync-quota-text.sync-quota-warning {
+  color: #e65100;
+}
+
+.sync-quota-text.sync-quota-critical {
+  color: #c62828;
+  font-weight: 600;
+}
+
 .settings-section button {
   margin-top: 4px;
 }
