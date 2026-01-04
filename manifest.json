@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Lifetiles",
   "version": "1.0.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1Z5a8+DiRjVl3nPzH5UCxay22RUUJsOEXk3MBGaOWqKJv7EYw+RlCzHgHXW2OHAdmRaL2n2Zt9xyUcCeuJTklazFojHAgqQZ9Bm1vIqj0D+DuiosUIwtUh3R+tomsKG34eeB/1H1uIfYW7ZGMfNN0kaIOY2u7+tGNcetgNf+aDHUYGnPuFKVAgsGy+zTOdQgPHeeKJUYHqrssXIJ2J0e8kNlyFj4V9tVsiC/vFpy6kodWOuexJYBvt+qKVasnwq47dX7Fxk1EEOURQxCX55tCrTnrveO5qfAjxtL9b5J1I0+vPSUf28eLTQ91L9vsXeHjj78Ucbzl33qIi+ow8u4vwIDAQAB",
   "description": "Organize your bookmarks in a tile-based dashboard",
   "permissions": ["storage", "tabs", "bookmarks"],
   "action": {
