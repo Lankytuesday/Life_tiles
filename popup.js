@@ -508,7 +508,7 @@ async function getTargetWindowId() {
                               bc.close();
                           } catch {}
                           projectModal.style.display = 'none';
-                          window.location.reload();
+                          window.close();
                           resolve();
                           return;
                         }
@@ -527,7 +527,7 @@ async function getTargetWindowId() {
                                 bc.close();
                             } catch {}
                             projectModal.style.display = 'none';
-                            window.location.reload();
+                            window.close();
                             resolve();
                         };
                     };
