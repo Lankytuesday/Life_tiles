@@ -521,6 +521,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     let submitProjectBtn = document.getElementById("submit-project-name");
     const closeProjectModal = document.getElementById("close-modal");
 
+    // Project Controls
+    const projectsList = document.getElementById("projects-list");
+    const expandAllBtn = document.getElementById("expand-all");
+    const collapseAllBtn = document.getElementById("collapse-all");
+
     // Tile Modal Elements
     const tileModal = document.getElementById("tile-modal");
     const tileNameInput = document.getElementById("tile-name-input");
@@ -670,29 +675,197 @@ document.addEventListener("DOMContentLoaded", async function () {
     let currentProjectContainer = null;
     let currentProjectId = null;
     let currentDashboardId = null;
+    let draggedProjectId = null; // Track project being dragged to sidebar
+
+    // Helper: Get the next available order for a new project in a dashboard
+    async function getNextProjectOrder(db, dashboardId) {
+        const normalizedId = String(dashboardId);
+        const readTx = db.transaction(['projects'], 'readonly');
+        const projectIndex = readTx.objectStore('projects').index('dashboardId');
+
+        // Query with string version first
+        let existingProjects = await new Promise(resolve => {
+            const req = projectIndex.getAll(normalizedId);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+
+        // If no results and it looks like a number, try querying with number type
+        if (existingProjects.length === 0 && !isNaN(normalizedId)) {
+            const readTx2 = db.transaction(['projects'], 'readonly');
+            const projectIndex2 = readTx2.objectStore('projects').index('dashboardId');
+            existingProjects = await new Promise(resolve => {
+                const req = projectIndex2.getAll(Number(normalizedId));
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        // Calculate max order + 1
+        let maxOrder = -1;
+        existingProjects.forEach(p => {
+            const order = Number.isFinite(+p.order) ? +p.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+        return maxOrder + 1;
+    }
+
+    // Move a project to a different dashboard
+    async function moveProjectToDashboard(projectId, newDashboardId) {
+        if (!projectId || !newDashboardId) return;
+
+        // Normalize dashboardId to match how it's stored in IndexedDB
+        // Dataset values are always strings, but we need to match the stored type
+        const normalizedNewId = String(newDashboardId);
+        if (normalizedNewId === String(currentDashboardId)) return; // Already on this dashboard
+
+        const db = await initDB();
+
+        // First, find the max order in the target dashboard to add at the end
+        // Try both string and number versions to handle type mismatches
+        const readTx = db.transaction(['projects'], 'readonly');
+        const readStore = readTx.objectStore('projects');
+        const projectIndex = readStore.index('dashboardId');
+
+        // Query with string version first, then try number if needed
+        let existingProjects = await new Promise(resolve => {
+            const req = projectIndex.getAll(normalizedNewId);
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => resolve([]);
+        });
+
+        // If no results and it looks like a number, try querying with number type
+        if (existingProjects.length === 0 && !isNaN(normalizedNewId)) {
+            const readTx2 = db.transaction(['projects'], 'readonly');
+            const readStore2 = readTx2.objectStore('projects');
+            const projectIndex2 = readStore2.index('dashboardId');
+            existingProjects = await new Promise(resolve => {
+                const req = projectIndex2.getAll(Number(normalizedNewId));
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => resolve([]);
+            });
+        }
+
+        // Calculate the new order (max + 1, or 0 if no projects)
+        let maxOrder = -1;
+        existingProjects.forEach(p => {
+            const order = Number.isFinite(+p.order) ? +p.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+        const newOrder = maxOrder + 1;
+
+        // Determine the correct type to store (match existing projects or use currentDashboardId's type)
+        const dashboardIdToStore = existingProjects.length > 0
+            ? existingProjects[0].dashboardId
+            : (typeof currentDashboardId === 'number' ? Number(normalizedNewId) : normalizedNewId);
+
+        const tx = db.transaction(['projects', 'tiles'], 'readwrite');
+        const projectStore = tx.objectStore('projects');
+        const tileStore = tx.objectStore('tiles');
+
+        // Update project's dashboardId and order
+        const projectReq = projectStore.get(projectId);
+        projectReq.onsuccess = async () => {
+            const project = projectReq.result;
+            if (project) {
+                project.dashboardId = dashboardIdToStore;
+                project.order = newOrder; // Add to end of new dashboard
+                projectStore.put(project);
+
+                // Also update all tiles in this project
+                const tileIndex = tileStore.index('projectId');
+                const tilesReq = tileIndex.getAll(projectId);
+                tilesReq.onsuccess = () => {
+                    const tiles = tilesReq.result;
+                    tiles.forEach(tile => {
+                        tile.dashboardId = dashboardIdToStore;
+                        tileStore.put(tile);
+                    });
+                };
+            }
+        };
+
+        await new Promise(resolve => {
+            tx.oncomplete = resolve;
+        });
+
+        // Note: We don't reload here - the DOM element is already removed by the caller
+    }
 
     // Load dashboards and projects on startup
     loadDashboards().catch(error => {
         console.error('Error loading dashboards:', error);
     });
 
+// Track last known mouse position during drag
+let lastDragMouseX = 0;
+let lastDragMouseY = 0;
+
+function handleDragMouseMove(e) {
+    lastDragMouseX = e.clientX;
+    lastDragMouseY = e.clientY;
+
+    // Highlight sidebar item if mouse is over it
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        const rect = item.getBoundingClientRect();
+        const isOver = lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
+                       lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom;
+        item.classList.toggle('drag-hover', isOver);
+    });
+}
+
 // Initialize project sorting
-new Sortable(document.getElementById('projects-container'), {
+new Sortable(document.getElementById('projects-list'), {
     animation: 150,
     draggable: '.project',
     handle: '.project-drag-handle',
     ghostClass: 'sortable-ghost',
     chosenClass: 'sortable-chosen',
     dragClass: 'sortable-drag',
-    onStart: function () {
+    forceFallback: true,  // Use fallback for better cross-container dragging
+    fallbackOnBody: true, // Append ghost to body so it can move outside container
+    fallbackTolerance: 3,
+    onStart: function (evt) {
       document.body.classList.add('dragging');
       document.body.style.cursor = 'grabbing';
+      draggedProjectId = evt.item.dataset.projectId;
+
+      // Track mouse movement during drag
+      document.addEventListener('mousemove', handleDragMouseMove);
     },
     onEnd: function (evt) {
-      // ✅ Persist PROJECT order (not tiles)
       document.body.classList.remove('dragging');
       document.body.style.cursor = '';
-      updateProjectOrder(evt);
+
+      // Stop tracking mouse movement
+      document.removeEventListener('mousemove', handleDragMouseMove);
+
+      // Check if dropped over a sidebar item using last known mouse position
+      let droppedOnDashboard = null;
+
+      document.querySelectorAll('.sidebar-item').forEach(item => {
+        const rect = item.getBoundingClientRect();
+        if (lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
+            lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom) {
+          droppedOnDashboard = item.dataset.dashboardId;
+        }
+        item.classList.remove('drag-hover');
+      });
+
+      if (droppedOnDashboard && draggedProjectId) {
+        // Move project to new dashboard
+        // Remove the project element from DOM immediately
+        const projectEl = document.querySelector(`.project[data-project-id="${draggedProjectId}"]`);
+        if (projectEl) {
+          projectEl.remove();
+        }
+        moveProjectToDashboard(draggedProjectId, droppedOnDashboard);
+      } else {
+        // Normal reorder within same dashboard
+        updateProjectOrder(evt);
+      }
+
+      draggedProjectId = null;
     }
   });
 
@@ -713,6 +886,31 @@ new Sortable(document.getElementById('projects-container'), {
 
     submitProjectBtn.addEventListener("click", createNewProject);
     closeProjectModal.addEventListener("click", closeProjectModalHandler);
+
+    // Expand/Collapse All Event Listeners
+    expandAllBtn.addEventListener('click', async () => {
+        const projects = projectsList.querySelectorAll('.project.collapsed');
+        const db = await initDB();
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
+        projects.forEach(proj => {
+            proj.classList.remove('collapsed');
+            const req = store.get(proj.dataset.projectId);
+            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = false; store.put(p); } };
+        });
+    });
+
+    collapseAllBtn.addEventListener('click', async () => {
+        const projects = projectsList.querySelectorAll('.project:not(.collapsed)');
+        const db = await initDB();
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
+        projects.forEach(proj => {
+            proj.classList.add('collapsed');
+            const req = store.get(proj.dataset.projectId);
+            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
+        });
+    });
 
     // Tile Modal Event Listeners
     tileNameInput.addEventListener("input", validateTileInputs);
@@ -854,21 +1052,10 @@ new Sortable(document.getElementById('projects-container'), {
               
                 // ✅ Paint the UI immediately (sidebar + empty projects area)
                 renderSidebar([defaultDashboard], defaultDashboard.id);
-              
-                const projectsContainer = document.getElementById('projects-container');
-                if (projectsContainer) {
-                  projectsContainer.innerHTML = '';
-                  const newProjectButton = document.createElement('button');
-                  newProjectButton.id = 'new-project';
-                  newProjectButton.className = 'new-project';
-                  newProjectButton.textContent = 'New Project';
-                  newProjectButton.addEventListener('click', function () {
-                    projectModal.style.display = "flex";
-                    projectNameInput.focus();
-                  });
-                  projectsContainer.appendChild(newProjectButton);
-                }
-              
+
+                // Clear projects list
+                projectsList.innerHTML = '';
+
                 // Nothing else to load yet
                 return [defaultDashboard];
               }
@@ -887,19 +1074,7 @@ new Sortable(document.getElementById('projects-container'), {
             renderSidebar(dashboards, validCurrentId);
 
             // Clear existing projects before loading new ones to prevent duplication
-            const projectsContainer = document.getElementById('projects-container');
-            projectsContainer.innerHTML = '';
-
-            // Add the New Project button
-            const newProjectButton = document.createElement('button');
-            newProjectButton.id = 'new-project';
-            newProjectButton.className = 'new-project';
-            newProjectButton.textContent = 'New Project';
-            newProjectButton.addEventListener('click', function() {
-                projectModal.style.display = "flex";
-                projectNameInput.focus();
-            });
-            projectsContainer.appendChild(newProjectButton);
+            projectsList.innerHTML = '';
 
             // Load projects for current dashboard
             const tx2 = db.transaction(['projects', 'tiles'], 'readonly');
@@ -952,41 +1127,41 @@ window.__lifetilesRefresh = () => loadDashboards();
     function renderSidebar(dashboards, currentId) {
         const list = document.getElementById('sidebar-list');
         if (!list) return;
-        
+
         list.innerHTML = '';
-        
+
         // Sort dashboards by order
         const sortedDashboards = dashboards.slice().sort((a, b) => {
             const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
             const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
             return ao - bo || String(a.id).localeCompare(String(b.id));
         });
-        
+
         sortedDashboards.forEach(dashboard => {
             const li = createSidebarItem(dashboard);
             li.setAttribute('aria-selected', String(dashboard.id === currentId));
             li.tabIndex = dashboard.id === currentId ? 0 : -1;
-            
+
             // Click to select dashboard
             li.addEventListener('click', (e) => {
                 if (e.target.closest('.actions')) return; // Don't select if clicking action buttons
                 switchDashboard(dashboard.id);
             });
-            
+
             // Edit button
             const editBtn = li.querySelector('.edit-btn');
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 editDashboardInline(dashboard, li);
             });
-            
+
             // Delete button
             const deleteBtn = li.querySelector('.delete-btn');
             deleteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 deleteDashboardFromSidebar(dashboard.id);
             });
-            
+
             list.appendChild(li);
         });
 
@@ -1006,28 +1181,33 @@ window.__lifetilesRefresh = () => loadDashboards();
     async function editDashboardInline(dashboard, listItem) {
         const labelEl = listItem.querySelector('.label');
         const actionsEl = listItem.querySelector('.actions');
-        
+
         // Create input
         const input = document.createElement('input');
         input.type = 'text';
         input.value = dashboard.name;
         input.style.cssText = 'border:1px solid #ddd; border-radius:4px; padding:2px 6px; font-size:14px; width:100%;';
-        
+
         // Replace label with input
         labelEl.style.display = 'none';
         actionsEl.style.display = 'none';
         listItem.insertBefore(input, actionsEl);
         input.focus();
         input.select();
-        
+
+        let editFinished = false; // Guard against double-call from blur after Enter/Escape
+
         const finishEdit = async (save = false) => {
+            if (editFinished) return; // Prevent double-call
+            editFinished = true;
+
             const newName = input.value.trim();
             if (save && newName && newName !== dashboard.name) {
                 try {
                     const db = await initDB();
                     const tx = db.transaction(['dashboards'], 'readwrite');
                     const store = tx.objectStore('dashboards');
-                    
+
                     await new Promise((resolve, reject) => {
                         const request = store.get(dashboard.id);
                         request.onsuccess = () => {
@@ -1043,21 +1223,28 @@ window.__lifetilesRefresh = () => loadDashboards();
                     labelEl.textContent = newName;
                     dashboard.name = newName;
                     triggerSync();
+
+                    // Notify popup of dashboard change
+                    try {
+                        const bc = new BroadcastChannel('lifetiles');
+                        bc.postMessage({ type: 'dashboards:changed' });
+                        bc.close();
+                    } catch {}
                 } catch (error) {
                     console.error('Error updating dashboard name:', error);
                 }
             }
-            
+
             input.remove();
             labelEl.style.display = '';
             actionsEl.style.display = '';
         };
-        
+
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') finishEdit(true);
             if (e.key === 'Escape') finishEdit(false);
         });
-        
+
         input.addEventListener('blur', () => finishEdit(true));
     }
 
@@ -1314,21 +1501,8 @@ window.__lifetilesRefresh = () => loadDashboards();
         localStorage.setItem('currentDashboardId', dashboardId);
         currentDashboardId = dashboardId;
 
-        
-
-        // Clear projects
-        document.getElementById('projects-container').innerHTML = '';
-
-        // Add the New Project button again
-        const newProjectButton = document.createElement('button');
-        newProjectButton.id = 'new-project';
-        newProjectButton.className = 'new-project';
-        newProjectButton.textContent = 'New Project';
-        newProjectButton.addEventListener('click', function() {
-            projectModal.style.display = "flex";
-            projectNameInput.focus();
-        });
-        document.getElementById('projects-container').appendChild(newProjectButton);
+        // Clear projects list
+        projectsList.innerHTML = '';
 
         // Load projects for selected dashboard
         await loadProjectsForDashboard(dashboardId);
@@ -1403,10 +1577,13 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function saveProject(projectData) {
         const db = await initDB();
-        const tx = db.transaction(['projects'], 'readwrite');
-        const store = tx.objectStore('projects');
 
         projectData.dashboardId = currentDashboardId;
+        // Assign order so project appears at end of list
+        projectData.order = await getNextProjectOrder(db, currentDashboardId);
+
+        const tx = db.transaction(['projects'], 'readwrite');
+        const store = tx.objectStore('projects');
 
         return new Promise((resolve, reject) => {
             const request = store.add(projectData);
@@ -1464,6 +1641,9 @@ window.__lifetilesRefresh = () => loadDashboards();
     function createProjectElement(projectData) {
         const project = document.createElement("div");
         project.className = "project";
+        if (projectData.collapsed) {
+            project.classList.add("collapsed");
+        }
         project.dataset.projectId = projectData.id;
 
         const projectHeader = document.createElement("div");
@@ -1483,6 +1663,30 @@ window.__lifetilesRefresh = () => loadDashboards();
             e.stopPropagation();
             closeAllMenus(); // Close any open menus first
             menuTrigger.classList.toggle("active");
+        });
+
+        // Collapse caret
+        const collapseCaret = document.createElement("button");
+        collapseCaret.className = "project-collapse-caret";
+        collapseCaret.title = "Collapse/Expand project";
+        collapseCaret.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+        collapseCaret.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            project.classList.toggle("collapsed");
+            const isCollapsed = project.classList.contains("collapsed");
+
+            // Save collapsed state to IndexedDB
+            const db = await initDB();
+            const tx = db.transaction(['projects'], 'readwrite');
+            const store = tx.objectStore('projects');
+            const req = store.get(projectData.id);
+            req.onsuccess = () => {
+                const proj = req.result;
+                if (proj) {
+                    proj.collapsed = isCollapsed;
+                    store.put(proj);
+                }
+            };
         });
 
         const menu = document.createElement("div");
@@ -1616,6 +1820,10 @@ window.__lifetilesRefresh = () => loadDashboards();
             if (!freshProject) return;
 
             const db = await initDB();
+
+            // Get the next order for the target dashboard before opening readwrite transaction
+            const newOrder = await getNextProjectOrder(db, selectedDashboardId);
+
             const tx = db.transaction(['projects', 'tiles'], 'readwrite');
             const projectStore = tx.objectStore('projects');
             const tileStore = tx.objectStore('tiles');
@@ -1626,8 +1834,9 @@ window.__lifetilesRefresh = () => loadDashboards();
                 request.onsuccess = () => resolve(request.result || []);
             });
 
-            // Update project's dashboardId
+            // Update project's dashboardId and order
             freshProject.dashboardId = selectedDashboardId;
+            freshProject.order = newOrder;
             await new Promise((resolve, reject) => {
                 const req = projectStore.put(freshProject);
                 req.onsuccess = () => resolve();
@@ -1804,8 +2013,17 @@ window.__lifetilesRefresh = () => loadDashboards();
         menu.appendChild(copyButton);
         menu.appendChild(removeButton);
 
+        // Bulk selection checkbox
+        const bulkCheckbox = document.createElement('input');
+        bulkCheckbox.type = 'checkbox';
+        bulkCheckbox.className = 'bulk-checkbox';
+        bulkCheckbox.dataset.type = 'project';
+        bulkCheckbox.dataset.id = projectData.id;
+
         projectHeader.appendChild(dragHandle);
+        projectHeader.appendChild(bulkCheckbox);
         projectHeader.appendChild(projectTitle);
+        projectHeader.appendChild(collapseCaret);
         projectHeader.appendChild(menuTrigger);
         projectHeader.appendChild(menu);
 
@@ -1913,7 +2131,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         project.appendChild(tilesContainer);
         tilesContainer.appendChild(addTileButton);
 
-        document.getElementById("projects-container").appendChild(project);
+        document.getElementById("projects-list").appendChild(project);
     }
 
     // Tile Creation
@@ -2276,18 +2494,8 @@ window.__lifetilesRefresh = () => loadDashboards();
                         localStorage.setItem('currentDashboardId', newCurrentId);
                         currentDashboardId = newCurrentId;
 
-                        // Clear projects container completely
-                        const projectsContainer = document.getElementById('projects-container');
-                        projectsContainer.innerHTML = '';
-                        const newProjectButton = document.createElement('button');
-                        newProjectButton.id = 'new-project';
-                        newProjectButton.className = 'new-project';
-                        newProjectButton.textContent = 'New Project';
-                        newProjectButton.addEventListener('click', function() {
-                            projectModal.style.display = "flex";
-                            projectNameInput.focus();
-                        });
-                        projectsContainer.appendChild(newProjectButton);
+                        // Clear projects list
+                        projectsList.innerHTML = '';
                     }
                 }
 
@@ -2567,17 +2775,8 @@ window.__lifetilesRefresh = () => loadDashboards();
                         localStorage.setItem('currentDashboardId', newCurrentId);
                         currentDashboardId = newCurrentId;
 
-                        // Clear projects container first
-                        document.getElementById('projects-container').innerHTML = '';
-                        const newProjectButton = document.createElement('button');
-                        newProjectButton.id = 'new-project';
-                        newProjectButton.className = 'new-project';
-                        newProjectButton.textContent = 'New Project';
-                        newProjectButton.addEventListener('click', function() {
-                            projectModal.style.display = "flex";
-                            projectNameInput.focus();
-                        });
-                        document.getElementById('projects-container').appendChild(newProjectButton);
+                        // Clear projects list
+                        projectsList.innerHTML = '';
 
                         // Only call loadDashboards to update the selector, it will load projects automatically
                         loadDashboards();
@@ -2800,6 +2999,14 @@ window.__lifetilesRefresh = () => loadDashboards();
         tile.appendChild(menuTrigger);
         tile.appendChild(menu);
 
+        // Bulk selection checkbox
+        const bulkCheckbox = document.createElement('input');
+        bulkCheckbox.type = 'checkbox';
+        bulkCheckbox.className = 'bulk-checkbox';
+        bulkCheckbox.dataset.type = 'tile';
+        bulkCheckbox.dataset.id = tileData.id;
+        tile.appendChild(bulkCheckbox);
+
         document.addEventListener("click", function(e) {
             if (!menu.contains(e.target) && e.target !== menuTrigger) {
                 menuTrigger.classList.remove("active");
@@ -2807,6 +3014,15 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
 
         tile.addEventListener("click", function(e) {
+            // In bulk mode, clicking the tile toggles selection
+            if (document.body.classList.contains('bulk-mode')) {
+                if (!e.target.classList.contains('bulk-checkbox')) {
+                    e.preventDefault();
+                    bulkCheckbox.checked = !bulkCheckbox.checked;
+                    bulkCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                return;
+            }
             if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
                 e.preventDefault(); // keep drag/click behavior clean
                 // Always open tiles in a new tab
@@ -2886,8 +3102,8 @@ function getOrderedTileIds(containerEl) {
   }
   async function updateProjectOrder(evt) {
     try {
-      const container = document.getElementById('projects-container');
-      const projectEls = Array.from(container.querySelectorAll('.project')); // skips the "New Project" button
+      const container = document.getElementById('projects-list');
+      const projectEls = Array.from(container.querySelectorAll('.project'));
       const db = await initDB();
       const tx = db.transaction(['projects'], 'readwrite');
       const store = tx.objectStore('projects');
@@ -3225,8 +3441,29 @@ async function importDashboardsJSON() {
             try {
                 const importData = JSON.parse(e.target.result);
                 const db = await initDB();
+
+                // Check for and remove empty default "My Dashboard" before importing
+                const checkTx = db.transaction(['dashboards', 'projects'], 'readwrite');
+                const existingDashboards = await new Promise(resolve => {
+                    const req = checkTx.objectStore('dashboards').getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                });
+
+                for (const dash of existingDashboards) {
+                    if (dash.name === 'My Dashboard') {
+                        const projects = await new Promise(resolve => {
+                            const req = checkTx.objectStore('projects').index('dashboardId').getAll(dash.id);
+                            req.onsuccess = () => resolve(req.result || []);
+                        });
+                        // Delete if empty
+                        if (projects.length === 0) {
+                            checkTx.objectStore('dashboards').delete(dash.id);
+                        }
+                    }
+                }
+
                 const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-                
+
                 // Import new data while preserving existing
                 for (const dashboard of importData.dashboards) {
                     const newDashboard = {
@@ -3237,11 +3474,14 @@ async function importDashboardsJSON() {
 
                     // Update project references to new dashboard ID
                     const dashboardProjects = importData.projects.filter(p => p.dashboardId === dashboard.id);
+                    let projectOrder = 0;
                     for (const project of dashboardProjects) {
                         const newProject = {
                             ...project,
                             id: Date.now().toString() + Math.random(),
-                            dashboardId: newDashboard.id
+                            dashboardId: newDashboard.id,
+                            // Preserve imported order if present, otherwise assign incrementally
+                            order: Number.isFinite(+project.order) ? project.order : projectOrder++
                         };
                         await tx.objectStore('projects').add(newProject);
 
@@ -3384,15 +3624,24 @@ async function importGoogleBookmarks() {
                 const projectStore = tx.objectStore('projects');
                 const tileStore = tx.objectStore('tiles');
 
-                // Get existing projects to determine order
+                // Get existing projects to determine starting order
                 const existingProjects = await new Promise((resolve) => {
                     const request = projectStore.index('dashboardId').getAll(selectedDashboardId);
                     request.onsuccess = () => resolve(request.result || []);
                 });
 
+                // Calculate next order value from existing projects
+                let maxOrder = -1;
+                existingProjects.forEach(p => {
+                    const order = Number.isFinite(+p.order) ? +p.order : -1;
+                    if (order > maxOrder) maxOrder = order;
+                });
+                let nextOrder = maxOrder + 1;
+
                 // Add each project and its tiles
                 for (const project of projects) {
                     project.dashboardId = selectedDashboardId;
+                    project.order = nextOrder++;
                     // Save project
                     await projectStore.add(project);
 
@@ -3452,3 +3701,847 @@ function showStatus(message) {
         }, 3000);
     });
 }
+
+// ===== Bulk Actions Mode =====
+
+(function initBulkMode() {
+    const bulkSelectBtn = document.getElementById('bulk-select');
+    const bulkActionBar = document.getElementById('bulk-action-bar');
+    const selectionCountEl = document.getElementById('selection-count');
+    const bulkDeleteBtn = document.getElementById('bulk-delete');
+    const bulkMoveBtn = document.getElementById('bulk-move');
+    const bulkCopyBtn = document.getElementById('bulk-copy');
+    const bulkCancelBtn = document.getElementById('bulk-cancel');
+
+    // Target selection modal elements
+    const bulkTargetModal = document.getElementById('bulk-target-modal');
+    const bulkTargetTitle = document.getElementById('bulk-target-title');
+    const bulkTargetSelect = document.getElementById('bulk-target-select');
+    const bulkTargetCancel = document.getElementById('bulk-target-cancel');
+    const bulkTargetConfirm = document.getElementById('bulk-target-confirm');
+
+    if (!bulkSelectBtn) return; // Not on main page
+
+    function enterBulkMode() {
+        document.body.classList.add('bulk-mode');
+        bulkSelectBtn.classList.add('hidden');
+        bulkActionBar.classList.remove('hidden');
+        updateSelectionCount();
+    }
+
+    function exitBulkMode() {
+        document.body.classList.remove('bulk-mode');
+        bulkSelectBtn.classList.remove('hidden');
+        bulkActionBar.classList.add('hidden');
+
+        // Clear all selections
+        document.querySelectorAll('.bulk-checkbox').forEach(cb => {
+            cb.checked = false;
+        });
+        document.querySelectorAll('.bulk-selected').forEach(el => {
+            el.classList.remove('bulk-selected');
+        });
+        updateSelectionCount();
+    }
+
+    function getSelectedItems() {
+        const selected = [];
+        document.querySelectorAll('.bulk-checkbox:checked').forEach(cb => {
+            selected.push({
+                type: cb.dataset.type,
+                id: cb.dataset.id,
+                element: cb.closest(cb.dataset.type === 'project' ? '.project' : '.tile')
+            });
+        });
+        return selected;
+    }
+
+    function updateSelectionCount() {
+        const selected = getSelectedItems();
+        const count = selected.length;
+        selectionCountEl.textContent = `${count} selected`;
+
+        // Enable/disable action buttons
+        const hasSelection = count > 0;
+        bulkDeleteBtn.disabled = !hasSelection;
+        bulkMoveBtn.disabled = !hasSelection;
+        bulkCopyBtn.disabled = !hasSelection;
+    }
+
+    // Toggle bulk mode
+    bulkSelectBtn.addEventListener('click', () => {
+        if (document.body.classList.contains('bulk-mode')) {
+            exitBulkMode();
+        } else {
+            enterBulkMode();
+        }
+    });
+
+    // Cancel button in bulk action bar
+    bulkCancelBtn.addEventListener('click', () => {
+        exitBulkMode();
+    });
+
+    // Handle checkbox changes using event delegation
+    document.addEventListener('change', (e) => {
+        if (!e.target.classList.contains('bulk-checkbox')) return;
+
+        const checkbox = e.target;
+        const type = checkbox.dataset.type;
+        const element = checkbox.closest(type === 'project' ? '.project' : '.tile');
+
+        if (element) {
+            element.classList.toggle('bulk-selected', checkbox.checked);
+        }
+
+        // Hierarchical selection logic
+        if (type === 'project') {
+            // Check/uncheck all tiles in this project
+            const projectEl = checkbox.closest('.project');
+            if (projectEl) {
+                const tileCheckboxes = projectEl.querySelectorAll('.tile .bulk-checkbox');
+                tileCheckboxes.forEach(cb => {
+                    cb.checked = checkbox.checked;
+                    cb.closest('.tile')?.classList.toggle('bulk-selected', checkbox.checked);
+                });
+            }
+        } else if (type === 'tile') {
+            // Update parent project checkbox state
+            const projectEl = checkbox.closest('.project');
+            if (projectEl) {
+                const projectCheckbox = projectEl.querySelector('.project-header .bulk-checkbox');
+                const allTileCheckboxes = projectEl.querySelectorAll('.tile .bulk-checkbox');
+                const tileCount = allTileCheckboxes.length;
+                const allChecked = Array.from(allTileCheckboxes).every(cb => cb.checked);
+
+                if (projectCheckbox) {
+                    // Only auto-check project if 2+ tiles and all are checked
+                    // For 1-tile projects, don't auto-check (allows selecting just the tile)
+                    // Always uncheck project if any tile is unchecked
+                    if (allChecked && tileCount >= 2) {
+                        projectCheckbox.checked = true;
+                        projectEl.classList.add('bulk-selected');
+                    } else if (!allChecked) {
+                        projectCheckbox.checked = false;
+                        projectEl.classList.remove('bulk-selected');
+                    }
+                }
+            }
+        }
+
+        updateSelectionCount();
+    });
+
+    // Prevent checkbox clicks from bubbling to parent handlers
+    document.addEventListener('click', (e) => {
+        if (e.target.classList.contains('bulk-checkbox')) {
+            e.stopPropagation();
+        }
+    }, true);
+
+    // Delete action
+    bulkDeleteBtn.addEventListener('click', async () => {
+        let selected = getSelectedItems();
+        if (selected.length === 0) return;
+
+        // Deduplicate: remove tiles whose parent project is also selected
+        const selectedProjectIds = new Set(selected.filter(s => s.type === 'project').map(s => s.id));
+        selected = selected.filter(s => {
+            if (s.type === 'tile') {
+                const parentProject = s.element?.closest('.project');
+                const parentId = parentProject?.dataset.projectId;
+                return !selectedProjectIds.has(parentId);
+            }
+            return true;
+        });
+
+        const projectCount = selected.filter(s => s.type === 'project').length;
+        const tileCount = selected.filter(s => s.type === 'tile').length;
+
+        let message = 'Are you sure you want to delete ';
+        const parts = [];
+        if (projectCount > 0) parts.push(`${projectCount} project${projectCount > 1 ? 's' : ''}`);
+        if (tileCount > 0) parts.push(`${tileCount} tile${tileCount > 1 ? 's' : ''}`);
+        message += parts.join(' and ') + '?';
+
+        if (!confirm(message)) return;
+
+        const db = await initDB();
+
+        // Delete projects
+        const projectIds = selected.filter(s => s.type === 'project').map(s => s.id);
+        if (projectIds.length > 0) {
+            const projectTx = db.transaction(['projects', 'tiles'], 'readwrite');
+            const projectStore = projectTx.objectStore('projects');
+            const tileStore = projectTx.objectStore('tiles');
+
+            for (const projectId of projectIds) {
+                // Delete all tiles in the project
+                const tilesIndex = tileStore.index('projectId');
+                const tilesRequest = tilesIndex.openCursor(IDBKeyRange.only(projectId));
+                tilesRequest.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        tileStore.delete(cursor.value.id);
+                        cursor.continue();
+                    }
+                };
+
+                // Delete the project
+                projectStore.delete(projectId);
+            }
+        }
+
+        // Delete individual tiles
+        const tileIds = selected.filter(s => s.type === 'tile').map(s => s.id);
+        if (tileIds.length > 0) {
+            const tileTx = db.transaction(['tiles'], 'readwrite');
+            const tileStore = tileTx.objectStore('tiles');
+            for (const tileId of tileIds) {
+                tileStore.delete(tileId);
+            }
+        }
+
+        // Remove elements from DOM
+        selected.forEach(item => {
+            if (item.element) {
+                item.element.remove();
+            }
+        });
+
+        exitBulkMode();
+        showStatus(`Deleted ${selected.length} item${selected.length > 1 ? 's' : ''}`);
+    });
+
+    // Helper: Deduplicate selection (remove tiles whose parent project is selected)
+    function deduplicateSelection(selected) {
+        const selectedProjectIds = new Set(selected.filter(s => s.type === 'project').map(s => s.id));
+        return selected.filter(s => {
+            if (s.type === 'tile') {
+                const parentProject = s.element?.closest('.project');
+                const parentId = parentProject?.dataset.projectId;
+                return !selectedProjectIds.has(parentId);
+            }
+            return true;
+        });
+    }
+
+    // Move action
+    bulkMoveBtn.addEventListener('click', async () => {
+        let selected = deduplicateSelection(getSelectedItems());
+        if (selected.length === 0) return;
+
+        // Determine what we're moving
+        const hasProjects = selected.some(s => s.type === 'project');
+        const hasTiles = selected.some(s => s.type === 'tile');
+
+        if (hasProjects && hasTiles) {
+            alert('Please select only projects or only tiles to move, not both.');
+            return;
+        }
+
+        if (hasProjects) {
+            // Move projects to another dashboard
+            await showMoveProjectsDialog(selected.filter(s => s.type === 'project'));
+        } else {
+            // Move tiles to another project
+            await showMoveTilesDialog(selected.filter(s => s.type === 'tile'));
+        }
+    });
+
+    // Copy action
+    bulkCopyBtn.addEventListener('click', async () => {
+        let selected = deduplicateSelection(getSelectedItems());
+        if (selected.length === 0) return;
+
+        // Determine what we're copying
+        const hasProjects = selected.some(s => s.type === 'project');
+        const hasTiles = selected.some(s => s.type === 'tile');
+
+        if (hasProjects && hasTiles) {
+            alert('Please select only projects or only tiles to copy, not both.');
+            return;
+        }
+
+        if (hasProjects) {
+            // Copy projects to another dashboard
+            await showCopyProjectsDialog(selected.filter(s => s.type === 'project'));
+        } else {
+            // Copy tiles to another project
+            await showCopyTilesDialog(selected.filter(s => s.type === 'tile'));
+        }
+    });
+
+    // Helper: Show target selection modal
+    function showTargetModal(title, options, onConfirm) {
+        const modal = document.getElementById('bulk-target-modal');
+        const titleEl = document.getElementById('bulk-target-title');
+        const selectEl = document.getElementById('bulk-target-select');
+        const cancelBtn = document.getElementById('bulk-target-cancel');
+        const confirmBtn = document.getElementById('bulk-target-confirm');
+
+        titleEl.textContent = title;
+        selectEl.innerHTML = '';
+
+        options.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.id;
+            option.textContent = opt.name;
+            selectEl.appendChild(option);
+        });
+
+        confirmBtn.classList.add('enabled');
+        confirmBtn.disabled = false;
+        modal.style.display = 'flex';
+
+        // Use one-time event handlers
+        const handleCancel = () => {
+            modal.style.display = 'none';
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+        };
+
+        const handleConfirm = () => {
+            const selectedId = selectEl.value;
+            const selected = options.find(o => o.id === selectedId);
+            modal.style.display = 'none';
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+            if (selected) onConfirm(selected);
+        };
+
+        cancelBtn.addEventListener('click', handleCancel);
+        confirmBtn.addEventListener('click', handleConfirm);
+    }
+
+    // Helper: Show move projects dialog
+    async function showMoveProjectsDialog(projects) {
+        const db = await initDB();
+        let dashboards = await new Promise((resolve, reject) => {
+            const tx = db.transaction(['dashboards'], 'readonly');
+            const store = tx.objectStore('dashboards');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+
+        // Sort by order property
+        dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        const currentDashboardId = window.currentDashboardId;
+        const otherDashboards = dashboards.filter(d => d.id !== currentDashboardId);
+
+        if (otherDashboards.length === 0) {
+            alert('No other dashboards available. Create another dashboard first.');
+            return;
+        }
+
+        showTargetModal('Move to Dashboard', otherDashboards, async (targetDashboard) => {
+            const db = await initDB();
+
+            // Get max order in target dashboard
+            const existingProjects = await new Promise((resolve, reject) => {
+                const tx = db.transaction(['projects'], 'readonly');
+                const store = tx.objectStore('projects');
+                const index = store.index('dashboardId');
+                const req = index.getAll(targetDashboard.id);
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error);
+            });
+
+            let maxOrder = -1;
+            existingProjects.forEach(p => {
+                const order = Number.isFinite(+p.order) ? +p.order : -1;
+                if (order > maxOrder) maxOrder = order;
+            });
+            let nextOrder = maxOrder + 1;
+
+            // Update each project's dashboardId and order
+            for (const proj of projects) {
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(['projects'], 'readwrite');
+                    const store = tx.objectStore('projects');
+                    const req = store.get(proj.id);
+                    req.onsuccess = () => {
+                        const project = req.result;
+                        if (project) {
+                            project.dashboardId = targetDashboard.id;
+                            project.order = nextOrder++;
+                            const putReq = store.put(project);
+                            putReq.onsuccess = () => resolve();
+                            putReq.onerror = () => reject(putReq.error);
+                        } else {
+                            resolve();
+                        }
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            // Remove elements from DOM after all DB updates complete
+            projects.forEach(p => p.element?.remove());
+            exitBulkMode();
+            showStatus(`Moved ${projects.length} project${projects.length > 1 ? 's' : ''} to ${targetDashboard.name}`);
+        });
+    }
+
+    // Helper: Show tree modal for selecting a project (across all dashboards)
+    async function showTreeTargetModal(title, onConfirm) {
+        const modal = document.getElementById('bulk-tile-target-modal');
+        const titleEl = document.getElementById('bulk-tile-target-title');
+        const treeEl = document.getElementById('bulk-tile-target-tree');
+        const cancelBtn = document.getElementById('bulk-tile-target-cancel');
+        const confirmBtn = document.getElementById('bulk-tile-target-confirm');
+
+        titleEl.textContent = title;
+        treeEl.innerHTML = '';
+        confirmBtn.disabled = true;
+        confirmBtn.classList.remove('enabled');
+        confirmBtn.style.backgroundColor = '';
+
+        const db = await initDB();
+
+        // Get all dashboards
+        let dashboards = await new Promise((resolve, reject) => {
+            const tx = db.transaction(['dashboards'], 'readonly');
+            const req = tx.objectStore('dashboards').getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+        dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        // Get all projects
+        let allProjects = await new Promise((resolve, reject) => {
+            const tx = db.transaction(['projects'], 'readonly');
+            const req = tx.objectStore('projects').getAll();
+            req.onsuccess = () => resolve(req.result || []);
+            req.onerror = () => reject(req.error);
+        });
+
+        let selectedProject = null;
+        let pendingCreateProject = null; // Reference to active createProject function
+
+        // Build tree
+        for (const dashboard of dashboards) {
+            const dashProjects = allProjects
+                .filter(p => p.dashboardId === dashboard.id)
+                .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+            const dashEl = document.createElement('div');
+            dashEl.className = 'target-tree-dashboard collapsed';
+
+            const headerEl = document.createElement('div');
+            headerEl.className = 'target-tree-dashboard-header';
+            headerEl.innerHTML = `
+                <svg class="target-tree-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span class="target-tree-dashboard-name">${dashboard.name}</span>
+            `;
+            headerEl.addEventListener('click', () => {
+                dashEl.classList.toggle('collapsed');
+            });
+
+            const projectsEl = document.createElement('div');
+            projectsEl.className = 'target-tree-projects';
+
+            for (const project of dashProjects) {
+                const projEl = document.createElement('div');
+                projEl.className = 'target-tree-project';
+                projEl.dataset.projectId = project.id;
+                projEl.innerHTML = `
+                    <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <span>${project.name}</span>
+                `;
+                projEl.addEventListener('click', () => {
+                    // Deselect previous
+                    treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
+                        el.classList.remove('selected');
+                    });
+                    // Select this one
+                    projEl.classList.add('selected');
+                    selectedProject = project;
+                    confirmBtn.disabled = false;
+                    confirmBtn.classList.add('enabled');
+                    confirmBtn.style.backgroundColor = 'var(--color-success)';
+                });
+                projectsEl.appendChild(projEl);
+            }
+
+            // Add "+ New Project" option
+            const newProjEl = document.createElement('div');
+            newProjEl.className = 'target-tree-new-project';
+            newProjEl.innerHTML = `
+                <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>New Project</span>
+            `;
+            newProjEl.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                // Replace with input field
+                newProjEl.innerHTML = `
+                    <input type="text" class="target-tree-new-project-input" placeholder="Project name..." autofocus>
+                `;
+                const input = newProjEl.querySelector('input');
+                input.focus();
+
+                // Enable/disable confirm button as user types
+                input.addEventListener('input', () => {
+                    if (input.value.trim()) {
+                        confirmBtn.disabled = false;
+                        confirmBtn.classList.add('enabled');
+                        confirmBtn.style.backgroundColor = 'var(--color-success)';
+                    } else {
+                        confirmBtn.disabled = true;
+                        confirmBtn.classList.remove('enabled');
+                        confirmBtn.style.backgroundColor = '';
+                    }
+                });
+
+                let isCreating = false;
+                const createProject = async () => {
+                    pendingCreateProject = null; // Clear reference when creating
+                    if (isCreating) return;
+                    const name = input.value.trim();
+                    if (!name) {
+                        // Reset to button state
+                        newProjEl.innerHTML = `
+                            <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            <span>New Project</span>
+                        `;
+                        return;
+                    }
+
+                    isCreating = true;
+
+                    // Get max order for this dashboard
+                    const dashProjects = allProjects.filter(p => p.dashboardId === dashboard.id);
+                    let maxOrder = -1;
+                    dashProjects.forEach(p => {
+                        const order = Number.isFinite(+p.order) ? +p.order : -1;
+                        if (order > maxOrder) maxOrder = order;
+                    });
+
+                    // Create new project
+                    const newProject = {
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        name: name,
+                        dashboardId: dashboard.id,
+                        order: maxOrder + 1
+                    };
+
+                    // Enable confirm button immediately
+                    selectedProject = newProject;
+                    confirmBtn.disabled = false;
+                    confirmBtn.classList.add('enabled');
+                    // Force visual update
+                    confirmBtn.style.backgroundColor = 'var(--color-success)';
+
+                    await new Promise((resolve, reject) => {
+                        const tx = db.transaction(['projects'], 'readwrite');
+                        const store = tx.objectStore('projects');
+                        const req = store.add(newProject);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                    });
+
+                    // Add to allProjects for future reference
+                    allProjects.push(newProject);
+
+                    // Create project element and insert before "+ New Project"
+                    const projEl = document.createElement('div');
+                    projEl.className = 'target-tree-project selected';
+                    projEl.dataset.projectId = newProject.id;
+                    projEl.innerHTML = `
+                        <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span>${newProject.name}</span>
+                    `;
+                    projEl.addEventListener('click', () => {
+                        treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
+                            el.classList.remove('selected');
+                        });
+                        projEl.classList.add('selected');
+                        selectedProject = newProject;
+                        confirmBtn.disabled = false;
+                        confirmBtn.classList.add('enabled');
+                        confirmBtn.style.backgroundColor = 'var(--color-success)';
+                    });
+
+                    // Deselect others and select this one
+                    treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
+                        el.classList.remove('selected');
+                    });
+                    projectsEl.insertBefore(projEl, newProjEl);
+                    selectedProject = newProject;
+                    confirmBtn.disabled = false;
+                    confirmBtn.classList.add('enabled');
+                    confirmBtn.style.backgroundColor = 'var(--color-success)';
+
+                    // Reset new project button
+                    newProjEl.innerHTML = `
+                        <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                        </svg>
+                        <span>New Project</span>
+                    `;
+                };
+
+                // Store reference so confirm button can trigger it
+                pendingCreateProject = createProject;
+
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        createProject();
+                    } else if (e.key === 'Escape') {
+                        pendingCreateProject = null;
+                        confirmBtn.disabled = true;
+                        confirmBtn.classList.remove('enabled');
+                        confirmBtn.style.backgroundColor = '';
+                        newProjEl.innerHTML = `
+                            <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                            <span>New Project</span>
+                        `;
+                    }
+                });
+
+                input.addEventListener('blur', () => {
+                    // Small delay to allow Enter key to fire first
+                    setTimeout(() => {
+                        if (newProjEl.contains(input)) {
+                            createProject();
+                        }
+                    }, 100);
+                });
+            });
+            projectsEl.appendChild(newProjEl);
+
+            dashEl.appendChild(headerEl);
+            dashEl.appendChild(projectsEl);
+            treeEl.appendChild(dashEl);
+        }
+
+        modal.style.display = 'flex';
+
+        // Event handlers
+        const handleCancel = () => {
+            modal.style.display = 'none';
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+        };
+
+        const handleConfirm = async () => {
+            // If there's a pending project creation, trigger it first
+            if (pendingCreateProject && !selectedProject) {
+                await pendingCreateProject();
+            }
+            if (!selectedProject) return;
+            modal.style.display = 'none';
+            cancelBtn.removeEventListener('click', handleCancel);
+            confirmBtn.removeEventListener('click', handleConfirm);
+            onConfirm(selectedProject);
+        };
+
+        cancelBtn.addEventListener('click', handleCancel);
+        confirmBtn.addEventListener('click', handleConfirm);
+    }
+
+    // Helper: Show move tiles dialog
+    async function showMoveTilesDialog(tiles) {
+        showTreeTargetModal('Move to Project', async (targetProject) => {
+            const db = await initDB();
+
+            // Update each tile's projectId
+            for (const tile of tiles) {
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction(['tiles'], 'readwrite');
+                    const store = tx.objectStore('tiles');
+                    const req = store.get(tile.id);
+                    req.onsuccess = () => {
+                        const tileData = req.result;
+                        if (tileData) {
+                            tileData.projectId = targetProject.id;
+                            const putReq = store.put(tileData);
+                            putReq.onsuccess = () => resolve();
+                            putReq.onerror = () => reject(putReq.error);
+                        } else {
+                            resolve();
+                        }
+                    };
+                    req.onerror = () => reject(req.error);
+                });
+            }
+
+            // Move tile elements to target container (only works if on same dashboard)
+            const targetContainer = document.querySelector(`.project[data-project-id="${targetProject.id}"] .tiles-container`);
+            if (targetContainer) {
+                const addButton = targetContainer.querySelector('.add-tile-button');
+                tiles.forEach(t => {
+                    if (t.element && addButton) {
+                        targetContainer.insertBefore(t.element, addButton);
+                        t.element.classList.remove('bulk-selected');
+                        const cb = t.element.querySelector('.bulk-checkbox');
+                        if (cb) cb.checked = false;
+                    }
+                });
+            } else {
+                // Target is on different dashboard or newly created - remove tiles and refresh
+                tiles.forEach(t => t.element?.remove());
+                // Refresh to show newly created project if on same dashboard
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
+                }
+            }
+            exitBulkMode();
+            showStatus(`Moved ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
+        });
+    }
+
+    // Helper: Show copy projects dialog
+    async function showCopyProjectsDialog(projects) {
+        const db = await initDB();
+        let dashboards = await new Promise((resolve, reject) => {
+            const tx = db.transaction(['dashboards'], 'readonly');
+            const store = tx.objectStore('dashboards');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+        });
+
+        // Sort by order property
+        dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+        showTargetModal('Copy to Dashboard', dashboards, async (targetDashboard) => {
+            const db = await initDB();
+
+            // Get max order in target dashboard
+            const existingProjects = await new Promise((resolve, reject) => {
+                const tx = db.transaction(['projects'], 'readonly');
+                const store = tx.objectStore('projects');
+                const index = store.index('dashboardId');
+                const req = index.getAll(targetDashboard.id);
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error);
+            });
+
+            let maxOrder = -1;
+            existingProjects.forEach(p => {
+                const order = Number.isFinite(+p.order) ? +p.order : -1;
+                if (order > maxOrder) maxOrder = order;
+            });
+            let nextOrder = maxOrder + 1;
+
+            for (const proj of projects) {
+                const originalProject = await new Promise((resolve, reject) => {
+                    const tx = db.transaction(['projects'], 'readonly');
+                    const store = tx.objectStore('projects');
+                    const req = store.get(proj.id);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                if (!originalProject) continue;
+
+                const newProjectId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+                const newProject = {
+                    ...originalProject,
+                    id: newProjectId,
+                    dashboardId: targetDashboard.id,
+                    name: originalProject.name + ' (Copy)',
+                    order: nextOrder++
+                };
+
+                const projectTx = db.transaction(['projects'], 'readwrite');
+                projectTx.objectStore('projects').add(newProject);
+
+                const originalTiles = await new Promise((resolve, reject) => {
+                    const tx = db.transaction(['tiles'], 'readonly');
+                    const store = tx.objectStore('tiles');
+                    const index = store.index('projectId');
+                    const req = index.getAll(IDBKeyRange.only(proj.id));
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                const tileTx = db.transaction(['tiles'], 'readwrite');
+                const tileStore = tileTx.objectStore('tiles');
+                for (const tile of originalTiles) {
+                    const newTile = {
+                        ...tile,
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        projectId: newProjectId
+                    };
+                    tileStore.add(newTile);
+                }
+            }
+
+            // Refresh to show newly copied projects
+            if (window.__lifetilesRefresh) {
+                await window.__lifetilesRefresh();
+            }
+            exitBulkMode();
+            showStatus(`Copied ${projects.length} project${projects.length > 1 ? 's' : ''} to ${targetDashboard.name}`);
+        });
+    }
+
+    // Helper: Show copy tiles dialog
+    async function showCopyTilesDialog(tiles) {
+        showTreeTargetModal('Copy to Project', async (targetProject) => {
+            const db = await initDB();
+
+            const newTiles = [];
+            for (const tile of tiles) {
+                const originalTile = await new Promise((resolve, reject) => {
+                    const readTx = db.transaction(['tiles'], 'readonly');
+                    const store = readTx.objectStore('tiles');
+                    const req = store.get(tile.id);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+
+                if (originalTile) {
+                    const newTile = {
+                        ...originalTile,
+                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        projectId: targetProject.id
+                    };
+                    await new Promise((resolve, reject) => {
+                        const tx = db.transaction(['tiles'], 'readwrite');
+                        const store = tx.objectStore('tiles');
+                        const req = store.add(newTile);
+                        req.onsuccess = () => resolve();
+                        req.onerror = () => reject(req.error);
+                    });
+                    newTiles.push(newTile);
+                }
+            }
+
+            // Add tile elements if target is on current dashboard
+            const targetContainer = document.querySelector(`.project[data-project-id="${targetProject.id}"] .tiles-container`);
+            if (targetContainer) {
+                for (const tileData of newTiles) {
+                    await createTileElement(targetContainer, tileData);
+                }
+            } else {
+                // Target project might be newly created - refresh to show it
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
+                }
+            }
+            exitBulkMode();
+            showStatus(`Copied ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
+        });
+    }
+})();

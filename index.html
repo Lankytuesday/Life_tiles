@@ -37,7 +37,24 @@
                 </div>
               
                 <div id="projects-container">
-                    <button id="new-project" class="new-project">New Project</button>
+                    <div class="project-controls">
+                        <button id="new-project" class="new-project">+ New Project</button>
+                        <div class="project-controls-right">
+                            <button id="expand-all" class="project-control-btn">+ Expand All</button>
+                            <button id="collapse-all" class="project-control-btn">− Collapse All</button>
+                            <button id="bulk-select" class="project-control-btn">Select</button>
+                        </div>
+                    </div>
+                    <div id="bulk-action-bar" class="bulk-action-bar hidden">
+                        <span id="selection-count">0 selected</span>
+                        <div class="bulk-action-buttons">
+                            <button id="bulk-delete" class="bulk-btn bulk-delete" disabled>Delete</button>
+                            <button id="bulk-move" class="bulk-btn" disabled>Move to...</button>
+                            <button id="bulk-copy" class="bulk-btn" disabled>Copy to...</button>
+                            <button id="bulk-cancel" class="bulk-btn">Cancel</button>
+                        </div>
+                    </div>
+                    <div id="projects-list"></div>
                 </div>
               </main>
 
@@ -88,6 +105,34 @@
                     <div class="modal-buttons">
                         <button id="close-popup-modal" class="cancel-button">Cancel</button>
                         <button id="submit-popup-tile" class="done-button" disabled>Done</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Move/Copy Target Modal (for projects - simple dropdown) -->
+            <div id="bulk-target-modal" class="modal">
+                <div class="modal-content">
+                    <h2 id="bulk-target-title">Move to</h2>
+                    <select id="bulk-target-select">
+                        <!-- Options populated dynamically -->
+                    </select>
+                    <div class="modal-buttons">
+                        <button id="bulk-target-cancel" class="cancel-button">Cancel</button>
+                        <button id="bulk-target-confirm" class="done-button">Confirm</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bulk Move/Copy Target Modal (for tiles - tree structure) -->
+            <div id="bulk-tile-target-modal" class="modal">
+                <div class="modal-content" style="width: 320px;">
+                    <h2 id="bulk-tile-target-title">Move to Project</h2>
+                    <div id="bulk-tile-target-tree" class="target-tree">
+                        <!-- Tree populated dynamically -->
+                    </div>
+                    <div class="modal-buttons">
+                        <button id="bulk-tile-target-cancel" class="cancel-button">Cancel</button>
+                        <button id="bulk-tile-target-confirm" class="done-button" disabled>Confirm</button>
                     </div>
                 </div>
             </div>
