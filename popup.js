@@ -308,7 +308,9 @@ async function getTargetWindowId() {
                         // Skip creating the initial tile if current tab is internal (chrome://, etc.)
                         if (!currentTab?.url || isInternalUrl(currentTab.url)) {
                           projectModal.style.display = 'none';
-                          if (typeof LifetilesSync !== 'undefined') LifetilesSync.scheduleSync();
+                          if (typeof LifetilesSync !== 'undefined') {
+                              LifetilesSync.forceSync().catch(e => console.error('[Popup] Sync failed:', e));
+                          }
                           window.location.reload();
                           resolve();
                           return;
@@ -322,7 +324,9 @@ async function getTargetWindowId() {
                         };
                         tileStore.add(tileData).onsuccess = () => {
                             projectModal.style.display = 'none';
-                            if (typeof LifetilesSync !== 'undefined') LifetilesSync.scheduleSync();
+                            if (typeof LifetilesSync !== 'undefined') {
+                                LifetilesSync.forceSync().catch(e => console.error('[Popup] Sync failed:', e));
+                            }
                             window.location.reload();
                             resolve();
                         };
@@ -423,9 +427,13 @@ async function getTargetWindowId() {
                       });
                     } catch (_) {}
                   }
-            // Trigger sync before closing
+            // Trigger sync before closing (use forceSync and await it)
             if (typeof LifetilesSync !== 'undefined') {
-                LifetilesSync.scheduleSync();
+                try {
+                    await LifetilesSync.forceSync();
+                } catch (e) {
+                    console.error('[Popup] Sync failed:', e);
+                }
             }
             window.close();
         } else {
@@ -443,7 +451,7 @@ async function getTargetWindowId() {
                 const tx = db.transaction(['tiles'], 'readwrite');
                 const tileStore = tx.objectStore('tiles');
                 const req = tileStore.add(tileData);
-                req.onsuccess = () => {
+                req.onsuccess = async () => {
                     try {
                         const bc = new BroadcastChannel('lifetiles');
                         bc.postMessage({ type: 'tiles:changed' });
@@ -456,9 +464,13 @@ async function getTargetWindowId() {
                           });
                         } catch (_) {}
                       }
-                      // Trigger sync before closing
+                      // Trigger sync before closing (use forceSync and await it)
                       if (typeof LifetilesSync !== 'undefined') {
-                          LifetilesSync.scheduleSync();
+                          try {
+                              await LifetilesSync.forceSync();
+                          } catch (e) {
+                              console.error('[Popup] Sync failed:', e);
+                          }
                       }
                       window.close();
                 };
