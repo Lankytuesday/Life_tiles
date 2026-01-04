@@ -308,6 +308,7 @@ async function getTargetWindowId() {
                         // Skip creating the initial tile if current tab is internal (chrome://, etc.)
                         if (!currentTab?.url || isInternalUrl(currentTab.url)) {
                           projectModal.style.display = 'none';
+                          if (typeof LifetilesSync !== 'undefined') LifetilesSync.scheduleSync();
                           window.location.reload();
                           resolve();
                           return;
@@ -321,6 +322,7 @@ async function getTargetWindowId() {
                         };
                         tileStore.add(tileData).onsuccess = () => {
                             projectModal.style.display = 'none';
+                            if (typeof LifetilesSync !== 'undefined') LifetilesSync.scheduleSync();
                             window.location.reload();
                             resolve();
                         };
@@ -421,7 +423,10 @@ async function getTargetWindowId() {
                       });
                     } catch (_) {}
                   }
-                  
+            // Trigger sync before closing
+            if (typeof LifetilesSync !== 'undefined') {
+                LifetilesSync.scheduleSync();
+            }
             window.close();
         } else {
             const tileName = tileNameInput.value.trim();
@@ -451,8 +456,11 @@ async function getTargetWindowId() {
                           });
                         } catch (_) {}
                       }
+                      // Trigger sync before closing
+                      if (typeof LifetilesSync !== 'undefined') {
+                          LifetilesSync.scheduleSync();
+                      }
                       window.close();
-                      
                 };
                 req.onerror = (e) => console.error('Failed to save tile:', e);
 
