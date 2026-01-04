@@ -3011,7 +3011,7 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
 async function initDB() {
     return new Promise((resolve, reject) => {
         // Increment the version number to force an upgrade
-        const request = indexedDB.open('lifetiles', 5);
+        const request = indexedDB.open('lifetiles', 6);
 
         request.onerror = (event) => {
             reject(event.target.error);
