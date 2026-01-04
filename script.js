@@ -416,6 +416,7 @@ function wireLiveUpdates() {
       lifetilesBC.onmessage = (e) => {
         if (e?.data?.type === 'tiles:changed') {
             __ltScheduleRefresh();
+            triggerSync(); // Sync changes from popup
         }
       };
       window.addEventListener('unload', () => { try { lifetilesBC?.close(); } catch {} });
@@ -426,6 +427,7 @@ function wireLiveUpdates() {
       chrome.runtime.onMessage.addListener((msg) => {
         if (msg?.type === 'tiles:changed') {
             __ltScheduleRefresh();
+            triggerSync(); // Sync changes from popup
         }
       });
     }
