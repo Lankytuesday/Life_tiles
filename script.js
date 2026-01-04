@@ -473,7 +473,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             window.addEventListener('lifetiles-sync', (e) => {
                 if (e.detail.type === 'remote_update' && e.detail.imported) {
                     console.log('[Sync] Remote update received, refreshing UI');
-                    loadProjects(); // Refresh the UI
+                    loadDashboards(); // Refresh sidebar and projects
                 }
                 if (e.detail.type === 'quota_warning') {
                     console.warn('[Sync] Quota warning:', e.detail.percentUsed + '% used');
@@ -609,11 +609,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     console.log('[Sync] Pull result:', result);
                     if (result.imported) {
                         if (statusEl) statusEl.textContent = 'Pulled! Refreshing...';
-                        await loadDashboards(); // Refresh sidebar
-                        // Refresh current dashboard projects
-                        if (currentDashboardId) {
-                            await loadProjectsForDashboard(currentDashboardId);
-                        }
+                        await loadDashboards(); // Refresh sidebar and projects
                     } else {
                         if (statusEl) statusEl.textContent = 'No changes to pull';
                     }
