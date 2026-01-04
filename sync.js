@@ -430,26 +430,36 @@ const LifetilesSync = (function() {
      */
     async function importToIndexedDB(data) {
         const db = await initDB();
-        const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
 
-        // Clear existing
-        await Promise.all([
-            new Promise(r => { tx.objectStore('dashboards').clear().onsuccess = r; }),
-            new Promise(r => { tx.objectStore('projects').clear().onsuccess = r; }),
-            new Promise(r => { tx.objectStore('tiles').clear().onsuccess = r; })
-        ]);
-
-        // Add new data
-        for (const d of data.dashboards) tx.objectStore('dashboards').put(d);
-        for (const p of data.projects) tx.objectStore('projects').put(p);
-        for (const t of data.tiles) tx.objectStore('tiles').put(t);
+        // First transaction: clear all stores
+        const clearTx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
+        clearTx.objectStore('dashboards').clear();
+        clearTx.objectStore('projects').clear();
+        clearTx.objectStore('tiles').clear();
 
         await new Promise((resolve, reject) => {
-            tx.oncomplete = resolve;
-            tx.onerror = () => reject(tx.error);
+            clearTx.oncomplete = resolve;
+            clearTx.onerror = () => reject(clearTx.error);
         });
 
-        console.log('[Sync] Imported to IndexedDB');
+        console.log('[Sync] Cleared existing data');
+
+        // Second transaction: add new data
+        const addTx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
+        for (const d of data.dashboards) addTx.objectStore('dashboards').put(d);
+        for (const p of data.projects) addTx.objectStore('projects').put(p);
+        for (const t of data.tiles) addTx.objectStore('tiles').put(t);
+
+        await new Promise((resolve, reject) => {
+            addTx.oncomplete = resolve;
+            addTx.onerror = () => reject(addTx.error);
+        });
+
+        console.log('[Sync] Imported to IndexedDB:', {
+            dashboards: data.dashboards.length,
+            projects: data.projects.length,
+            tiles: data.tiles.length
+        });
     }
 
     /**
