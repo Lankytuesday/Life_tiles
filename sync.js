@@ -219,10 +219,12 @@ const LifetilesSync = (function() {
     const SYNC_KEY = '_lifetiles'; // Single key for all data
     const CHUNK_SIZE = 7500; // Safe size per chunk
     const DEBOUNCE_MS = 2000;
+    const IGNORE_WINDOW_MS = 3000; // Ignore onChanged events for 3s after push
 
     let debounceTimer = null;
     let syncEnabled = true;
     let lastSyncedTimestamp = null;
+    let lastPushTime = 0; // Track when we last pushed to ignore our own changes
 
     /**
      * Initialize sync
@@ -355,6 +357,7 @@ const LifetilesSync = (function() {
 
             await setSyncStorage(payload);
             lastSyncedTimestamp = Date.now();
+            lastPushTime = Date.now(); // Track push time to ignore our own onChanged events
 
             console.log('[Sync] Push successful');
             return { success: true, chunks: chunks.length, size: compressed.length };
@@ -475,7 +478,14 @@ const LifetilesSync = (function() {
         chrome.storage.onChanged.addListener((changes, area) => {
             if (area !== 'sync') return;
             if (changes[`${SYNC_KEY}_n`] || changes[`${SYNC_KEY}_0`]) {
-                console.log('[Sync] Remote change detected');
+                // Ignore our own changes (within ignore window after push)
+                const timeSincePush = Date.now() - lastPushTime;
+                if (timeSincePush < IGNORE_WINDOW_MS) {
+                    console.log(`[Sync] Ignoring onChanged (our own push ${timeSincePush}ms ago)`);
+                    return;
+                }
+
+                console.log('[Sync] Remote change detected, pulling...');
                 pullFromSync().then(result => {
                     if (result.imported) {
                         window.dispatchEvent(new CustomEvent('lifetiles-sync', {

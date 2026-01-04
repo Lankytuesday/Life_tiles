@@ -524,11 +524,41 @@ document.addEventListener("DOMContentLoaded", async function () {
         const menu = document.createElement('div');
         menu.className = 'settings-menu';
         menu.innerHTML = `
+            <div class="settings-section">
+                <div class="settings-section-label">Sync</div>
+                <div id="sync-status" class="sync-status">Checking...</div>
+                <button type="button" data-action="sync-now">Sync now</button>
+                <button type="button" data-action="sync-pull">Pull from cloud</button>
+            </div>
+            <div class="settings-divider"></div>
             <button type="button" data-action="import-google">Import Google bookmarks</button>
             <button type="button" data-action="export-dashboards">Export dashboards (JSON)</button>
             <button type="button" data-action="import-dashboards">Import dashboards (JSON)</button>
         `;
         settingsBtn.parentElement.appendChild(menu);
+
+        // Update sync status when menu opens
+        async function updateSyncStatus() {
+            const statusEl = document.getElementById('sync-status');
+            if (!statusEl) return;
+            if (typeof LifetilesSync === 'undefined') {
+                statusEl.textContent = 'Sync unavailable';
+                statusEl.className = 'sync-status sync-error';
+                return;
+            }
+            const status = await LifetilesSync.getStatus();
+            if (status.enabled) {
+                const kb = (status.bytesUsed / 1024).toFixed(1);
+                const lastSync = status.lastSynced
+                    ? new Date(status.lastSynced).toLocaleTimeString()
+                    : 'never';
+                statusEl.textContent = `${kb} KB used · Last: ${lastSync}`;
+                statusEl.className = 'sync-status sync-ok';
+            } else {
+                statusEl.textContent = status.error || 'Sync disabled';
+                statusEl.className = 'sync-status sync-error';
+            }
+        }
 
         // Toggle open/close
         function closeSettingsMenu() {
@@ -538,6 +568,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         function openSettingsMenu() {
             settingsBtn.classList.add('active');
             settingsBtn.setAttribute('aria-expanded', 'true');
+            updateSyncStatus(); // Refresh sync status when menu opens
         }
 
         settingsBtn.addEventListener('click', (e) => {
@@ -561,7 +592,34 @@ document.addEventListener("DOMContentLoaded", async function () {
             if (!action) return;
 
             try {
-                if (action === 'import-google') {
+                if (action === 'sync-now') {
+                    const statusEl = document.getElementById('sync-status');
+                    if (statusEl) statusEl.textContent = 'Syncing...';
+                    const result = await LifetilesSync.forceSync();
+                    console.log('[Sync] Force sync result:', result);
+                    await updateSyncStatus();
+                    if (result.success) {
+                        if (statusEl) statusEl.textContent = 'Pushed to cloud!';
+                    }
+                    return; // Don't close menu for sync actions
+                } else if (action === 'sync-pull') {
+                    const statusEl = document.getElementById('sync-status');
+                    if (statusEl) statusEl.textContent = 'Pulling...';
+                    const result = await LifetilesSync.pullFromSync();
+                    console.log('[Sync] Pull result:', result);
+                    if (result.imported) {
+                        if (statusEl) statusEl.textContent = 'Pulled! Refreshing...';
+                        await loadDashboards(); // Refresh sidebar
+                        // Refresh current dashboard projects
+                        if (currentDashboardId) {
+                            await loadProjectsForDashboard(currentDashboardId);
+                        }
+                    } else {
+                        if (statusEl) statusEl.textContent = 'No changes to pull';
+                    }
+                    await updateSyncStatus();
+                    return; // Don't close menu for sync actions
+                } else if (action === 'import-google') {
                     await importGoogleBookmarks();
                 } else if (action === 'export-dashboards') {
                     await exportDashboardsJSON();
@@ -572,7 +630,9 @@ document.addEventListener("DOMContentLoaded", async function () {
                 console.error(err);
                 alert('Something went wrong. Check the console for details.');
             } finally {
-                closeSettingsMenu();
+                if (action !== 'sync-now' && action !== 'sync-pull') {
+                    closeSettingsMenu();
+                }
             }
         });
     }
@@ -1331,6 +1391,7 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     async function saveTile(projectId, tileData) {
+        console.log('[saveTile] called with:', projectId, tileData.name);
         const db = await initDB();
         const tx = db.transaction('tiles', 'readwrite');
         const store = tx.objectStore('tiles');
@@ -1347,6 +1408,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 order: Number.isFinite(+tileData.order) ? +tileData.order : 0
             });
             request.onsuccess = () => {
+                console.log('[saveTile] success, calling triggerSync');
                 triggerSync();
                 resolve();
             };

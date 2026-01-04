@@ -1122,3 +1122,42 @@ html, body {
 .settings-menu button:hover {
   background: var(--color-bg-hover);
 }
+
+/* Settings menu sections */
+.settings-section {
+  padding: 8px 14px;
+}
+
+.settings-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+
+.settings-divider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 4px 0;
+}
+
+/* Sync status indicator */
+.sync-status {
+  font-size: 12px;
+  padding: 4px 0 8px;
+  color: #666;
+}
+
+.sync-status.sync-ok {
+  color: #2e7d32;
+}
+
+.sync-status.sync-error {
+  color: #c62828;
+}
+
+.settings-section button {
+  margin-top: 4px;
+}
