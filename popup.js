@@ -463,7 +463,7 @@ async function getTargetWindowId() {
 
 async function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('lifetiles', 5);
+        const request = indexedDB.open('lifetiles', 6);
 
         request.onerror = (event) => {
             reject(event.target.error);
@@ -473,7 +473,7 @@ async function initDB() {
             const db = event.target.result;
 
             if (!db.objectStoreNames.contains('dashboards')) {
-                const dashboardsStore = db.createObjectStore('dashboards', { keyPath: 'id' });
+                db.createObjectStore('dashboards', { keyPath: 'id' });
             }
 
             if (!db.objectStoreNames.contains('projects')) {
@@ -485,6 +485,10 @@ async function initDB() {
                 const tilesStore = db.createObjectStore('tiles', { keyPath: 'id' });
                 tilesStore.createIndex('projectId', 'projectId', { unique: false });
                 tilesStore.createIndex('dashboardId', 'dashboardId', { unique: false });
+            }
+
+            if (!db.objectStoreNames.contains('favicons')) {
+                db.createObjectStore('favicons', { keyPath: 'hostname' });
             }
         };
 
