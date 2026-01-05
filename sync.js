@@ -301,7 +301,7 @@ const LifetilesSync = (function() {
         if (type === 'dashboard') {
             return { i: obj.id, n: obj.name, o: obj.order };
         } else if (type === 'project') {
-            return { i: obj.id, n: obj.name, d: obj.dashboardId, o: obj.order };
+            return { i: obj.id, n: obj.name, d: obj.dashboardId, o: obj.order, c: obj.collapsed ? 1 : 0 };
         } else if (type === 'tile') {
             return { i: obj.id, n: obj.name, u: obj.url, p: obj.projectId, d: obj.dashboardId, o: obj.order };
         }
@@ -315,7 +315,7 @@ const LifetilesSync = (function() {
         if (type === 'dashboard') {
             return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, order: obj.o ?? obj.order };
         } else if (type === 'project') {
-            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order };
+            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order, collapsed: (obj.c ?? obj.collapsed) ? true : false };
         } else if (type === 'tile') {
             return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, url: obj.u ?? obj.url, projectId: obj.p ?? obj.projectId, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order };
         }
@@ -394,6 +394,9 @@ const LifetilesSync = (function() {
 
             console.log(`[Sync] Split into ${chunks.length} chunk(s)`);
 
+            // Set push time BEFORE any writes to ignore onChanged events during push
+            lastPushTime = Date.now();
+
             // Clear old chunks first
             const existing = await getSyncStorage(null);
             const oldChunks = Object.keys(existing).filter(k => k.startsWith(SYNC_KEY));
@@ -409,7 +412,6 @@ const LifetilesSync = (function() {
 
             await setSyncStorage(payload);
             lastSyncedTimestamp = Date.now();
-            lastPushTime = Date.now(); // Track push time to ignore our own onChanged events
 
             console.log('[Sync] Push successful');
             return { success: true, chunks: chunks.length, size: compressed.length, percentUsed: Math.round(percentUsed * 100) };
