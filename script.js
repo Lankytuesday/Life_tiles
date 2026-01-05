@@ -3910,6 +3910,7 @@ function showStatus(message) {
         });
 
         exitBulkMode();
+        triggerSync();
         showStatus(`Deleted ${selected.length} item${selected.length > 1 ? 's' : ''}`);
     });
 
@@ -4081,6 +4082,7 @@ function showStatus(message) {
             // Remove elements from DOM after all DB updates complete
             projects.forEach(p => p.element?.remove());
             exitBulkMode();
+            triggerSync();
             showStatus(`Moved ${projects.length} project${projects.length > 1 ? 's' : ''} to ${targetDashboard.name}`);
         });
     }
@@ -4405,6 +4407,7 @@ function showStatus(message) {
                 }
             }
             exitBulkMode();
+            triggerSync();
             showStatus(`Moved ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
         });
     }
@@ -4492,6 +4495,7 @@ function showStatus(message) {
                 await window.__lifetilesRefresh();
             }
             exitBulkMode();
+            triggerSync();
             showStatus(`Copied ${projects.length} project${projects.length > 1 ? 's' : ''} to ${targetDashboard.name}`);
         });
     }
@@ -4541,6 +4545,7 @@ function showStatus(message) {
                 }
             }
             exitBulkMode();
+            triggerSync();
             showStatus(`Copied ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
         });
     }
