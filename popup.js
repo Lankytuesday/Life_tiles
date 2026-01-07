@@ -1,5 +1,15 @@
 // --- Session Buddy–style helpers (no top-level await) ---
 
+// Generate short unique IDs (7 chars = 3.5 trillion combinations)
+function shortId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let id = '';
+    for (let i = 0; i < 7; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return id;
+}
+
 // Get the last-focused normal Chrome window id (not the popup)
 async function getTargetWindowId() {
     try {
@@ -182,7 +192,7 @@ async function getTargetWindowId() {
         if (!tileUrl || isInternalUrl(tileUrl)) return;
 
         const tileData = {
-            id: Date.now().toString(),
+            id: shortId(),
             name: tileName,
             url: tileUrl,
             projectId: projectId,
@@ -473,7 +483,7 @@ async function getTargetWindowId() {
                 const nextOrder = await getNextProjectOrder(db, selectedDashboardId);
 
                 const projectData = {
-                    id: Date.now().toString(),
+                    id: shortId(),
                     name: projectName,
                     dashboardId: selectedDashboardId,
                     order: nextOrder
@@ -516,7 +526,7 @@ async function getTargetWindowId() {
                           return;
                         }
                         const tileData = {
-                            id: Date.now().toString() + Math.random(),
+                            id: shortId() + Math.random(),
                             name: currentTab.title || 'Untitled',
                             url: currentTab.url,
                             projectId: projectData.id,
@@ -606,7 +616,7 @@ async function getTargetWindowId() {
                 const tileStore = tx.objectStore('tiles');
 
                 const tileData = {
-                    id: Date.now().toString() + Math.random(),
+                    id: shortId() + Math.random(),
                     name: tab.title || 'Untitled',
                     url: tab.url,
                     projectId: projectId,
@@ -648,7 +658,7 @@ async function getTargetWindowId() {
 
             if (tileName && isValidUrl(tileUrl) && !isInternalUrl(tileUrl)) {
                 const tileData = {
-                    id: Date.now().toString(),
+                    id: shortId(),
                     name: tileName,
                     url: tileUrl,
                     projectId: projectId,

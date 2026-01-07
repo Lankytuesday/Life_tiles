@@ -2,6 +2,16 @@ const __ltOnsiteBlocked = new Set();
 
 let lifetilesBC = null;
 
+// Generate short unique IDs (7 chars = 3.5 trillion combinations)
+function shortId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let id = '';
+    for (let i = 0; i < 7; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return id;
+}
+
 // Helper to trigger sync after data mutations
 function triggerSync() {
     if (typeof LifetilesSync !== 'undefined') {
@@ -369,7 +379,7 @@ async function migrateFromChromeStorage() {
 
         // Create default dashboard if none exists
         const defaultDashboard = {
-            id: Date.now().toString(),
+            id: shortId(),
             name: "Imported Dashboard"
         };
         await dashboardStore.put(defaultDashboard);
@@ -555,7 +565,6 @@ document.addEventListener("DOMContentLoaded", async function () {
                 </div>
                 <div id="sync-quota-text" class="sync-quota-text"></div>
                 <button type="button" data-action="sync-now">Sync now</button>
-                <button type="button" data-action="sync-pull">Pull from cloud</button>
             </div>
             <div class="settings-divider"></div>
             <button type="button" data-action="import-google">Import Google bookmarks</button>
@@ -639,19 +648,6 @@ document.addEventListener("DOMContentLoaded", async function () {
                     if (result.success) {
                         if (statusEl) statusEl.textContent = 'Pushed to cloud!';
                     }
-                    return; // Don't close menu for sync actions
-                } else if (action === 'sync-pull') {
-                    const statusEl = document.getElementById('sync-status');
-                    if (statusEl) statusEl.textContent = 'Pulling...';
-                    const result = await LifetilesSync.pullFromSync();
-                    console.log('[Sync] Pull result:', result);
-                    if (result.imported) {
-                        if (statusEl) statusEl.textContent = 'Pulled! Refreshing...';
-                        await loadDashboards(); // Refresh sidebar and projects
-                    } else {
-                        if (statusEl) statusEl.textContent = 'No changes to pull';
-                    }
-                    await updateSyncStatus();
                     return; // Don't close menu for sync actions
                 } else if (action === 'import-google') {
                     await importGoogleBookmarks();
@@ -1032,7 +1028,7 @@ new Sortable(document.getElementById('projects-list'), {
             if (!dashboards || dashboards.length === 0) {
                 // Create a default dashboard row
                 const defaultDashboard = {
-                  id: (crypto?.randomUUID?.() || Date.now().toString()),
+                  id: shortId(),
                   name: "My Dashboard",
                   order: 0
                 };
@@ -1628,7 +1624,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         if (projectName) {
             const projectData = {
-                id: Date.now().toString(),
+                id: shortId(),
                 name: projectName,
                 tiles: []
             };
@@ -1959,7 +1955,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Build new project from FRESH data
             const newProjectData = {
-                id: Date.now().toString(),
+                id: shortId(),
                 name: freshProject.name,
                 dashboardId: selectedDashboardId
             };
@@ -1971,7 +1967,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             for (const tile of tiles) {
                 const newTile = {
                     ...tile,
-                    id: Date.now().toString() + Math.random(),
+                    id: shortId() + Math.random(),
                     projectId: newProjectData.id,
                     dashboardId: selectedDashboardId
                 };
@@ -2150,7 +2146,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 .filter(el => el.classList.contains('tile') && el.dataset.tileId);
 
             const tileData = {
-                id: Date.now().toString(),
+                id: shortId(),
                 name: tileName,
                 url: tileUrl,
                 projectId: currentProjectId,
@@ -2179,7 +2175,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 .filter(el => el.classList.contains('tile') && el.dataset.tileId);
 
             const tileData = {
-                id: Date.now().toString(),
+                id: shortId(),
                 name: tileName,
                 url: tileUrl,
                 projectId: currentProjectId,
@@ -2282,7 +2278,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         const order = await getNextDashboardOrder(db);
       
         const dashboardData = {
-          id: Date.now().toString(),
+          id: shortId(),
           name: dashboardName,
           projects: [],
           order
@@ -2884,7 +2880,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function createTileElement(container, tileData) {
         if (!tileData.id) {
-            tileData.id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+            tileData.id = shortId();
         }
         const tile = document.createElement("div");
         tile.className = "tile";
@@ -3308,7 +3304,7 @@ async function migrateFromChromeStorage() {
 
         // Create default dashboard if none exists
         const defaultDashboard = {
-            id: Date.now().toString(),
+            id: shortId(),
             name: "Imported Dashboard"
         };
         await dashboardStore.put(defaultDashboard);
@@ -3468,7 +3464,7 @@ async function importDashboardsJSON() {
                 for (const dashboard of importData.dashboards) {
                     const newDashboard = {
                         ...dashboard,
-                        id: Date.now().toString() + Math.random() // Generate new ID to avoid conflicts
+                        id: shortId() + Math.random() // Generate new ID to avoid conflicts
                     };
                     await tx.objectStore('dashboards').add(newDashboard);
 
@@ -3478,7 +3474,7 @@ async function importDashboardsJSON() {
                     for (const project of dashboardProjects) {
                         const newProject = {
                             ...project,
-                            id: Date.now().toString() + Math.random(),
+                            id: shortId() + Math.random(),
                             dashboardId: newDashboard.id,
                             // Preserve imported order if present, otherwise assign incrementally
                             order: Number.isFinite(+project.order) ? project.order : projectOrder++
@@ -3490,7 +3486,7 @@ async function importDashboardsJSON() {
                         for (const tile of projectTiles) {
                             await tx.objectStore('tiles').add({
                                 ...tile,
-                                id: Date.now().toString() + Math.random(),
+                                id: shortId() + Math.random(),
                                 projectId: newProject.id,
                                 dashboardId: newDashboard.id
                             });
@@ -3513,7 +3509,7 @@ async function importDashboardsJSON() {
 function processBookmarksBar(bookmarkBar) {
     const projects = [];
     const looseBookmarks = {
-        id: crypto.randomUUID(),
+        id: shortId(),
         name: 'Imported Bookmarks',
         tiles: []
     };
@@ -3522,7 +3518,7 @@ function processBookmarksBar(bookmarkBar) {
         if (child.url && !isInternalUrl(child.url)) {
             // Single bookmark goes into the looseBookmarks project
             looseBookmarks.tiles.push({
-                id: crypto.randomUUID(),
+                id: shortId(),
                 name: child.title,
                 url: child.url
             });
@@ -3532,7 +3528,7 @@ function processBookmarksBar(bookmarkBar) {
             child.children.forEach(bookmark => {
                 if (bookmark.url && !isInternalUrl(bookmark.url)) {                  
                     tiles.push({
-                        id: crypto.randomUUID(),
+                        id: shortId(),
                         name: bookmark.title,
                         url: bookmark.url
                     });
@@ -3540,7 +3536,7 @@ function processBookmarksBar(bookmarkBar) {
             });
             if (tiles.length > 0) {
                 projects.push({
-                    id: crypto.randomUUID(),
+                    id: shortId(),
                     name: child.title,
                     tiles: tiles
                 });
@@ -4233,7 +4229,7 @@ function showStatus(message) {
 
                     // Create new project
                     const newProject = {
-                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        id: shortId(),
                         name: name,
                         dashboardId: dashboard.id,
                         order: maxOrder + 1
@@ -4457,7 +4453,7 @@ function showStatus(message) {
 
                 if (!originalProject) continue;
 
-                const newProjectId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+                const newProjectId = shortId();
                 const newProject = {
                     ...originalProject,
                     id: newProjectId,
@@ -4483,7 +4479,7 @@ function showStatus(message) {
                 for (const tile of originalTiles) {
                     const newTile = {
                         ...tile,
-                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        id: shortId(),
                         projectId: newProjectId
                     };
                     tileStore.add(newTile);
@@ -4518,7 +4514,7 @@ function showStatus(message) {
                 if (originalTile) {
                     const newTile = {
                         ...originalTile,
-                        id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                        id: shortId(),
                         projectId: targetProject.id
                     };
                     await new Promise((resolve, reject) => {

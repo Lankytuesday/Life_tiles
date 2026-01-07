@@ -303,7 +303,8 @@ const LifetilesSync = (function() {
         } else if (type === 'project') {
             return { i: obj.id, n: obj.name, d: obj.dashboardId, o: obj.order, c: obj.collapsed ? 1 : 0 };
         } else if (type === 'tile') {
-            return { i: obj.id, n: obj.name, u: obj.url, p: obj.projectId, d: obj.dashboardId, o: obj.order };
+            // Note: dashboardId omitted - derived from project on pull
+            return { i: obj.id, n: obj.name, u: obj.url, p: obj.projectId, o: obj.order };
         }
         return obj;
     }
@@ -317,7 +318,8 @@ const LifetilesSync = (function() {
         } else if (type === 'project') {
             return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order, collapsed: (obj.c ?? obj.collapsed) ? true : false };
         } else if (type === 'tile') {
-            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, url: obj.u ?? obj.url, projectId: obj.p ?? obj.projectId, dashboardId: obj.d ?? obj.dashboardId, order: obj.o ?? obj.order };
+            // Note: dashboardId derived from project in importToIndexedDB
+            return { id: obj.i ?? obj.id, name: obj.n ?? obj.name, url: obj.u ?? obj.url, projectId: obj.p ?? obj.projectId, order: obj.o ?? obj.order };
         }
         return obj;
     }
@@ -355,6 +357,22 @@ const LifetilesSync = (function() {
         if (!syncEnabled) return { success: false, reason: 'disabled' };
 
         try {
+            // Safeguard: prevent pushing empty/near-empty data that would wipe cloud
+            const hasData = data.dashboards.length > 0 && data.projects.length > 0;
+            if (!hasData) {
+                console.warn('[Sync] Refusing to push empty data - would wipe cloud backup');
+                return { success: false, reason: 'empty_data' };
+            }
+
+            // Safeguard: check if cloud has significantly more data than we're pushing
+            const cloudData = await getSyncStorage(null);
+            const cloudChunks = cloudData[`${SYNC_KEY}_n`] || 0;
+            if (cloudChunks > 0 && data.tiles.length < 5) {
+                // Cloud has data but we have very few tiles - likely a fresh/broken state
+                console.warn(`[Sync] Refusing to overwrite cloud (${cloudChunks} chunks) with only ${data.tiles.length} tiles`);
+                return { success: false, reason: 'would_overwrite_cloud' };
+            }
+
             const json = JSON.stringify({
                 v: 4, // v4: short keys (i,n,u,o,p,d)
                 ts: Date.now(),
@@ -498,6 +516,14 @@ const LifetilesSync = (function() {
         const dashboards = data.dashboards.map(d => toFullKeys(d, 'dashboard'));
         const projects = data.projects.map(p => toFullKeys(p, 'project'));
         const tiles = data.tiles.map(t => toFullKeys(t, 'tile'));
+
+        // Derive dashboardId for tiles from their project
+        const projectMap = new Map(projects.map(p => [p.id, p.dashboardId]));
+        for (const tile of tiles) {
+            if (!tile.dashboardId && tile.projectId) {
+                tile.dashboardId = projectMap.get(tile.projectId);
+            }
+        }
 
         // First transaction: clear all stores
         const clearTx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
