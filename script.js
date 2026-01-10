@@ -564,6 +564,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     <div id="sync-quota-fill" class="sync-quota-fill"></div>
                 </div>
                 <div id="sync-quota-text" class="sync-quota-text"></div>
+                <div id="sync-warning" class="sync-warning" style="display:none;"></div>
                 <button type="button" data-action="sync-now">Sync now</button>
             </div>
             <div class="settings-divider"></div>
@@ -578,6 +579,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             const statusEl = document.getElementById('sync-status');
             const quotaFill = document.getElementById('sync-quota-fill');
             const quotaText = document.getElementById('sync-quota-text');
+            const warningEl = document.getElementById('sync-warning');
             if (!statusEl) return;
             if (typeof LifetilesSync === 'undefined') {
                 statusEl.textContent = 'Sync unavailable';
@@ -601,9 +603,21 @@ document.addEventListener("DOMContentLoaded", async function () {
                     quotaText.textContent = `${kb} KB / ${totalKb} KB (${status.percentUsed}%)`;
                     quotaText.className = `sync-quota-text sync-quota-${status.quotaStatus}`;
                 }
+
+                // Check if local data would exceed quota
+                if (warningEl && typeof LifetilesSync.checkLocalSize === 'function') {
+                    const localCheck = await LifetilesSync.checkLocalSize();
+                    if (localCheck.wouldExceed) {
+                        warningEl.textContent = `⚠️ Local data (${localCheck.localKb} KB) exceeds quota - some changes not synced`;
+                        warningEl.style.display = 'block';
+                    } else {
+                        warningEl.style.display = 'none';
+                    }
+                }
             } else {
                 statusEl.textContent = status.error || 'Sync disabled';
                 statusEl.className = 'sync-status sync-error';
+                if (warningEl) warningEl.style.display = 'none';
             }
         }
 

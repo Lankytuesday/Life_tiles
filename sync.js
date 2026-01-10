@@ -228,6 +228,7 @@ const LifetilesSync = (function() {
     let syncEnabled = true;
     let lastSyncedTimestamp = null;
     let lastPushTime = 0; // Track when we last pushed to ignore our own changes
+    let quotaWarningShown = false; // Only show quota warning once per session
 
     /**
      * Initialize sync
@@ -397,7 +398,8 @@ const LifetilesSync = (function() {
                 return { success: false, reason: 'quota_exceeded', percentUsed: Math.round(percentUsed * 100) };
             }
 
-            if (percentUsed >= QUOTA_WARNING_THRESHOLD) {
+            if (percentUsed >= QUOTA_WARNING_THRESHOLD && !quotaWarningShown) {
+                quotaWarningShown = true; // Only warn once per session
                 console.warn(`[Sync] Approaching quota limit: ${Math.round(percentUsed * 100)}%`);
                 window.dispatchEvent(new CustomEvent('lifetiles-sync', {
                     detail: { type: 'quota_warning', percentUsed: Math.round(percentUsed * 100), size: estimatedSize }
@@ -624,6 +626,29 @@ const LifetilesSync = (function() {
     }
 
     /**
+     * Check if local data would exceed quota
+     */
+    async function checkLocalSize() {
+        try {
+            const data = await getLocalData();
+            const json = JSON.stringify({
+                v: 4,
+                ts: Date.now(),
+                d: data.dashboards,
+                p: data.projects,
+                t: data.tiles
+            });
+            const compressed = LZ.compress(json);
+            const estimatedSize = compressed.length + 100;
+            const localKb = (estimatedSize / 1024).toFixed(1);
+            const wouldExceed = estimatedSize > QUOTA_BYTES * QUOTA_ERROR_THRESHOLD;
+            return { localKb, wouldExceed, estimatedSize };
+        } catch (e) {
+            return { localKb: '?', wouldExceed: false, error: e.message };
+        }
+    }
+
+    /**
      * Force sync now
      */
     async function forceSync() {
@@ -672,6 +697,7 @@ const LifetilesSync = (function() {
         scheduleSync,
         startListening,
         getStatus,
+        checkLocalSize,
         forceSync,
         resetSync,
         pullFromSync

@@ -1265,6 +1265,15 @@ html, body {
   font-weight: 600;
 }
 
+.sync-warning {
+  font-size: 11px;
+  color: #c62828;
+  background: #ffebee;
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
 .settings-section button {
   margin-top: 4px;
 }
