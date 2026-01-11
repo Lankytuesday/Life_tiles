@@ -532,6 +532,7 @@ body.dragging {
 .project-notes-textarea {
     width: 100%;
     min-height: 80px;
+    max-height: 170px;
     padding: 8px;
     border: 1px solid #ddd;
     border-radius: 4px;
