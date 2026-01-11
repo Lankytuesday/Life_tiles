@@ -32,6 +32,10 @@ async function probeImage(src, timeout = 900) {
 async function purgeLegacyFavicons() {
     try {
       const db = await initDB();
+      // Check if favicons store exists before using it
+      if (!db.objectStoreNames.contains('favicons')) {
+          return;
+      }
       const tx = db.transaction(['favicons'], 'readwrite');
       const store = tx.objectStore('favicons');
 
@@ -265,8 +269,10 @@ async function loadFaviconForHost(hostname, pageUrl) {
     if (found) {
       try {
         const db = await initDB();
-        const tx = db.transaction(["favicons"], "readwrite");
-        tx.objectStore("favicons").put({ hostname, favicon: found, timestamp: Date.now() });
+        if (db.objectStoreNames.contains('favicons')) {
+          const tx = db.transaction(["favicons"], "readwrite");
+          tx.objectStore("favicons").put({ hostname, favicon: found, timestamp: Date.now() });
+        }
       } catch {}
     }
   
@@ -290,6 +296,10 @@ function isInternalUrl(u) {
 async function checkFaviconCache(hostname) {
     try {
         const db = await initDB();
+        // Check if favicons store exists before using it
+        if (!db.objectStoreNames.contains('favicons')) {
+            return null;
+        }
         const tx = db.transaction(['favicons'], 'readonly');
         const store = tx.objectStore('favicons');
         const result = await new Promise((resolve, reject) => {
@@ -308,6 +318,10 @@ async function checkFaviconCache(hostname) {
 async function saveFaviconToCache(hostname, faviconUrl) {
     try {
         const db = await initDB();
+        // Check if favicons store exists before using it
+        if (!db.objectStoreNames.contains('favicons')) {
+            return;
+        }
         return new Promise((resolve, reject) => {
             const tx = db.transaction(['favicons'], 'readwrite');
             const store = tx.objectStore('favicons');
@@ -482,6 +496,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     const projectsList = document.getElementById("projects-list");
     const expandAllBtn = document.getElementById("expand-all");
     const collapseAllBtn = document.getElementById("collapse-all");
+    const currentDashboardTitle = document.getElementById("current-dashboard-title");
 
     // Tile Modal Elements
     const tileModal = document.getElementById("tile-modal");
@@ -939,6 +954,9 @@ new Sortable(document.getElementById('projects-list'), {
                 // ✅ Paint the UI immediately (sidebar + empty projects area)
                 renderSidebar([defaultDashboard], defaultDashboard.id);
 
+                // Update dashboard title
+                if (currentDashboardTitle) currentDashboardTitle.textContent = defaultDashboard.name;
+
                 // Clear projects list
                 projectsList.innerHTML = '';
 
@@ -958,6 +976,10 @@ new Sortable(document.getElementById('projects-list'), {
             }
 
             renderSidebar(dashboards, validCurrentId);
+
+            // Update dashboard title
+            const currentDash = dashboards.find(d => d.id === validCurrentId);
+            if (currentDashboardTitle) currentDashboardTitle.textContent = currentDash ? currentDash.name : '';
 
             // Clear existing projects before loading new ones to prevent duplication
             projectsList.innerHTML = '';
@@ -1108,6 +1130,11 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                     labelEl.textContent = newName;
                     dashboard.name = newName;
+
+                    // Update dashboard title if this is the current dashboard
+                    if (dashboard.id === currentDashboardId && currentDashboardTitle) {
+                        currentDashboardTitle.textContent = newName;
+                    }
 
                     // Notify popup of dashboard change
                     try {
@@ -1373,12 +1400,20 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     async function switchDashboard(dashboardId) {
-        // Update active sidebar item
+        // Update active sidebar item and get dashboard name
+        let dashboardName = '';
         document.querySelectorAll('.sidebar-item').forEach(item => {
             const isActive = item.dataset.dashboardId === dashboardId;
             item.setAttribute('aria-selected', String(isActive));
             item.tabIndex = isActive ? 0 : -1;
+            if (isActive) {
+                const nameSpan = item.querySelector('.label');
+                dashboardName = nameSpan ? nameSpan.textContent : '';
+            }
         });
+
+        // Update dashboard title in project controls
+        if (currentDashboardTitle) currentDashboardTitle.textContent = dashboardName;
 
         // Save current dashboard
         localStorage.setItem('currentDashboardId', dashboardId);
@@ -1571,7 +1606,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
             // Project edit button (refactored with fresh DB fetch)
         const editButton = document.createElement("button");
-        editButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit`;
+        editButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Rename`;
         editButton.onclick = async (e) => {
         e.stopPropagation();
         closeAllMenus();
@@ -3109,7 +3144,7 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
 async function initDB() {
     return new Promise((resolve, reject) => {
         // Increment the version number to force an upgrade
-        const request = indexedDB.open('lifetiles', 5);
+        const request = indexedDB.open('lifetiles', 6);
 
         request.onerror = (event) => {
             reject(event.target.error);

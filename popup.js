@@ -669,7 +669,7 @@ async function getTargetWindowId() {
 
 async function initDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('lifetiles', 5);
+        const request = indexedDB.open('lifetiles', 6);
 
         request.onerror = (event) => {
             reject(event.target.error);

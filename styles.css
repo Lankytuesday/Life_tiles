@@ -210,6 +210,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
+    border: 1px solid transparent;
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: background-color var(--transition);
@@ -225,6 +226,7 @@
 
 .sidebar-item[aria-selected="true"] {
     background: #e8f0fe;
+    border-color: rgba(26, 115, 232, 0.4);
     color: var(--color-brand);
     font-weight: 500;
 }
@@ -303,11 +305,21 @@ body.dragging {
 
 /* Project controls (expand/collapse all) */
 .project-controls {
+    position: relative;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 8px;
     margin-bottom: 8px;
+}
+
+.dashboard-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 18px;
+    font-weight: 500;
+    color: #888;
 }
 
 .project-controls-right {
