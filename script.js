@@ -1568,6 +1568,56 @@ window.__lifetilesRefresh = () => loadDashboards();
         projectTitle.className = "project-title";
         projectTitle.textContent = projectData.name;
 
+        // Notes toggle button
+        const notesToggle = document.createElement("button");
+        notesToggle.className = "project-notes-toggle";
+        if (projectData.notes) {
+            notesToggle.classList.add("has-notes");
+        }
+        notesToggle.title = "Project notes";
+        notesToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>`;
+
+        // Notes section (hidden by default)
+        const notesSection = document.createElement("div");
+        notesSection.className = "project-notes-section";
+        const notesTextarea = document.createElement("textarea");
+        notesTextarea.className = "project-notes-textarea";
+        notesTextarea.placeholder = "Add notes about this project...";
+        notesTextarea.value = projectData.notes || "";
+        notesSection.appendChild(notesTextarea);
+
+        // Toggle notes visibility
+        notesToggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            notesSection.classList.toggle("expanded");
+            notesToggle.classList.toggle("active");
+            if (notesSection.classList.contains("expanded")) {
+                notesTextarea.focus();
+            }
+        });
+
+        // Auto-save notes on blur
+        notesTextarea.addEventListener("blur", async () => {
+            const newNotes = notesTextarea.value.trim();
+            const db = await initDB();
+            const tx = db.transaction(['projects'], 'readwrite');
+            const store = tx.objectStore('projects');
+            const req = store.get(projectData.id);
+            req.onsuccess = () => {
+                const proj = req.result;
+                if (proj) {
+                    proj.notes = newNotes;
+                    store.put(proj);
+                    // Update has-notes indicator
+                    if (newNotes) {
+                        notesToggle.classList.add("has-notes");
+                    } else {
+                        notesToggle.classList.remove("has-notes");
+                    }
+                }
+            };
+        });
+
         const menuTrigger = document.createElement("button");
         menuTrigger.className = "project-menu-trigger";
         menuTrigger.innerHTML = "⋮";
@@ -1929,6 +1979,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         projectHeader.appendChild(dragHandle);
         projectHeader.appendChild(bulkCheckbox);
         projectHeader.appendChild(projectTitle);
+        projectHeader.appendChild(notesToggle);
         projectHeader.appendChild(collapseCaret);
         projectHeader.appendChild(menuTrigger);
         projectHeader.appendChild(menu);
@@ -2034,6 +2085,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
 
         project.appendChild(projectHeader);
+        project.appendChild(notesSection);
         project.appendChild(tilesContainer);
         tilesContainer.appendChild(addTileButton);
 
