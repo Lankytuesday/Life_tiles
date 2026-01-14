@@ -1587,12 +1587,36 @@ window.__lifetilesRefresh = () => loadDashboards();
         notesSection.appendChild(notesTextarea);
 
         // Toggle notes visibility
-        notesToggle.addEventListener("click", (e) => {
+        notesToggle.addEventListener("click", async (e) => {
             e.stopPropagation();
-            notesSection.classList.toggle("expanded");
-            notesToggle.classList.toggle("active");
-            if (notesSection.classList.contains("expanded")) {
+
+            // If project is collapsed, expand it and open notes
+            const wasCollapsed = project.classList.contains("collapsed");
+            if (wasCollapsed) {
+                project.classList.remove("collapsed");
+                // Save expanded state to IndexedDB
+                const db = await initDB();
+                const tx = db.transaction(['projects'], 'readwrite');
+                const store = tx.objectStore('projects');
+                const req = store.get(projectData.id);
+                req.onsuccess = () => {
+                    const proj = req.result;
+                    if (proj) {
+                        proj.collapsed = false;
+                        store.put(proj);
+                    }
+                };
+                // Always open notes when expanding from collapsed
+                notesSection.classList.add("expanded");
+                notesToggle.classList.add("active");
                 notesTextarea.focus();
+            } else {
+                // Normal toggle behavior
+                notesSection.classList.toggle("expanded");
+                notesToggle.classList.toggle("active");
+                if (notesSection.classList.contains("expanded")) {
+                    notesTextarea.focus();
+                }
             }
         });
 
