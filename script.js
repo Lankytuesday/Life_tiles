@@ -506,6 +506,144 @@ document.addEventListener("DOMContentLoaded", async function () {
         });
     }
 
+    // Edit tile name inline using contenteditable
+    async function editTileNameInline(nameElement, tileData, tileElement) {
+        const currentName = tileData.name;
+
+        // Show full name for editing (not truncated)
+        nameElement.textContent = currentName;
+
+        // Make the element editable
+        nameElement.contentEditable = 'true';
+        nameElement.focus();
+
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(nameElement);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        let editFinished = false;
+
+        const finishEdit = async (save = false) => {
+            if (editFinished) return;
+            editFinished = true;
+
+            nameElement.contentEditable = 'false';
+
+            const newName = nameElement.textContent.trim();
+            if (save && newName && newName !== currentName) {
+                try {
+                    const db = await initDB();
+                    const tx = db.transaction(['tiles'], 'readwrite');
+                    const store = tx.objectStore('tiles');
+
+                    await new Promise((resolve, reject) => {
+                        const request = store.get(tileData.id);
+                        request.onsuccess = () => {
+                            const updated = request.result;
+                            updated.name = newName;
+                            const updateRequest = store.put(updated);
+                            updateRequest.onsuccess = () => resolve();
+                            updateRequest.onerror = () => reject(updateRequest.error);
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+
+                    tileData.name = newName;
+                    nameElement.textContent = truncateText(newName, 60);
+                    tileElement.setAttribute("title", newName);
+
+                } catch (err) {
+                    console.error('Failed to update tile name:', err);
+                    nameElement.textContent = truncateText(currentName, 60);
+                }
+            } else {
+                nameElement.textContent = truncateText(currentName, 60);
+            }
+        };
+
+        nameElement.addEventListener('blur', () => finishEdit(true), { once: true });
+        nameElement.addEventListener('keydown', function handler(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                nameElement.removeEventListener('keydown', handler);
+                finishEdit(true);
+            } else if (e.key === 'Escape') {
+                nameElement.removeEventListener('keydown', handler);
+                finishEdit(false);
+            }
+        });
+    }
+
+    // Edit project title inline using contenteditable
+    async function editProjectTitleInline(titleElement, projectData) {
+        const currentName = titleElement.textContent;
+
+        // Make the element editable
+        titleElement.contentEditable = 'true';
+        titleElement.focus();
+
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(titleElement);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        let editFinished = false;
+
+        const finishEdit = async (save = false) => {
+            if (editFinished) return;
+            editFinished = true;
+
+            titleElement.contentEditable = 'false';
+
+            const newName = titleElement.textContent.trim();
+            if (save && newName && newName !== currentName) {
+                try {
+                    const db = await initDB();
+                    const tx = db.transaction(['projects'], 'readwrite');
+                    const store = tx.objectStore('projects');
+
+                    await new Promise((resolve, reject) => {
+                        const request = store.get(projectData.id);
+                        request.onsuccess = () => {
+                            const updated = request.result;
+                            updated.name = newName;
+                            const updateRequest = store.put(updated);
+                            updateRequest.onsuccess = () => resolve();
+                            updateRequest.onerror = () => reject(updateRequest.error);
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+
+                    titleElement.textContent = newName;
+                    projectData.name = newName;
+
+                } catch (err) {
+                    console.error('Failed to update project name:', err);
+                    titleElement.textContent = currentName;
+                }
+            } else {
+                titleElement.textContent = currentName;
+            }
+        };
+
+        titleElement.addEventListener('blur', () => finishEdit(true), { once: true });
+        titleElement.addEventListener('keydown', function handler(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                titleElement.removeEventListener('keydown', handler);
+                finishEdit(true);
+            } else if (e.key === 'Escape') {
+                titleElement.removeEventListener('keydown', handler);
+                finishEdit(false);
+            }
+        });
+    }
+
     // Edit dashboard title inline using contenteditable
     async function editDashboardTitleInline() {
         if (!currentDashboardId || !currentDashboardTitle) return;
@@ -1488,6 +1626,9 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     async function switchDashboard(dashboardId) {
+        // Skip if already on this dashboard
+        if (dashboardId === currentDashboardId) return;
+
         // Update active sidebar item and get dashboard name
         let dashboardName = '';
         document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -1655,6 +1796,13 @@ window.__lifetilesRefresh = () => loadDashboards();
         const projectTitle = document.createElement("h2");
         projectTitle.className = "project-title";
         projectTitle.textContent = projectData.name;
+        projectTitle.title = "Double-click to edit";
+
+        // Double-click to edit project title
+        projectTitle.addEventListener("dblclick", (e) => {
+            e.stopPropagation();
+            editProjectTitleInline(projectTitle, projectData);
+        });
 
         // Notes toggle button
         const notesToggle = document.createElement("button");
@@ -3084,7 +3232,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 }
                 return;
             }
-            if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
+            if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger') && !e.target.closest('.tile-name')) {
                 e.preventDefault(); // keep drag/click behavior clean
                 // Always open tiles in a new tab
                 const win = window.open(tileData.url, '_blank', 'noopener,noreferrer');
@@ -3120,8 +3268,15 @@ window.__lifetilesRefresh = () => loadDashboards();
         const nameElement = document.createElement("div");
         nameElement.className = "tile-name";
         nameElement.textContent = truncateText(tileData.name, 60);
-        nameElement.setAttribute("title", tileData.name);
+        nameElement.setAttribute("title", "Double-click to edit");
         tile.setAttribute("title", tileData.name);
+
+        // Double-click to edit tile name
+        nameElement.addEventListener("dblclick", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            editTileNameInline(nameElement, tileData, tile);
+        });
 
         tile.appendChild(thumbnailElement);
         tile.appendChild(nameElement);

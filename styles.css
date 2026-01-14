@@ -820,7 +820,7 @@ body.dragging {
     font-size: 12px;
     margin-top: 4px;
     text-align: center;
-    padding: 0 2px 2px 2px;
+    padding: 2px 4px;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
@@ -829,6 +829,14 @@ body.dragging {
     width: 100%;
     line-height: 1.3;
     max-height: 50px; /* Approx height for 3 lines with descenders */
+    cursor: text;
+    border-radius: 3px;
+    transition: box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+
+.tile-name:hover {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
 }
 
 .add-tile-button {
@@ -993,6 +1001,14 @@ button:disabled {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    cursor: text;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: box-shadow 0.2s ease;
+}
+
+.project-title:hover {
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
 }
 
 /* Responsive breakpoints */
