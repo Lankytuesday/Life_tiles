@@ -498,6 +498,93 @@ document.addEventListener("DOMContentLoaded", async function () {
     const collapseAllBtn = document.getElementById("collapse-all");
     const currentDashboardTitle = document.getElementById("current-dashboard-title");
 
+    // Double-click dashboard title to edit
+    if (currentDashboardTitle) {
+        currentDashboardTitle.title = 'Double-click to edit';
+        currentDashboardTitle.addEventListener('dblclick', () => {
+            editDashboardTitleInline();
+        });
+    }
+
+    // Edit dashboard title inline using contenteditable
+    async function editDashboardTitleInline() {
+        if (!currentDashboardId || !currentDashboardTitle) return;
+
+        const currentName = currentDashboardTitle.textContent;
+
+        // Make the element editable
+        currentDashboardTitle.contentEditable = 'true';
+        currentDashboardTitle.focus();
+
+        // Select all text
+        const range = document.createRange();
+        range.selectNodeContents(currentDashboardTitle);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        let editFinished = false;
+
+        const finishEdit = async (save = false) => {
+            if (editFinished) return;
+            editFinished = true;
+
+            currentDashboardTitle.contentEditable = 'false';
+
+            const newName = currentDashboardTitle.textContent.trim();
+            if (save && newName && newName !== currentName) {
+                try {
+                    const db = await initDB();
+                    const tx = db.transaction(['dashboards'], 'readwrite');
+                    const store = tx.objectStore('dashboards');
+
+                    await new Promise((resolve, reject) => {
+                        const request = store.get(currentDashboardId);
+                        request.onsuccess = () => {
+                            const updated = request.result;
+                            updated.name = newName;
+                            const updateRequest = store.put(updated);
+                            updateRequest.onsuccess = () => resolve();
+                            updateRequest.onerror = () => reject(updateRequest.error);
+                        };
+                        request.onerror = () => reject(request.error);
+                    });
+
+                    currentDashboardTitle.textContent = newName;
+
+                    // Update sidebar
+                    const sidebarItem = document.querySelector(`.sidebar-item[data-dashboard-id="${currentDashboardId}"] .label`);
+                    if (sidebarItem) sidebarItem.textContent = newName;
+
+                    // Notify popup
+                    try {
+                        const bc = new BroadcastChannel('lifetiles');
+                        bc.postMessage({ type: 'dashboards-changed' });
+                        bc.close();
+                    } catch (err) { /* ignore */ }
+
+                } catch (err) {
+                    console.error('Failed to update dashboard name:', err);
+                    currentDashboardTitle.textContent = currentName; // Restore on error
+                }
+            } else {
+                currentDashboardTitle.textContent = currentName; // Restore if cancelled or unchanged
+            }
+        };
+
+        currentDashboardTitle.addEventListener('blur', () => finishEdit(true), { once: true });
+        currentDashboardTitle.addEventListener('keydown', function handler(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                currentDashboardTitle.removeEventListener('keydown', handler);
+                finishEdit(true);
+            } else if (e.key === 'Escape') {
+                currentDashboardTitle.removeEventListener('keydown', handler);
+                finishEdit(false);
+            }
+        });
+    }
+
     // Tile Modal Elements
     const tileModal = document.getElementById("tile-modal");
     const tileNameInput = document.getElementById("tile-name-input");
@@ -1024,8 +1111,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             <span class="dot"></span>
             <span class="label">${dashboard.name}</span>
             <div class="actions">
-                <button class="sidebar-item-btn edit-btn" title="Edit" aria-label="Edit dashboard">✎</button>
-                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete dashboard">×</button>
+                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete dashboard"></button>
             </div>
         `;
         return li;
@@ -1056,11 +1142,13 @@ window.__lifetilesRefresh = () => loadDashboards();
                 switchDashboard(dashboard.id);
             });
 
-            // Edit button
-            const editBtn = li.querySelector('.edit-btn');
-            editBtn.addEventListener('click', (e) => {
+            // Double-click label to edit (only if already selected)
+            const labelEl = li.querySelector('.label');
+            labelEl.addEventListener('dblclick', (e) => {
                 e.stopPropagation();
-                editDashboardInline(dashboard, li);
+                if (dashboard.id === currentDashboardId) {
+                    editDashboardInline(dashboard, li);
+                }
             });
 
             // Delete button
@@ -1094,7 +1182,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         const input = document.createElement('input');
         input.type = 'text';
         input.value = dashboard.name;
-        input.style.cssText = 'border:1px solid #ddd; border-radius:4px; padding:2px 6px; font-size:14px; width:100%;';
+        input.style.cssText = 'border:1px solid #ddd; border-radius:4px; padding:4px 6px; font-size:14px; flex:1; min-width:0; box-sizing:border-box; margin:0; line-height:1.2; align-self:center;';
 
         // Replace label with input
         labelEl.style.display = 'none';
