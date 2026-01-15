@@ -88,6 +88,24 @@
             padding: 8px;
             margin-bottom: 10px;
             text-align: center;
+            background: #1a73e8;
+            color: white;
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        #dashboard-link:hover {
+            background: #1557b0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+        #quick-save-btn {
+            padding: 8px;
+            margin-bottom: 10px;
+            text-align: center;
             background: white;
             color: #1a73e8;
             cursor: pointer;
@@ -96,8 +114,9 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             transition: all 0.2s ease;
             font-size: 14px;
+            width: 100%;
         }
-        #dashboard-link:hover {
+        #quick-save-btn:hover {
             background: #f8f9fa;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             transform: translateY(-1px);
@@ -138,7 +157,7 @@
     <div id="dashboard-link">Go to Dashboard</div>
 
     <!-- Quick Save button (shown when last project is remembered) -->
-    <button id="quick-save-btn" style="display: none; background-color: #1a73e8;">
+    <button id="quick-save-btn" style="display: none;">
         Quick Save to <span class="quick-save-project-name"></span>
     </button>
 
