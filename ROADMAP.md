@@ -1,8 +1,5 @@
 # Lifetiles Roadmap
 
-## In Progress
-- **Project Notes** - Add description/notes field to projects for context
-
 ## Quick Wins
 - [ ] Keyboard shortcuts (Alt+S to save, Alt+L to open Lifetiles)
 - [ ] Duplicate detection - warn when saving existing URL
@@ -14,6 +11,7 @@
 - [ ] Undo/redo (especially for deletes)
 - [ ] Empty states with helpful prompts
 - [ ] Drag tiles between projects directly (without bulk mode)
+- [ ] "New Dashboard" button in popup dashboard dropdown (create dashboard without leaving popup)
 
 ## Organization
 - [ ] Tags/labels - cross-project categorization
@@ -22,8 +20,9 @@
 - [ ] Favorites/pins for important tiles
 
 ## Technical
+- [ ] **Dexie.js refactor** - see DEXIE_REFACTOR.md
+- [ ] Auto-backup to chrome.storage.local (debounced on change + hourly)
 - [ ] Firebase backend (solves 100KB sync limit)
-- [ ] Auto-backup to JSON file
 - [ ] Lazy loading for large dashboards
 - [ ] Search within URLs, not just names
 
@@ -35,6 +34,8 @@
 ---
 
 ## Completed
+- [x] Inline editing - double-click to edit dashboard, project, and tile names
+- [x] Project notes - expandable notes field for each project
 - [x] Bulk actions (move, copy, delete)
 - [x] Chrome sync storage
 - [x] Global search

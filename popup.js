@@ -12,17 +12,17 @@ async function getTargetWindowId() {
     const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
     return wins[0]?.id ?? null;
   }
-  
+
   // Focus existing dashboard tab in that window, or create it there
   async function focusOrCreateDashboardInWindow(windowId) {
     const dashboardUrl = chrome.runtime.getURL('index.html');
-  
+
     // Look for an existing Lifetiles tab in THIS window
     const matches = await chrome.tabs.query({
       windowId,
       url: [dashboardUrl, `${dashboardUrl}*`]
     });
-  
+
     if (matches.length) {
       // Prefer the most-recently-used if multiples exist
       matches.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
@@ -40,30 +40,8 @@ async function getTargetWindowId() {
   }
 
   // Helper: Get the next available order for a new project in a dashboard
-  async function getNextProjectOrder(db, dashboardId) {
-    const normalizedId = String(dashboardId);
-    const readTx = db.transaction(['projects'], 'readonly');
-    const projectIndex = readTx.objectStore('projects').index('dashboardId');
-
-    // Query with string version first
-    let existingProjects = await new Promise(resolve => {
-      const req = projectIndex.getAll(normalizedId);
-      req.onsuccess = () => resolve(req.result || []);
-      req.onerror = () => resolve([]);
-    });
-
-    // If no results and it looks like a number, try querying with number type
-    if (existingProjects.length === 0 && !isNaN(normalizedId)) {
-      const readTx2 = db.transaction(['projects'], 'readonly');
-      const projectIndex2 = readTx2.objectStore('projects').index('dashboardId');
-      existingProjects = await new Promise(resolve => {
-        const req = projectIndex2.getAll(Number(normalizedId));
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => resolve([]);
-      });
-    }
-
-    // Calculate max order + 1
+  async function getNextProjectOrder(dashboardId) {
+    const existingProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
     let maxOrder = -1;
     existingProjects.forEach(p => {
       const order = Number.isFinite(+p.order) ? +p.order : -1;
@@ -130,9 +108,6 @@ async function getTargetWindowId() {
     tileDetails.style.display = 'none';
     saveButton.disabled = true;
 
-    // Initialize IndexedDB
-    const db = await initDB();
-
     // Pre-populate tile name/URL immediately on popup load
     const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
@@ -146,21 +121,15 @@ async function getTargetWindowId() {
     if (lastProjectData) {
         try {
             lastProject = JSON.parse(lastProjectData);
-            // Verify the project still exists in IndexedDB before showing Quick Save
+            // Verify the project still exists before showing Quick Save
             if (lastProject && lastProject.value) {
                 const { projectId } = JSON.parse(lastProject.value);
-                const tx = db.transaction(['projects'], 'readonly');
-                const projectStore = tx.objectStore('projects');
-                const projectExists = await new Promise(resolve => {
-                    const req = projectStore.get(projectId);
-                    req.onsuccess = () => resolve(!!req.result);
-                    req.onerror = () => resolve(false);
-                });
+                const existingProject = await db.projects.get(projectId);
 
-                if (projectExists && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
+                if (existingProject && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
                     quickSaveBtn.style.display = 'block';
                     quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
-                } else if (!projectExists) {
+                } else if (!existingProject) {
                     // Clear stale reference
                     localStorage.removeItem('lifetiles_lastProject');
                     lastProject = null;
@@ -189,10 +158,8 @@ async function getTargetWindowId() {
             dashboardId: dashboardId
         };
 
-        const tx = db.transaction(['tiles'], 'readwrite');
-        const tileStore = tx.objectStore('tiles');
-        const req = tileStore.add(tileData);
-        req.onsuccess = () => {
+        try {
+            await db.tiles.add(tileData);
             try {
                 const bc = new BroadcastChannel('lifetiles');
                 bc.postMessage({ type: 'tiles:changed' });
@@ -206,8 +173,9 @@ async function getTargetWindowId() {
                 } catch (_) {}
             }
             window.close();
-        };
-        req.onerror = (e) => console.error('Quick save failed:', e);
+        } catch (e) {
+            console.error('Quick save failed:', e);
+        }
     });
 
     // Toggle project dropdown visibility
@@ -269,47 +237,38 @@ async function getTargetWindowId() {
     }
 
     // Load all projects from all dashboards into dropdown
-    const tx = db.transaction(['dashboards', 'projects'], 'readonly');
-    const dashboardStore = tx.objectStore('dashboards');
-    const projectStore = tx.objectStore('projects');
+    let dashboards = await db.dashboards.toArray();
 
-    const dashboardsRequest = dashboardStore.getAll();
-    dashboardsRequest.onsuccess = async () => {
-        let dashboards = dashboardsRequest.result;
+    // Sort dashboards by order property
+    if (dashboards && dashboards.length > 0) {
+        const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
+        dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
+    }
 
-        // Sort dashboards by order property
-        if (dashboards && dashboards.length > 0) {
-            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));            
-        }
+    // Clear existing options
+    const scrollArea = document.createElement('div');
+    scrollArea.className = 'dropdown-scroll-area';
 
-        // Clear existing options
-        const scrollArea = document.createElement('div');
-        scrollArea.className = 'dropdown-scroll-area';
+    // Add initial instructions
+    const instructionElement = document.createElement('div');
+    instructionElement.className = 'dropdown-placeholder';
+    instructionElement.textContent = '-- Select a project --';
+    scrollArea.appendChild(instructionElement);
+    dropdownOptions.innerHTML = '';
+    dropdownOptions.appendChild(scrollArea);
 
-        // Add initial instructions
-        const instructionElement = document.createElement('div');
-        instructionElement.className = 'dropdown-placeholder';
-        instructionElement.textContent = '-- Select a project --';
-        scrollArea.appendChild(instructionElement);
-        dropdownOptions.innerHTML = '';
-        dropdownOptions.appendChild(scrollArea);
+    // Get last-used dashboard from localStorage
+    const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
+    console.log('Last used dashboard from localStorage:', lastUsedDashboardId);
 
-        // Get last-used dashboard from localStorage
-        const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
-        console.log('Last used dashboard from localStorage:', lastUsedDashboardId);
+    // Create groups for each dashboard (including empty ones)
+    let firstDashboardId = null;
 
-        // Create groups for each dashboard (including empty ones)
-        let firstDashboardId = null;
+    // Store references for inline new project buttons
+    const inlineNewProjectButtons = [];
 
-        // Store references for inline new project buttons
-        const inlineNewProjectButtons = [];
-
-        for (const dashboard of dashboards) {
-            const projectsRequest = projectStore.index('dashboardId').getAll(dashboard.id);
-            const projects = await new Promise(resolve => {
-                projectsRequest.onsuccess = () => resolve(projectsRequest.result);
-            });
+    for (const dashboard of dashboards) {
+        const projects = await db.projects.where('dashboardId').equals(dashboard.id).toArray();
 
             // Track first dashboard with projects
             if (projects.length > 0 && !firstDashboardId) {
@@ -469,8 +428,7 @@ async function getTargetWindowId() {
             const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
             if (projectName && selectedDashboardId) {
-                // Get the next order before opening readwrite transaction
-                const nextOrder = await getNextProjectOrder(db, selectedDashboardId);
+                const nextOrder = await getNextProjectOrder(selectedDashboardId);
 
                 const projectData = {
                     id: Date.now().toString(),
@@ -479,62 +437,53 @@ async function getTargetWindowId() {
                     order: nextOrder
                 };
 
-                const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-                const projectStore = tx.objectStore('projects');
-                const tileStore = tx.objectStore('tiles');
+                await db.projects.add(projectData);
 
-                await new Promise(resolve => {
-                    const request = projectStore.add(projectData);
-                    request.onsuccess = () => {
-                        // Save newly created project as last used for Quick Save
-                        const projectValue = JSON.stringify({
-                            dashboardId: selectedDashboardId,
-                            projectId: projectData.id
-                        });
-                        const savedProject = {
-                            value: projectValue,
-                            name: projectName,
-                            dashboardId: selectedDashboardId
-                        };
-                        localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
-                        localStorage.setItem('lifetiles_lastDashboard', String(selectedDashboardId));
-
-                        // Skip creating the initial tile if current tab is internal (chrome://, etc.)
-                        if (!currentTab?.url || isInternalUrl(currentTab.url)) {
-                          // Notify dashboard of changes
-                          try {
-                              const bc = new BroadcastChannel('lifetiles');
-                              bc.postMessage({ type: 'tiles:changed' });
-                              bc.close();
-                          } catch {}
-                          projectModal.style.display = 'none';
-                          window.close();
-                          resolve();
-                          return;
-                        }
-                        const tileData = {
-                            id: Date.now().toString() + Math.random(),
-                            name: currentTab.title || 'Untitled',
-                            url: currentTab.url,
-                            projectId: projectData.id,
-                            dashboardId: selectedDashboardId
-                        };
-                        tileStore.add(tileData).onsuccess = () => {
-                            // Notify dashboard of changes
-                            try {
-                                const bc = new BroadcastChannel('lifetiles');
-                                bc.postMessage({ type: 'tiles:changed' });
-                                bc.close();
-                            } catch {}
-                            projectModal.style.display = 'none';
-                            window.close();
-                            resolve();
-                        };
-                    };
+                // Save newly created project as last used for Quick Save
+                const projectValue = JSON.stringify({
+                    dashboardId: selectedDashboardId,
+                    projectId: projectData.id
                 });
+                const savedProject = {
+                    value: projectValue,
+                    name: projectName,
+                    dashboardId: selectedDashboardId
+                };
+                localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
+                localStorage.setItem('lifetiles_lastDashboard', String(selectedDashboardId));
+
+                // Skip creating the initial tile if current tab is internal (chrome://, etc.)
+                if (!currentTab?.url || isInternalUrl(currentTab.url)) {
+                    // Notify dashboard of changes
+                    try {
+                        const bc = new BroadcastChannel('lifetiles');
+                        bc.postMessage({ type: 'tiles:changed' });
+                        bc.close();
+                    } catch {}
+                    projectModal.style.display = 'none';
+                    window.close();
+                    return;
+                }
+
+                const tileData = {
+                    id: Date.now().toString() + Math.random(),
+                    name: currentTab.title || 'Untitled',
+                    url: currentTab.url,
+                    projectId: projectData.id,
+                    dashboardId: selectedDashboardId
+                };
+                await db.tiles.add(tileData);
+
+                // Notify dashboard of changes
+                try {
+                    const bc = new BroadcastChannel('lifetiles');
+                    bc.postMessage({ type: 'tiles:changed' });
+                    bc.close();
+                } catch {}
+                projectModal.style.display = 'none';
+                window.close();
             }
         });
-    };
 
     // Handle save option selection
     saveCurrentOption.addEventListener('click', () => {
@@ -593,12 +542,9 @@ async function getTargetWindowId() {
         if (saveMode === 'all') {
             const tabs = await chrome.tabs.query({ currentWindow: true });
 
-            // Process each tab sequentially with a new transaction
+            // Save all tabs using Dexie
             for (const tab of tabs) {
                 if (!tab.url || isInternalUrl(tab.url)) continue;
-                const tx = db.transaction(['tiles'], 'readwrite');
-                const tileStore = tx.objectStore('tiles');
-
                 const tileData = {
                     id: Date.now().toString() + Math.random(),
                     name: tab.title || 'Untitled',
@@ -606,28 +552,22 @@ async function getTargetWindowId() {
                     projectId: projectId,
                     dashboardId: dashboardId
                 };
-
-                await new Promise((resolve, reject) => {
-                    const request = tileStore.add(tileData);
-                    request.onsuccess = resolve;
-                    request.onerror = reject;
-                });
+                await db.tiles.add(tileData);
             }
-            // ✅ notify dashboard(s) once all writes are done
+
+            // Notify dashboard(s) once all writes are done
             try {
                 const bc = new BroadcastChannel('lifetiles');
                 bc.postMessage({ type: 'tiles:changed' });
                 bc.close();
-                } catch {}
-                if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-                    try {
-                      chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                        // Swallow "Could not establish connection. Receiving end does not exist."
+            } catch {}
+            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+                try {
+                    chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
                         void chrome.runtime.lastError;
-                      });
-                    } catch (_) {}
-                  }
-                  
+                    });
+                } catch (_) {}
+            }
             window.close();
         } else {
             const tileName = tileNameInput.value.trim();
@@ -641,61 +581,26 @@ async function getTargetWindowId() {
                     projectId: projectId,
                     dashboardId: dashboardId
                 };
-                const tx = db.transaction(['tiles'], 'readwrite');
-                const tileStore = tx.objectStore('tiles');
-                const req = tileStore.add(tileData);
-                req.onsuccess = () => {
+
+                try {
+                    await db.tiles.add(tileData);
                     try {
                         const bc = new BroadcastChannel('lifetiles');
                         bc.postMessage({ type: 'tiles:changed' });
                         bc.close();
-                      } catch {}
-                      if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+                    } catch {}
+                    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
                         try {
-                          chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                            void chrome.runtime.lastError; // swallow "Receiving end does not exist"
-                          });
+                            chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                                void chrome.runtime.lastError;
+                            });
                         } catch (_) {}
-                      }
-                      window.close();
-                      
-                };
-                req.onerror = (e) => console.error('Failed to save tile:', e);
-
+                    }
+                    window.close();
+                } catch (e) {
+                    console.error('Failed to save tile:', e);
+                }
             }
         }
     });
 });
-
-async function initDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('lifetiles', 6);
-
-        request.onerror = (event) => {
-            reject(event.target.error);
-        };
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-
-            if (!db.objectStoreNames.contains('dashboards')) {
-                const dashboardsStore = db.createObjectStore('dashboards', { keyPath: 'id' });
-            }
-
-            if (!db.objectStoreNames.contains('projects')) {
-                const projectsStore = db.createObjectStore('projects', { keyPath: 'id' });
-                projectsStore.createIndex('dashboardId', 'dashboardId', { unique: false });
-            }
-
-            if (!db.objectStoreNames.contains('tiles')) {
-                const tilesStore = db.createObjectStore('tiles', { keyPath: 'id' });
-                tilesStore.createIndex('projectId', 'projectId', { unique: false });
-                tilesStore.createIndex('dashboardId', 'dashboardId', { unique: false });
-            }
-        };
-
-        request.onsuccess = (event) => {
-            resolve(event.target.result);
-        };
-    });
-}

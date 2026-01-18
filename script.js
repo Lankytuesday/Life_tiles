@@ -31,19 +31,7 @@ async function probeImage(src, timeout = 900) {
 // One-time cleanup: remove legacy cached favicons that point to deprecated services
 async function purgeLegacyFavicons() {
     try {
-      const db = await initDB();
-      // Check if favicons store exists before using it
-      if (!db.objectStoreNames.contains('favicons')) {
-          return;
-      }
-      const tx = db.transaction(['favicons'], 'readwrite');
-      const store = tx.objectStore('favicons');
-
-      const rows = await new Promise((res, rej) => {
-        const req = store.getAll();
-        req.onsuccess = () => res(req.result || []);
-        req.onerror = () => rej(req.error);
-      });
+      const rows = await db.favicons.toArray();
 
       for (const row of rows) {
         const f = row?.favicon || '';
@@ -54,7 +42,7 @@ async function purgeLegacyFavicons() {
           // Match any deprecated favicon services
           /favicon.*googleapis/i.test(f)
         )) {
-          store.delete(row.hostname);
+          await db.favicons.delete(row.hostname);
           sessionFaviconCache.delete?.(row.hostname);
           console.log('Purged deprecated favicon cache for:', row.hostname);
         }
@@ -268,11 +256,7 @@ async function loadFaviconForHost(hostname, pageUrl) {
     // Persist if found
     if (found) {
       try {
-        const db = await initDB();
-        if (db.objectStoreNames.contains('favicons')) {
-          const tx = db.transaction(["favicons"], "readwrite");
-          tx.objectStore("favicons").put({ hostname, favicon: found, timestamp: Date.now() });
-        }
+        await db.favicons.put({ hostname, favicon: found, timestamp: Date.now() });
       } catch {}
     }
   
@@ -295,19 +279,7 @@ function isInternalUrl(u) {
 // Initialize favicon cache handling
 async function checkFaviconCache(hostname) {
     try {
-        const db = await initDB();
-        // Check if favicons store exists before using it
-        if (!db.objectStoreNames.contains('favicons')) {
-            return null;
-        }
-        const tx = db.transaction(['favicons'], 'readonly');
-        const store = tx.objectStore('favicons');
-        const result = await new Promise((resolve, reject) => {
-            const request = store.get(hostname);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-
+        const result = await db.favicons.get(hostname);
         return (result?.favicon && result.timestamp > Date.now() - FAVICON_TTL_MS) ? result.favicon : null;
     } catch (e) {
         console.error('Error checking favicon cache:', e);
@@ -317,23 +289,10 @@ async function checkFaviconCache(hostname) {
 
 async function saveFaviconToCache(hostname, faviconUrl) {
     try {
-        const db = await initDB();
-        // Check if favicons store exists before using it
-        if (!db.objectStoreNames.contains('favicons')) {
-            return;
-        }
-        return new Promise((resolve, reject) => {
-            const tx = db.transaction(['favicons'], 'readwrite');
-            const store = tx.objectStore('favicons');
-            const request = store.put({
-                hostname,
-                favicon: faviconUrl,
-                timestamp: Date.now()
-            });
-
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-            request.onerror = () => reject(request.error);
+        await db.favicons.put({
+            hostname,
+            favicon: faviconUrl,
+            timestamp: Date.now()
         });
     } catch (e) {
         console.error('Error saving favicon to cache:', e);
@@ -349,72 +308,7 @@ if (typeof chrome === 'undefined' || !chrome.storage) {
         window.indexedDB = window.mozIndexedDB || window.webkitIndexedDB || window.msIndexedDB;
     }
 }
-/*
-async function migrateFromChromeStorage() {
-    try {
-        // Get all data from chrome.storage.sync
-        const data = await new Promise(resolve => {
-            chrome.storage.sync.get(null, resolve);
-        });
 
-        console.log('Retrieved storage data:', data);
-
-        // Check if we have any projects to migrate
-        const projectKeys = Object.keys(data).filter(key => key.startsWith('project_'));
-        if (projectKeys.length === 0) {
-            console.log('No projects found in storage');
-            return false;
-        }
-
-        const db = await initDB();
-        const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-
-        // Store object stores in variables
-        const dashboardStore = tx.objectStore('dashboards');
-        const projectStore = tx.objectStore('projects');
-        const tileStore = tx.objectStore('tiles');
-
-        // Create default dashboard if none exists
-        const defaultDashboard = {
-            id: Date.now().toString(),
-            name: "Imported Dashboard"
-        };
-        await dashboardStore.put(defaultDashboard);
-
-        // Process projects and tiles
-        for (const [key, value] of Object.entries(data)) {
-            if (key.startsWith('project_')) {
-                // Add project
-                const project = {
-                    id: value.id || key.replace('project_', ''),
-                    name: value.name || 'Imported Project',
-                    dashboardId: defaultDashboard.id
-                };
-                await projectStore.put(project);
-
-                // Process associated tiles
-                if (value.tiles) {
-                    for (const tile of value.tiles) {
-                        await tileStore.put({
-                            id: tile.id || Date.now().toString(),
-                            name: tile.name,
-                            url: tile.url,
-                            projectId: project.id,
-                            dashboardId: defaultDashboard.id
-                        });
-                    }
-                }
-            }
-        }
-
-        console.log('Migration completed successfully');
-        return true;
-    } catch (error) {
-        console.error('Migration failed:', error);
-        return false;
-    }
-}
-*/
 // Wire popup→dashboard live updates (BroadcastChannel + runtime message)
 function wireLiveUpdates() {
     // BroadcastChannel (kept alive via global var)
@@ -465,13 +359,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         });
     }
     
-    // Initialize IndexedDB
-    try {
-        const db = await initDB();
-        console.log('IndexedDB initialized successfully');
-    } catch (error) {
-        console.error('Failed to initialize IndexedDB:', error);
-    }
+    // Dexie handles database initialization lazily
+    console.log('Database ready (Dexie)');
 
     // Dashboard Modal Elements
     const dashboardModal = document.getElementById("dashboard-modal");
@@ -535,26 +424,10 @@ document.addEventListener("DOMContentLoaded", async function () {
             const newName = nameElement.textContent.trim();
             if (save && newName && newName !== currentName) {
                 try {
-                    const db = await initDB();
-                    const tx = db.transaction(['tiles'], 'readwrite');
-                    const store = tx.objectStore('tiles');
-
-                    await new Promise((resolve, reject) => {
-                        const request = store.get(tileData.id);
-                        request.onsuccess = () => {
-                            const updated = request.result;
-                            updated.name = newName;
-                            const updateRequest = store.put(updated);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-
+                    await db.tiles.update(tileData.id, { name: newName });
                     tileData.name = newName;
                     nameElement.textContent = truncateText(newName, 60);
                     tileElement.setAttribute("title", newName);
-
                 } catch (err) {
                     console.error('Failed to update tile name:', err);
                     nameElement.textContent = truncateText(currentName, 60);
@@ -603,25 +476,9 @@ document.addEventListener("DOMContentLoaded", async function () {
             const newName = titleElement.textContent.trim();
             if (save && newName && newName !== currentName) {
                 try {
-                    const db = await initDB();
-                    const tx = db.transaction(['projects'], 'readwrite');
-                    const store = tx.objectStore('projects');
-
-                    await new Promise((resolve, reject) => {
-                        const request = store.get(projectData.id);
-                        request.onsuccess = () => {
-                            const updated = request.result;
-                            updated.name = newName;
-                            const updateRequest = store.put(updated);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-
+                    await db.projects.update(projectData.id, { name: newName });
                     titleElement.textContent = newName;
                     projectData.name = newName;
-
                 } catch (err) {
                     console.error('Failed to update project name:', err);
                     titleElement.textContent = currentName;
@@ -672,22 +529,7 @@ document.addEventListener("DOMContentLoaded", async function () {
             const newName = currentDashboardTitle.textContent.trim();
             if (save && newName && newName !== currentName) {
                 try {
-                    const db = await initDB();
-                    const tx = db.transaction(['dashboards'], 'readwrite');
-                    const store = tx.objectStore('dashboards');
-
-                    await new Promise((resolve, reject) => {
-                        const request = store.get(currentDashboardId);
-                        request.onsuccess = () => {
-                            const updated = request.result;
-                            updated.name = newName;
-                            const updateRequest = store.put(updated);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-
+                    await db.dashboards.update(currentDashboardId, { name: newName });
                     currentDashboardTitle.textContent = newName;
 
                     // Update sidebar
@@ -804,28 +646,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     let draggedProjectId = null; // Track project being dragged to sidebar
 
     // Helper: Get the next available order for a new project in a dashboard
-    async function getNextProjectOrder(db, dashboardId) {
-        const normalizedId = String(dashboardId);
-        const readTx = db.transaction(['projects'], 'readonly');
-        const projectIndex = readTx.objectStore('projects').index('dashboardId');
-
-        // Query with string version first
-        let existingProjects = await new Promise(resolve => {
-            const req = projectIndex.getAll(normalizedId);
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => resolve([]);
-        });
-
-        // If no results and it looks like a number, try querying with number type
-        if (existingProjects.length === 0 && !isNaN(normalizedId)) {
-            const readTx2 = db.transaction(['projects'], 'readonly');
-            const projectIndex2 = readTx2.objectStore('projects').index('dashboardId');
-            existingProjects = await new Promise(resolve => {
-                const req = projectIndex2.getAll(Number(normalizedId));
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => resolve([]);
-            });
-        }
+    async function getNextProjectOrder(dashboardId) {
+        const existingProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
 
         // Calculate max order + 1
         let maxOrder = -1;
@@ -840,80 +662,39 @@ document.addEventListener("DOMContentLoaded", async function () {
     async function moveProjectToDashboard(projectId, newDashboardId) {
         if (!projectId || !newDashboardId) return;
 
-        // Normalize dashboardId to match how it's stored in IndexedDB
-        // Dataset values are always strings, but we need to match the stored type
         const normalizedNewId = String(newDashboardId);
         if (normalizedNewId === String(currentDashboardId)) return; // Already on this dashboard
 
-        const db = await initDB();
+        // Get existing projects in target dashboard to calculate order
+        let existingProjects = await db.projects.where('dashboardId').equals(normalizedNewId).toArray();
 
-        // First, find the max order in the target dashboard to add at the end
-        // Try both string and number versions to handle type mismatches
-        const readTx = db.transaction(['projects'], 'readonly');
-        const readStore = readTx.objectStore('projects');
-        const projectIndex = readStore.index('dashboardId');
-
-        // Query with string version first, then try number if needed
-        let existingProjects = await new Promise(resolve => {
-            const req = projectIndex.getAll(normalizedNewId);
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => resolve([]);
-        });
-
-        // If no results and it looks like a number, try querying with number type
+        // Try number version if no results (handle legacy type mismatches)
         if (existingProjects.length === 0 && !isNaN(normalizedNewId)) {
-            const readTx2 = db.transaction(['projects'], 'readonly');
-            const readStore2 = readTx2.objectStore('projects');
-            const projectIndex2 = readStore2.index('dashboardId');
-            existingProjects = await new Promise(resolve => {
-                const req = projectIndex2.getAll(Number(normalizedNewId));
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => resolve([]);
-            });
+            existingProjects = await db.projects.where('dashboardId').equals(Number(normalizedNewId)).toArray();
         }
 
         // Calculate the new order (max + 1, or 0 if no projects)
-        let maxOrder = -1;
-        existingProjects.forEach(p => {
+        const maxOrder = existingProjects.reduce((max, p) => {
             const order = Number.isFinite(+p.order) ? +p.order : -1;
-            if (order > maxOrder) maxOrder = order;
-        });
+            return order > max ? order : max;
+        }, -1);
         const newOrder = maxOrder + 1;
 
-        // Determine the correct type to store (match existing projects or use currentDashboardId's type)
+        // Determine the correct type to store
         const dashboardIdToStore = existingProjects.length > 0
             ? existingProjects[0].dashboardId
             : (typeof currentDashboardId === 'number' ? Number(normalizedNewId) : normalizedNewId);
 
-        const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-        const projectStore = tx.objectStore('projects');
-        const tileStore = tx.objectStore('tiles');
+        // Update project
+        const project = await db.projects.get(projectId);
+        if (project) {
+            project.dashboardId = dashboardIdToStore;
+            project.order = newOrder;
+            await db.projects.put(project);
 
-        // Update project's dashboardId and order
-        const projectReq = projectStore.get(projectId);
-        projectReq.onsuccess = async () => {
-            const project = projectReq.result;
-            if (project) {
-                project.dashboardId = dashboardIdToStore;
-                project.order = newOrder; // Add to end of new dashboard
-                projectStore.put(project);
-
-                // Also update all tiles in this project
-                const tileIndex = tileStore.index('projectId');
-                const tilesReq = tileIndex.getAll(projectId);
-                tilesReq.onsuccess = () => {
-                    const tiles = tilesReq.result;
-                    tiles.forEach(tile => {
-                        tile.dashboardId = dashboardIdToStore;
-                        tileStore.put(tile);
-                    });
-                };
-            }
-        };
-
-        await new Promise(resolve => {
-            tx.oncomplete = resolve;
-        });
+            // Update all tiles in this project
+            await db.tiles.where('projectId').equals(projectId).modify({ dashboardId: dashboardIdToStore });
+        }
 
         // Note: We don't reload here - the DOM element is already removed by the caller
     }
@@ -1016,26 +797,18 @@ new Sortable(document.getElementById('projects-list'), {
     // Expand/Collapse All Event Listeners
     expandAllBtn.addEventListener('click', async () => {
         const projects = projectsList.querySelectorAll('.project.collapsed');
-        const db = await initDB();
-        const tx = db.transaction(['projects'], 'readwrite');
-        const store = tx.objectStore('projects');
-        projects.forEach(proj => {
+        for (const proj of projects) {
             proj.classList.remove('collapsed');
-            const req = store.get(proj.dataset.projectId);
-            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = false; store.put(p); } };
-        });
+            await db.projects.update(proj.dataset.projectId, { collapsed: false });
+        }
     });
 
     collapseAllBtn.addEventListener('click', async () => {
         const projects = projectsList.querySelectorAll('.project:not(.collapsed)');
-        const db = await initDB();
-        const tx = db.transaction(['projects'], 'readwrite');
-        const store = tx.objectStore('projects');
-        projects.forEach(proj => {
+        for (const proj of projects) {
             proj.classList.add('collapsed');
-            const req = store.get(proj.dataset.projectId);
-            req.onsuccess = () => { const p = req.result; if (p) { p.collapsed = true; store.put(p); } };
-        });
+            await db.projects.update(proj.dataset.projectId, { collapsed: true });
+        }
     });
 
     // Tile Modal Event Listeners
@@ -1138,58 +911,36 @@ new Sortable(document.getElementById('projects-list'), {
     // Storage functions
     async function loadDashboards() {
         try {
-            const db = await initDB();
-
             // Get all dashboards
-            let dashboards = await new Promise((resolve, reject) => {
-                const dashboardStore = db.transaction(['dashboards'], 'readonly').objectStore('dashboards');
-                const request = dashboardStore.getAll();
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-            });
+            let dashboards = await db.dashboards.toArray();
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
                 const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
                 dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-
             }
 
             if (!dashboards || dashboards.length === 0) {
-                // Create a default dashboard row
+                // Create a default dashboard
                 const defaultDashboard = {
-                  id: (crypto?.randomUUID?.() || Date.now().toString()),
-                  name: "My Dashboard",
-                  order: 0
+                    id: (crypto?.randomUUID?.() || Date.now().toString()),
+                    name: "My Dashboard",
+                    order: 0
                 };
-              
-                // ✅ Properly await the IndexedDB transaction
-                await new Promise((resolve, reject) => {
-                  const tx = db.transaction(['dashboards'], 'readwrite');
-                  const store = tx.objectStore('dashboards');
-                  store.add(defaultDashboard);
-                  tx.oncomplete = resolve;
-                  tx.onerror = () => reject(tx.error);
-                });
-              
+
+                await db.dashboards.add(defaultDashboard);
+
                 // Select it
                 localStorage.setItem('currentDashboardId', defaultDashboard.id);
                 currentDashboardId = defaultDashboard.id;
-              
-                // ✅ Paint the UI immediately (sidebar + empty projects area)
+
+                // Paint the UI immediately
                 renderSidebar([defaultDashboard], defaultDashboard.id);
-
-                // Update dashboard title
                 if (currentDashboardTitle) currentDashboardTitle.textContent = defaultDashboard.name;
-
-                // Clear projects list
                 projectsList.innerHTML = '';
 
-                // Nothing else to load yet
                 return [defaultDashboard];
-              }
-              
-              
+            }
 
             const currentId = localStorage.getItem('currentDashboardId') || dashboards[0].id;
 
@@ -1206,30 +957,20 @@ new Sortable(document.getElementById('projects-list'), {
             const currentDash = dashboards.find(d => d.id === validCurrentId);
             if (currentDashboardTitle) currentDashboardTitle.textContent = currentDash ? currentDash.name : '';
 
-            // Clear existing projects before loading new ones to prevent duplication
+            // Clear existing projects before loading new ones
             projectsList.innerHTML = '';
 
             // Load projects for current dashboard
-            const tx2 = db.transaction(['projects', 'tiles'], 'readonly');
-            const projectStore = tx2.objectStore('projects');
-            const projects = await new Promise((resolve) => {
-                const request = projectStore.index('dashboardId').getAll(validCurrentId);
-                request.onsuccess = () => resolve(request.result || []);
-            });
+            const projects = await db.projects.where('dashboardId').equals(validCurrentId).toArray();
 
             // Load all tiles for the projects
-            const tileStore = tx2.objectStore('tiles');
             for (const project of projects) {
-                const tiles = await new Promise((resolve) => {
-                    const request = tileStore.index('projectId').getAll(project.id);
-                    request.onsuccess = () => resolve(request.result || []);
-                });
-                project.tiles = tiles;
+                project.tiles = await db.tiles.where('projectId').equals(project.id).toArray();
             }
 
             loadProjects(projects);
             currentDashboardId = validCurrentId;
-            
+
             return dashboards;
         } catch (error) {
             console.error('Error in loadDashboards:', error);
@@ -1338,22 +1079,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             const newName = input.value.trim();
             if (save && newName && newName !== dashboard.name) {
                 try {
-                    const db = await initDB();
-                    const tx = db.transaction(['dashboards'], 'readwrite');
-                    const store = tx.objectStore('dashboards');
-
-                    await new Promise((resolve, reject) => {
-                        const request = store.get(dashboard.id);
-                        request.onsuccess = () => {
-                            const updated = request.result;
-                            updated.name = newName;
-                            const updateRequest = store.put(updated);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
-
+                    await db.dashboards.update(dashboard.id, { name: newName });
                     labelEl.textContent = newName;
                     dashboard.name = newName;
 
@@ -1388,47 +1114,15 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     // Delete dashboard from sidebar
     async function deleteDashboardFromSidebar(dashboardId) {
-        const db = await initDB();
-        const tx = db.transaction(['dashboards'], 'readonly');
-        const store = tx.objectStore('dashboards');
-
-        const dashboards = await new Promise((resolve) => {
-            const request = store.getAll();
-            request.onsuccess = () => resolve(request.result || []);
-        });
-
-        if (dashboards.length <= 1) {
-            alert("Cannot delete the last dashboard");
-            return;
-        }
-
-        if (confirm('Are you sure you want to delete this dashboard? All projects and tiles in it will be removed.')) {
-            // Use existing deletion logic
-            await deleteDashboardFromManage(dashboardId, null);
-            
-            // Refresh sidebar
-            const updatedDashboards = await loadDashboards();
-        }
+        await deleteDashboardFromManage(dashboardId, null);
     }
 
     // Update dashboard order from sidebar
     async function updateDashboardOrderFromSidebar(idsInNewOrder) {
         try {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readwrite');
-            const store = tx.objectStore('dashboards');
-
-            idsInNewOrder.forEach((id, idx) => {
-                const getReq = store.get(id);
-                getReq.onsuccess = () => {
-                    const rec = getReq.result;
-                    if (!rec) return;
-                    rec.order = idx;
-                    store.put(rec);
-                };
-            });
-            
-            await new Promise(res => tx.oncomplete = res);
+            for (let idx = 0; idx < idsInNewOrder.length; idx++) {
+                await db.dashboards.update(idsInNewOrder[idx], { order: idx });
+            }
         } catch (error) {
             console.error('Error updating dashboard order:', error);
         }
@@ -1455,17 +1149,8 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         // Cache dashboards for name lookup
         async function cacheDashboards() {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const store = tx.objectStore('dashboards');
-            return new Promise((resolve) => {
-                const req = store.getAll();
-                req.onsuccess = () => {
-                    dashboardsCache = req.result || [];
-                    resolve(dashboardsCache);
-                };
-                req.onerror = () => resolve([]);
-            });
+            dashboardsCache = await db.dashboards.toArray();
+            return dashboardsCache;
         }
 
         function getDashboardName(dashboardId) {
@@ -1477,28 +1162,15 @@ window.__lifetilesRefresh = () => loadDashboards();
             if (!query || query.length < 2) return { dashboards: [], projects: [], tiles: [] };
 
             const q = query.toLowerCase();
-            const db = await initDB();
-            const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readonly');
+            const [allDashboards, allProjects, allTiles] = await Promise.all([
+                db.dashboards.toArray(),
+                db.projects.toArray(),
+                db.tiles.toArray()
+            ]);
 
-            const dashboards = await new Promise((resolve) => {
-                const req = tx.objectStore('dashboards').getAll();
-                req.onsuccess = () => resolve((req.result || []).filter(d => d.name.toLowerCase().includes(q)));
-                req.onerror = () => resolve([]);
-            });
-
-            const projects = await new Promise((resolve) => {
-                const req = tx.objectStore('projects').getAll();
-                req.onsuccess = () => resolve((req.result || []).filter(p => p.name.toLowerCase().includes(q)));
-                req.onerror = () => resolve([]);
-            });
-
-            const tiles = await new Promise((resolve) => {
-                const req = tx.objectStore('tiles').getAll();
-                req.onsuccess = () => resolve((req.result || []).filter(t =>
-                    t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q)
-                ));
-                req.onerror = () => resolve([]);
-            });
+            const dashboards = allDashboards.filter(d => d.name.toLowerCase().includes(q));
+            const projects = allProjects.filter(p => p.name.toLowerCase().includes(q));
+            const tiles = allTiles.filter(t => t.name.toLowerCase().includes(q) || t.url.toLowerCase().includes(q));
 
             return { dashboards, projects, tiles };
         }
@@ -1664,27 +1336,16 @@ window.__lifetilesRefresh = () => loadDashboards();
                 return ao - bo || String(a.id).localeCompare(String(b.id));
             });
 
-            const db = await initDB();
-            const tx = db.transaction(['tiles'], 'readonly');
-            const tileStore = tx.objectStore('tiles');
-
             for (const projectData of projects) {
-                // Load tiles for this project
-                const tiles = await new Promise((resolve) => {
-                    const request = tileStore.index('projectId').getAll(projectData.id);
-                    request.onsuccess = () => {
-                        const tiles = request.result || [];
-                        // Sort tiles by order property
-                        tiles.sort((a, b) => {
-                            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
-                            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
-                            return ao - bo || String(a.id).localeCompare(String(b.id));
-                        });
-                        console.log(`Loaded ${tiles.length} tiles for project ${projectData.id}`);
-                        resolve(tiles);
-                    };
-                    request.onerror = () => resolve([]);
+                // Load tiles for this project using Dexie
+                let tiles = await db.tiles.where('projectId').equals(projectData.id).toArray();
+                // Sort tiles by order property
+                tiles.sort((a, b) => {
+                    const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+                    const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+                    return ao - bo || String(a.id).localeCompare(String(b.id));
                 });
+                console.log(`Loaded ${tiles.length} tiles for project ${projectData.id}`);
 
                 // Filter out internal/unsupported URLs (chrome://, chrome-extension://, etc.)
                 const safeTiles = tiles.filter(t => {
@@ -1704,62 +1365,30 @@ window.__lifetilesRefresh = () => loadDashboards();
                 createProjectElement(projectWithTiles);
             }
         }
-        return Promise.resolve();
     }
 
     async function loadProjectsForDashboard(dashboardId) {
-        const db = await initDB();
-        const tx = db.transaction(['projects'], 'readonly');
-        const projectStore = tx.objectStore('projects');
-        const projectIndex = projectStore.index('dashboardId');
-
-        return new Promise((resolve) => {
-            const request = projectIndex.getAll(dashboardId);
-            request.onsuccess = () => {
-                loadProjects(request.result);
-                resolve();
-            };
-        });
+        const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+        await loadProjects(projects);
     }
 
     async function saveProject(projectData) {
-        const db = await initDB();
-
         projectData.dashboardId = currentDashboardId;
         // Assign order so project appears at end of list
-        projectData.order = await getNextProjectOrder(db, currentDashboardId);
+        projectData.order = await getNextProjectOrder(currentDashboardId);
 
-        const tx = db.transaction(['projects'], 'readwrite');
-        const store = tx.objectStore('projects');
-
-        return new Promise((resolve, reject) => {
-            const request = store.add(projectData);
-            request.onsuccess = () => {
-                createProjectElement(projectData);
-                resolve();
-            };
-            request.onerror = () => reject(request.error);
-        });
+        await db.projects.add(projectData);
+        createProjectElement(projectData);
     }
 
     async function saveTile(projectId, tileData) {
-        const db = await initDB();
-        const tx = db.transaction('tiles', 'readwrite');
-        const store = tx.objectStore('tiles');
-
-        // Save full tile data in IndexedDB
-        return new Promise((resolve, reject) => {
-            const request = store.put({
-                id: tileData.id,
-                name: tileData.name,
-                url: tileData.url,
-                projectId: projectId,
-                dashboardId: currentDashboardId,
-                // ✅ keep the order assigned at creation (existingTiles.length)
-                order: Number.isFinite(+tileData.order) ? +tileData.order : 0
-            });
-            request.onsuccess = () => resolve();
-            request.onerror = () => reject(request.error);
+        await db.tiles.put({
+            id: tileData.id,
+            name: tileData.name,
+            url: tileData.url,
+            projectId: projectId,
+            dashboardId: currentDashboardId,
+            order: Number.isFinite(+tileData.order) ? +tileData.order : 0
         });
     }
 
@@ -1830,18 +1459,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             const wasCollapsed = project.classList.contains("collapsed");
             if (wasCollapsed) {
                 project.classList.remove("collapsed");
-                // Save expanded state to IndexedDB
-                const db = await initDB();
-                const tx = db.transaction(['projects'], 'readwrite');
-                const store = tx.objectStore('projects');
-                const req = store.get(projectData.id);
-                req.onsuccess = () => {
-                    const proj = req.result;
-                    if (proj) {
-                        proj.collapsed = false;
-                        store.put(proj);
-                    }
-                };
+                // Save expanded state using Dexie
+                await db.projects.update(projectData.id, { collapsed: false });
                 // Always open notes when expanding from collapsed
                 notesSection.classList.add("expanded");
                 notesToggle.classList.add("active");
@@ -1859,23 +1478,13 @@ window.__lifetilesRefresh = () => loadDashboards();
         // Auto-save notes on blur
         notesTextarea.addEventListener("blur", async () => {
             const newNotes = notesTextarea.value.trim();
-            const db = await initDB();
-            const tx = db.transaction(['projects'], 'readwrite');
-            const store = tx.objectStore('projects');
-            const req = store.get(projectData.id);
-            req.onsuccess = () => {
-                const proj = req.result;
-                if (proj) {
-                    proj.notes = newNotes;
-                    store.put(proj);
-                    // Update has-notes indicator
-                    if (newNotes) {
-                        notesToggle.classList.add("has-notes");
-                    } else {
-                        notesToggle.classList.remove("has-notes");
-                    }
-                }
-            };
+            await db.projects.update(projectData.id, { notes: newNotes });
+            // Update has-notes indicator
+            if (newNotes) {
+                notesToggle.classList.add("has-notes");
+            } else {
+                notesToggle.classList.remove("has-notes");
+            }
         });
 
         const menuTrigger = document.createElement("button");
@@ -1896,19 +1505,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             e.stopPropagation();
             project.classList.toggle("collapsed");
             const isCollapsed = project.classList.contains("collapsed");
-
-            // Save collapsed state to IndexedDB
-            const db = await initDB();
-            const tx = db.transaction(['projects'], 'readwrite');
-            const store = tx.objectStore('projects');
-            const req = store.get(projectData.id);
-            req.onsuccess = () => {
-                const proj = req.result;
-                if (proj) {
-                    proj.collapsed = isCollapsed;
-                    store.put(proj);
-                }
-            };
+            // Save collapsed state using Dexie
+            await db.projects.update(projectData.id, { collapsed: isCollapsed });
         });
 
         const menu = document.createElement("div");
@@ -1941,29 +1539,17 @@ window.__lifetilesRefresh = () => loadDashboards();
             const newName = projectNameInput.value.trim();
             if (!newName) return;
 
-            const db = await initDB();
-            const tx = db.transaction(['projects'], 'readwrite');
-            const store = tx.objectStore('projects');
-            const req = store.get(freshProject.id);
+            await db.projects.update(freshProject.id, { name: newName });
+            const titleEl = currentProjectEl.querySelector('.project-title');
+            if (titleEl) titleEl.textContent = newName;
 
-            req.onsuccess = () => {
-                const updated = req.result;
-                if (!updated) return;
+            closeProjectModalHandler();
 
-                updated.name = newName;
-                store.put(updated).onsuccess = () => {
-                    const titleEl = currentProjectEl.querySelector('.project-title');
-                    if (titleEl) titleEl.textContent = newName;
-
-                    closeProjectModalHandler();
-
-                    // Reset the submit button back to "create" mode
-                    const oldBtn = submitProjectBtn;
-                    submitProjectBtn = oldBtn.cloneNode(true);
-                    oldBtn.parentNode.replaceChild(submitProjectBtn, oldBtn);
-                    submitProjectBtn.addEventListener('click', createNewProject);
-                };
-            };
+            // Reset the submit button back to "create" mode
+            const oldBtn = submitProjectBtn;
+            submitProjectBtn = oldBtn.cloneNode(true);
+            oldBtn.parentNode.replaceChild(submitProjectBtn, oldBtn);
+            submitProjectBtn.addEventListener('click', createNewProject);
         });
     };
 
@@ -1976,16 +1562,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         e.stopPropagation();
         closeAllMenus();
 
-        const db = await initDB();
-        let tx = db.transaction(['dashboards'], 'readonly');
-        const dashboardStore = tx.objectStore('dashboards');
-
-        let dashboards = await new Promise((resolve, reject) => {
-            const request = dashboardStore.getAll();
-            request.onsuccess = () => resolve(request.result || []);
-            request.onerror = () => reject(request.error);
-        });
-
+        let dashboards = await db.dashboards.toArray();
         if (dashboards.length > 0) {
             const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
             dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
@@ -2040,39 +1617,18 @@ window.__lifetilesRefresh = () => loadDashboards();
             const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
             if (!freshProject) return;
 
-            const db = await initDB();
-
-            // Get the next order for the target dashboard before opening readwrite transaction
-            const newOrder = await getNextProjectOrder(db, selectedDashboardId);
-
-            const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-            const projectStore = tx.objectStore('projects');
-            const tileStore = tx.objectStore('tiles');
-
-            // Get all tiles for this project
-            const tiles = await new Promise((resolve) => {
-                const request = tileStore.index('projectId').getAll(freshProject.id);
-                request.onsuccess = () => resolve(request.result || []);
-            });
+            const newOrder = await getNextProjectOrder(selectedDashboardId);
 
             // Update project's dashboardId and order
-            freshProject.dashboardId = selectedDashboardId;
-            freshProject.order = newOrder;
-            await new Promise((resolve, reject) => {
-                const req = projectStore.put(freshProject);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
+            await db.projects.update(freshProject.id, {
+                dashboardId: selectedDashboardId,
+                order: newOrder
             });
 
             // Update all tiles' dashboardId
-            for (const tile of tiles) {
-                tile.dashboardId = selectedDashboardId;
-                await new Promise((resolve, reject) => {
-                    const req = tileStore.put(tile);
-                    req.onsuccess = () => resolve();
-                    req.onerror = () => reject(req.error);
-                });
-            }
+            await db.tiles.where('projectId').equals(freshProject.id).modify({
+                dashboardId: selectedDashboardId
+            });
 
             // Remove project from current view
             currentProjectEl.remove();
@@ -2096,22 +1652,10 @@ window.__lifetilesRefresh = () => loadDashboards();
         e.stopPropagation();
         closeAllMenus();
 
-        const db = await initDB();
-        let tx = db.transaction(['dashboards'], 'readonly'); // Only need dashboards for selection
-        const dashboardStore = tx.objectStore('dashboards');
-
-        // Get all dashboards
-        let dashboards = await new Promise((resolve, reject) => {
-            const request = dashboardStore.getAll();
-            request.onsuccess = () => resolve(request.result || []);
-            request.onerror = () => reject(request.error);
-        });
-
-        // Sort dashboards by order property
+        let dashboards = await db.dashboards.toArray();
         if (dashboards.length > 0) {
             const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
             dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-
         }
 
         // Create dashboard selection modal
@@ -2158,26 +1702,16 @@ window.__lifetilesRefresh = () => loadDashboards();
             const selectedDashboardId = select.value;
             if (!selectedDashboardId) return;
 
-            // 🔄 Always resolve the current project element
             const currentProjectEl = copyButton.closest('.project');
             if (!currentProjectEl) return;
 
-            // 🔄 Fetch fresh project data
             const freshProject = await getProjectById(currentProjectEl.dataset.projectId);
             if (!freshProject) return;
 
-            const db = await initDB();
-            const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-            const projectStore = tx.objectStore('projects');
-            const tileStore = tx.objectStore('tiles');
+            // Get all tiles for this project
+            const tiles = await db.tiles.where('projectId').equals(freshProject.id).toArray();
 
-            // Get all tiles for this fresh project
-            const tiles = await new Promise((resolve) => {
-                const request = tileStore.index('projectId').getAll(freshProject.id);
-                request.onsuccess = () => resolve(request.result || []);
-            });
-
-            // Build new project from FRESH data
+            // Build new project
             const newProjectData = {
                 id: Date.now().toString(),
                 name: freshProject.name,
@@ -2185,17 +1719,16 @@ window.__lifetilesRefresh = () => loadDashboards();
             };
 
             // Add new project
-            await projectStore.add(newProjectData);
+            await db.projects.add(newProjectData);
 
             // Copy tiles to the new project
             for (const tile of tiles) {
-                const newTile = {
+                await db.tiles.add({
                     ...tile,
                     id: Date.now().toString() + Math.random(),
                     projectId: newProjectData.id,
                     dashboardId: selectedDashboardId
-                };
-                await tileStore.add(newTile);
+                });
             }
 
             modal.remove();
@@ -2216,11 +1749,8 @@ window.__lifetilesRefresh = () => loadDashboards();
         removeButton.onclick = async (e) => {
             e.stopPropagation();
             if (confirm('Are you sure you want to remove this project?')) {
-                const db = await initDB();
-                const tx = db.transaction(['projects'], 'readwrite');
-                const store = tx.objectStore('projects');
-                const request = store.delete(projectData.id);
-                request.onsuccess = () => project.remove();
+                await db.projects.delete(projectData.id);
+                project.remove();
             }
         };
 
@@ -2291,11 +1821,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     evt.to.appendChild(addTileButton);
                 }
 
-                const db = await initDB();
-                const tx = db.transaction(['tiles'], 'readwrite');
-                const store = tx.objectStore('tiles');
-
-                const resequence = (container) => {
+                const resequence = async (container) => {
                     if (!container) return;
                     const projEl = container.closest('.project');
                     if (!projEl) return;
@@ -2303,25 +1829,17 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                     // only real tiles; skip placeholders
                     const tileEls = [...container.querySelectorAll('.tile[data-tile-id]')];
-                    tileEls.forEach((el, idx) => {
-                        const tileId = el.dataset.tileId; // string id
-                        const getReq = store.get(tileId);
-                        getReq.onsuccess = () => {
-                            const rec = getReq.result;
-                            if (!rec) return;
-                            rec.projectId = projectId;     // normalize container ownership
-                            rec.order = idx;               // 0..N numeric
-                            store.put(rec);
-                        };
-                    });
+                    await Promise.all(tileEls.map((el, idx) =>
+                        db.tiles.update(el.dataset.tileId, {
+                            projectId: projectId,
+                            order: idx
+                        })
+                    ));
                 };
 
                 // handle same-project and cross-project moves
-                resequence(evt.from);
-                resequence(evt.to);
-
-                // ✅ ensure all writes have actually committed before UI/broadcast
-                await new Promise(res => tx.oncomplete = res);
+                await resequence(evt.from);
+                await resequence(evt.to);
             },
             onMove: function(evt) {
                 return !evt.related.classList.contains('add-tile-button');
@@ -2363,9 +1881,9 @@ window.__lifetilesRefresh = () => loadDashboards();
             tileName &&
             (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
           ) {
-            // Get current tile count for proper order assignment
-            const existingTiles = Array.from(currentProjectContainer.children)
-                .filter(el => el.classList.contains('tile') && el.dataset.tileId);
+            // Get max order from DB for proper order assignment
+            const existingTiles = await db.tiles.where('projectId').equals(currentProjectId).toArray();
+            const maxOrder = existingTiles.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
 
             const tileData = {
                 id: Date.now().toString(),
@@ -2373,7 +1891,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 url: tileUrl,
                 projectId: currentProjectId,
                 dashboardId: currentDashboardId,
-                order: existingTiles.length
+                order: maxOrder + 1
             };
 
             await saveTile(currentProjectId, tileData);
@@ -2392,9 +1910,9 @@ window.__lifetilesRefresh = () => loadDashboards();
             tileName &&
             (() => { try { const u = new URL(tileUrl); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } })()
           ) {
-            // Get current tile count for proper order assignment
-            const existingTiles = Array.from(currentProjectContainer.children)
-                .filter(el => el.classList.contains('tile') && el.dataset.tileId);
+            // Get max order from DB for proper order assignment
+            const existingTiles = await db.tiles.where('projectId').equals(currentProjectId).toArray();
+            const maxOrder = existingTiles.reduce((max, t) => Math.max(max, t.order ?? -1), -1);
 
             const tileData = {
                 id: Date.now().toString(),
@@ -2402,7 +1920,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 url: tileUrl,
                 projectId: currentProjectId,
                 dashboardId: currentDashboardId,
-                order: existingTiles.length
+                order: maxOrder + 1
             };
 
             await saveTile(currentProjectId, tileData);
@@ -2478,44 +1996,33 @@ window.__lifetilesRefresh = () => loadDashboards();
         dashboardNameInput.value = "";
         validateDashboardInput();
     }
-    async function getNextDashboardOrder(db) {
-        const store = db.transaction(['dashboards'], 'readonly').objectStore('dashboards');
-        const dashboards = await new Promise((res, rej) => {
-          const req = store.getAll();
-          req.onsuccess = () => res(req.result || []);
-          req.onerror = () => rej(req.error);
-        });
+    async function getNextDashboardOrder() {
+        const dashboards = await db.dashboards.toArray();
         const max = dashboards
           .map(d => Number.isFinite(+d.order) ? +d.order : -1)
           .reduce((a, b) => Math.max(a, b), -1);
         return max + 1;
-      }
-      
-      // inside createNewDashboard()
-      async function createNewDashboard() {
+    }
+
+    async function createNewDashboard() {
         const dashboardName = dashboardNameInput.value.trim();
         if (!dashboardName) return;
-      
-        const db = await initDB();
-        const order = await getNextDashboardOrder(db);
-      
+
+        const order = await getNextDashboardOrder();
+
         const dashboardData = {
           id: Date.now().toString(),
           name: dashboardName,
           projects: [],
           order
         };
-      
-        const tx = db.transaction(['dashboards'],'readwrite');
-        tx.objectStore('dashboards').add(dashboardData);
-        tx.oncomplete = async () => {
-          // …your existing UI refresh code
-          localStorage.setItem('currentDashboardId', dashboardData.id);
-          currentDashboardId = dashboardData.id;
-          await loadDashboards();
-          closeDashboardModalHandler();
-        };
-      }
+
+        await db.dashboards.add(dashboardData);
+        localStorage.setItem('currentDashboardId', dashboardData.id);
+        currentDashboardId = dashboardData.id;
+        await loadDashboards();
+        closeDashboardModalHandler();
+    }
       
     function closeAllMenus() {
         const allMenuTriggers = document.querySelectorAll('.project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
@@ -2571,38 +2078,19 @@ window.__lifetilesRefresh = () => loadDashboards();
         list.innerHTML = '';
 
         try {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards', 'projects'], 'readonly');
-            const dashboardStore = tx.objectStore('dashboards');
-            const projectStore = tx.objectStore('projects');
-
             // Get all dashboards
-            let dashboards = await new Promise((resolve, reject) => {
-                const request = dashboardStore.getAll();
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-            });
+            let dashboards = await db.dashboards.toArray();
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
                 const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
                 dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-
             }
 
             // Get project counts for each dashboard
             for (const dashboard of dashboards) {
-                const projects = await new Promise((resolve) => {
-                    const request = projectStore.index('dashboardId').getAll(dashboard.id);
-                    request.onsuccess = () => resolve(request.result || []);
-                });
-                dashboard.projectCount = projects.length;
+                dashboard.projectCount = await db.projects.where('dashboardId').equals(dashboard.id).count();
             }
-
-            // Sort dashboards by order (if available) or by name
-            const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-            dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-
 
             // Create dashboard items
             dashboards.forEach((dashboard, index) => {
@@ -2701,8 +2189,6 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         if (confirm(`Are you sure you want to delete ${selectedIds.length} dashboard${selectedIds.length > 1 ? 's' : ''}? All projects and tiles in them will be removed.`)) {
             try {
-                const db = await initDB();
-
                 // If current dashboard is being deleted, switch to a remaining one first
                 if (currentDashboardBeingDeleted) {
                     const remainingCheckboxes = Array.from(allDashboards).filter(cb => !selectedIds.includes(cb.dataset.dashboardId));
@@ -2716,57 +2202,23 @@ window.__lifetilesRefresh = () => loadDashboards();
                     }
                 }
 
-                // Delete each selected dashboard in a single transaction per dashboard
+                // Delete each selected dashboard
                 for (const dashboardId of selectedIds) {
-                    await new Promise(async (resolveDelete) => {
-                        const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-                        const dashboardStore = tx.objectStore('dashboards');
-                        const projectStore = tx.objectStore('projects');
-                        const tileStore = tx.objectStore('tiles');
+                    // Delete all tiles for projects in this dashboard
+                    const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+                    for (const project of projects) {
+                        await db.tiles.where('projectId').equals(project.id).delete();
+                    }
+                    // Delete all projects for this dashboard
+                    await db.projects.where('dashboardId').equals(dashboardId).delete();
+                    // Delete the dashboard
+                    await db.dashboards.delete(dashboardId);
 
-                        // Delete all projects and tiles for this dashboard
-                        const projects = await new Promise((resolve) => {
-                            const request = projectStore.index('dashboardId').getAll(dashboardId);
-                            request.onsuccess = () => resolve(request.result || []);
-                        });
-
-                        for (const project of projects) {
-                            const tiles = await new Promise((resolve) => {
-                                const request = tileStore.index('projectId').getAll(project.id);
-                                request.onsuccess = () => resolve(request.result || []);
-                            });
-
-                            for (const tile of tiles) {
-                                await new Promise((resolve) => {
-                                    const request = tileStore.delete(tile.id);
-                                    request.onsuccess = resolve;
-                                });
-                            }
-
-                            // Delete the project
-                            await new Promise((resolve) => {
-                                const request = projectStore.delete(project.id);
-                                request.onsuccess = resolve;
-                            });
-                        }
-
-                        // Delete the dashboard
-                        dashboardStore.delete(dashboardId);
-
-                        tx.oncomplete = () => {
-                            // Remove from UI immediately
-                            const item = document.querySelector(`[data-dashboard-id="${dashboardId}"]`);
-                            if (item) {
-                                item.remove();
-                            }
-                            resolveDelete();
-                        };
-
-                        tx.onerror = () => {
-                            console.error('Transaction failed for dashboard:', dashboardId);
-                            resolveDelete();
-                        };
-                    });
+                    // Remove from UI immediately
+                    const item = document.querySelector(`[data-dashboard-id="${dashboardId}"]`);
+                    if (item) {
+                        item.remove();
+                    }
                 }
 
                 // Update UI after all deletions are complete
@@ -2875,30 +2327,13 @@ window.__lifetilesRefresh = () => loadDashboards();
         }
 
         try {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readwrite');
-            const store = tx.objectStore('dashboards');
+            await db.dashboards.update(dashboardId, { name: newName });
+            // Update the manage modal display
+            item.querySelector('.manage-dashboard-name').textContent = newName;
+            item.classList.remove('editing');
 
-            await new Promise((resolve, reject) => {
-                const request = store.get(dashboardId);
-                request.onsuccess = () => {
-                    const dashboard = request.result;
-                    dashboard.name = newName;
-                    const updateRequest = store.put(dashboard);
-                    updateRequest.onsuccess = () => {
-                        // Update the manage modal display
-                        item.querySelector('.manage-dashboard-name').textContent = newName;
-                        item.classList.remove('editing');
-
-                        // Only update the dashboard selector without reloading projects
-                        updateDashboardSelector().then(() => {
-                            resolve();
-                        });
-                    };
-                    updateRequest.onerror = () => reject(updateRequest.error);
-                };
-                request.onerror = () => reject(request.error);
-            });
+            // Only update the dashboard selector without reloading projects
+            await updateDashboardSelector();
         } catch (error) {
             console.error('Error saving dashboard name:', error);
             alert('Error saving dashboard name. Please try again.');
@@ -2907,14 +2342,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function deleteDashboardFromManage(dashboardId, item) {
         try {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const store = tx.objectStore('dashboards');
-
-            const dashboards = await new Promise((resolve) => {
-                const request = store.getAll();
-                request.onsuccess = () => resolve(request.result || []);
-            });
+            const dashboards = await db.dashboards.toArray();
 
             if (dashboards.length <= 1) {
                 alert("Cannot delete the last dashboard");
@@ -2922,41 +2350,15 @@ window.__lifetilesRefresh = () => loadDashboards();
             }
 
             if (confirm('Are you sure you want to delete this dashboard? All projects and tiles in it will be removed.')) {
-                const tx2 = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-                const dashboardStore = tx2.objectStore('dashboards');
-                const projectStore = tx2.objectStore('projects');
-                const tileStore = tx2.objectStore('tiles');
-
-                // Delete all projects and tiles for this dashboard
-                const projects = await new Promise((resolve) => {
-                    const request = projectStore.index('dashboardId').getAll(dashboardId);
-                    request.onsuccess = () => resolve(request.result || []);
-                });
-
+                // Delete all tiles for projects in this dashboard
+                const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
                 for (const project of projects) {
-                    const tiles = await new Promise((resolve) => {
-                        const request = tileStore.index('projectId').getAll(project.id);
-                        request.onsuccess = () => resolve(request.result || []);
-                    });
-
-                    for (const tile of tiles) {
-                        await new Promise((resolve) => {
-                            const request = tileStore.delete(tile.id);
-                            request.onsuccess = resolve;
-                        });
-                    }
-
-                    await new Promise((resolve) => {
-                        const request = projectStore.delete(project.id);
-                        request.onsuccess = resolve;
-                    });
+                    await db.tiles.where('projectId').equals(project.id).delete();
                 }
-
+                // Delete all projects for this dashboard
+                await db.projects.where('dashboardId').equals(dashboardId).delete();
                 // Delete the dashboard
-                await new Promise((resolve) => {
-                    const request = dashboardStore.delete(dashboardId);
-                    request.onsuccess = resolve;
-                });
+                await db.dashboards.delete(dashboardId);
 
                 // Remove from UI
                 const itemEl =
@@ -3009,33 +2411,12 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function updateDashboardOrder(evt) {
         try {
-            const db = await initDB();
-            const tx = db.transaction(['dashboards'], 'readwrite');
-            const store = tx.objectStore('dashboards');
             const items = Array.from(evt.to.children);
 
             // Update order for each dashboard item
-            const promises = items.map(async (item, index) => {
-                const dashboardId = item.dataset.dashboardId;
-                return new Promise((resolve, reject) => {
-                    const request = store.get(dashboardId);
-                    request.onsuccess = () => {
-                        const dashboard = request.result;
-                        if (dashboard) {
-                            dashboard.order = index;
-                            const updateRequest = store.put(dashboard);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        } else {
-                            resolve();
-                        }
-                    };
-                    request.onerror = () => reject(request.error);
-                });
-            });
-
-            // Wait for all updates to complete
-            await Promise.all(promises);
+            await Promise.all(items.map((item, index) =>
+                db.dashboards.update(item.dataset.dashboardId, { order: index })
+            ));
 
             // Only update the dashboard selector without reloading projects
             await updateDashboardSelector();
@@ -3046,21 +2427,12 @@ window.__lifetilesRefresh = () => loadDashboards();
 
     async function updateDashboardSelector() {
         try {
-            const db = await initDB();
-
-            // Get all dashboards
-            let dashboards = await new Promise((resolve, reject) => {
-                const dashboardStore = db.transaction(['dashboards'], 'readonly').objectStore('dashboards');
-                const request = dashboardStore.getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
+            let dashboards = await db.dashboards.toArray();
 
             // Sort dashboards by order property
             if (dashboards && dashboards.length > 0) {
                 const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
                 dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-                
             }
 
             if (dashboards && dashboards.length > 0) {
@@ -3159,24 +2531,14 @@ window.__lifetilesRefresh = () => loadDashboards();
                 const newUrl = tileUrlInput.value.trim();
 
                 if (newName && isValidUrl(newUrl)) {
-                    const db = await initDB();
-                    const tx = db.transaction(['tiles'], 'readwrite');
-                    const store = tx.objectStore('tiles');
+                    await db.tiles.update(tileData.id, { name: newName, url: newUrl });
 
-                    await new Promise((resolve, reject) => {
-                        const request = store.get(tileData.id);
-                        request.onsuccess = () => {
-                            const updatedTileData = request.result;
-                            updatedTileData.name = newName;
-                            updatedTileData.url = newUrl;
-                            const updateRequest = store.put(updatedTileData);
-                            updateRequest.onsuccess = () => resolve();
-                            updateRequest.onerror = () => reject(updateRequest.error);
-                        };
-                        request.onerror = () => reject(request.error);
-                    });
+                    // Update the closure data so click handler uses new URL
+                    tileData.name = newName;
+                    tileData.url = newUrl;
 
                     tile.querySelector('.tile-name').textContent = newName;
+                    tile.setAttribute('title', newName);
                     closeTileModalHandler();
 
                     // Reset the submit button to create mode
@@ -3195,11 +2557,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             e.preventDefault();
             e.stopPropagation();
             if (confirm('Are you sure you want to remove this tile?')) {
-                const db = await initDB();
-                const tx = db.transaction(['tiles'], 'readwrite');
-                const store = tx.objectStore('tiles');
-                const deleteRequest = store.delete(tileData.id);
-                deleteRequest.onsuccess = () => tile.remove();
+                await db.tiles.delete(tileData.id);
+                tile.remove();
             }
         };
 
@@ -3320,31 +2679,16 @@ function getOrderedTileIds(containerEl) {
     try {
       const container = document.getElementById('projects-list');
       const projectEls = Array.from(container.querySelectorAll('.project'));
-      const db = await initDB();
-      const tx = db.transaction(['projects'], 'readwrite');
-      const store = tx.objectStore('projects');
 
-      await Promise.all(projectEls.map((el, index) => new Promise((resolve, reject) => {
-        const id = el.dataset.projectId;
-        const getReq = store.get(id);
-        getReq.onsuccess = () => {
-          const proj = getReq.result;
-          if (!proj) return resolve();
-          proj.order = index;
-          const putReq = store.put(proj);
-          putReq.onsuccess = resolve;
-          putReq.onerror  = () => reject(putReq.error);
-        };
-        getReq.onerror = () => reject(getReq.error);
-      })));
+      await Promise.all(projectEls.map((el, index) =>
+        db.projects.update(el.dataset.projectId, { order: index })
+      ));
     } catch (e) {
       console.error('updateProjectOrder failed:', e);
     }
   }
 async function updateTileOrder(evt, fromProjectId, toProjectId) {
         try {
-            const db = await initDB();
-
             // Ensure we have valid project IDs
             if (!fromProjectId || !toProjectId) {
                 console.error('Invalid project IDs:', fromProjectId, toProjectId);
@@ -3363,10 +2707,10 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
             // Use separate transactions to avoid conflicts
             if (fromProjectId !== toProjectId) {
                 // Handle cross-project move
-                await handleCrossProjectMove(db, draggedTileId, fromProjectId, toProjectId, evt);
+                await handleCrossProjectMove(draggedTileId, fromProjectId, toProjectId, evt);
             } else {
                 // Handle same-project reorder
-                await handleSameProjectReorder(db, toProjectId, evt);
+                await handleSameProjectReorder(toProjectId, evt);
             }
 
             // Remove hover states from all add-tile buttons after drag
@@ -3379,39 +2723,19 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
         }
     }
 
-    async function handleCrossProjectMove(db, draggedTileId, fromProjectId, toProjectId, evt) {
-        // First, update the dragged tile's project
-        const tx1 = db.transaction(['tiles'], 'readwrite');
-        const store1 = tx1.objectStore('tiles');
-
-        await new Promise((resolve, reject) => {
-            const getRequest = store1.get(draggedTileId);
-            getRequest.onsuccess = () => {
-                const tileData = getRequest.result;
-                if (tileData) {
-                    tileData.projectId = toProjectId;
-                    tileData.dashboardId = currentDashboardId;
-                    const putRequest = store1.put(tileData);
-                    putRequest.onsuccess = () => resolve();
-                    putRequest.onerror = () => reject(putRequest.error);
-                } else {
-                    reject(new Error('Tile not found: ' + draggedTileId));
-                }
-            };
-            getRequest.onerror = () => reject(getRequest.error);
-        });
-
-        // Wait for transaction to complete
-        await new Promise(resolve => {
-            tx1.oncomplete = resolve;
+    async function handleCrossProjectMove(draggedTileId, fromProjectId, toProjectId, evt) {
+        // Update the dragged tile's project
+        await db.tiles.update(draggedTileId, {
+            projectId: toProjectId,
+            dashboardId: currentDashboardId
         });
 
         // Then reorder both projects
-        await handleSameProjectReorder(db, fromProjectId, { from: evt.from });
-        await handleSameProjectReorder(db, toProjectId, { to: evt.to });
+        await handleSameProjectReorder(fromProjectId, { from: evt.from });
+        await handleSameProjectReorder(toProjectId, { to: evt.to });
     }
 
-    async function handleSameProjectReorder(db, projectId, evt) {
+    async function handleSameProjectReorder(projectId, evt) {
         const container = evt.to || evt.from;
         if (!container) return;
 
@@ -3420,147 +2744,19 @@ async function updateTileOrder(evt, fromProjectId, toProjectId) {
         );
         if (!tileElements.length) return;
 
-        const tx = db.transaction(['tiles'], 'readwrite');
-        const store = tx.objectStore('tiles');
-
-        const writes = tileElements.map((el, index) => {
-            const tileId = el.dataset.tileId;
-            return new Promise((resolve, reject) => {
-                const getRequest = store.get(tileId);
-                getRequest.onsuccess = () => {
-                    const rec = getRequest.result;
-                    if (!rec) return resolve(); // nothing to do for orphan
-                    // ✅ Always normalize project + sequential order
-                    rec.projectId = String(projectId);
-                    rec.order = Number(index);
-                    const put = store.put(rec);
-                    put.onsuccess = () => resolve();
-                    put.onerror  = () => reject(put.error);
-                };
-                getRequest.onerror = () => reject(getRequest.error);
-            });
-        });
-
-        await Promise.all(writes);
-        // ✅ make sure the transaction actually commits before we return
-        await new Promise(res => { tx.oncomplete = res; });
+        await Promise.all(tileElements.map((el, index) =>
+            db.tiles.update(el.dataset.tileId, {
+                projectId: String(projectId),
+                order: Number(index)
+            })
+        ));
     }
 
-
-
     async function getProjectTiles(projectId) {
-        const db = await initDB();
-        const tx = db.transaction(['tiles'], 'readonly');
-        const tileStore = tx.objectStore('tiles');
-        const tileIndex = tileStore.index('projectId');
-        return new Promise((resolve) => {
-            const request = tileIndex.getAll(projectId);
-            request.onsuccess = () => resolve(request.result || []);
-        });
+        return db.tiles.where('projectId').equals(projectId).toArray();
     }
 });
 
-async function initDB() {
-    return new Promise((resolve, reject) => {
-        // Increment the version number to force an upgrade
-        const request = indexedDB.open('lifetiles', 6);
-
-        request.onerror = (event) => {
-            reject(event.target.error);
-        };
-
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-
-            // Create or update stores
-            if (!db.objectStoreNames.contains('dashboards')) {
-                db.createObjectStore('dashboards', { keyPath: 'id' });
-            }
-            if (!db.objectStoreNames.contains('projects')) {
-                const projectsStore = db.createObjectStore('projects', { keyPath: 'id' });
-                projectsStore.createIndex('dashboardId', 'dashboardId', { unique: false });
-            }
-            if (!db.objectStoreNames.contains('tiles')) {
-                const tilesStore = db.createObjectStore('tiles', { keyPath: 'id' });
-                tilesStore.createIndex('projectId', 'projectId', { unique: false });
-                tilesStore.createIndex('dashboardId', 'dashboardId', { unique: false });
-            }
-            if (!db.objectStoreNames.contains('favicons')) {
-                db.createObjectStore('favicons', { keyPath: 'hostname' });
-            }
-        };
-
-        request.onsuccess = (event) => {
-            resolve(event.target.result);
-        };
-    });
-}
-/*
-async function migrateFromChromeStorage() {
-    try {
-        // Get all data from chrome.storage.sync
-        const data = await new Promise(resolve => {
-            chrome.storage.sync.get(null, resolve);
-        });
-
-        console.log('Retrieved storage data:', data);
-
-        // Check if we have any projects to migrate
-        const projectKeys = Object.keys(data).filter(key => key.startsWith('project_'));
-        if (projectKeys.length === 0) {
-            console.log('No projects found in storage');
-            return false;
-        }
-
-        const db = await initDB();
-        const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
-
-        // Store object stores in variables
-        const dashboardStore = tx.objectStore('dashboards');
-        const projectStore = tx.objectStore('projects');
-        const tileStore = tx.objectStore('tiles');
-
-        // Create default dashboard if none exists
-        const defaultDashboard = {
-            id: Date.now().toString(),
-            name: "Imported Dashboard"
-        };
-        await dashboardStore.put(defaultDashboard);
-
-        // Process projects and tiles
-        for (const [key, value] of Object.entries(data)) {
-            if (key.startsWith('project_')) {
-                // Add project
-                const project = {
-                    id: value.id || key.replace('project_', ''),
-                    name: value.name || 'Imported Project',
-                    dashboardId: defaultDashboard.id
-                };
-                await projectStore.put(project);
-
-                // Process associated tiles
-                if (value.tiles) {
-                    for (const tile of value.tiles) {
-                        await tileStore.put({
-                            id: tile.id || Date.now().toString(),
-                            name: tile.name,
-                            url: tile.url,
-                            projectId: project.id,
-                            dashboardId: defaultDashboard.id
-                        });
-                    }
-                }
-            }
-        }
-
-        console.log('Migration completed successfully');
-        return true;
-    } catch (error) {
-        console.error('Migration failed:', error);
-        return false;
-    }
-}
-*/
   // Close manage dashboards modal
     const closeManageDashboardsBtn = document.getElementById('close-manage-dashboards');
     if (closeManageDashboardsBtn) {
@@ -3576,52 +2772,19 @@ async function migrateFromChromeStorage() {
     // Async functions for getting fresh project and tile data to the edit modals
     }
     async function getTileById(id) {
-        const db = await initDB();
-        const tx = db.transaction('tiles', 'readonly');
-        const store = tx.objectStore('tiles');
-
-        return new Promise((resolve, reject) => {
-            const request = store.get(id);
-            request.onsuccess = () => resolve(request.result || null);
-            request.onerror = () => reject(request.error);
-        });
+        return db.tiles.get(id) || null;
     }
 
     async function getProjectById(id) {
-        const db = await initDB();
-        const tx = db.transaction('projects', 'readonly');
-        const store = tx.objectStore('projects');
-
-        return new Promise((resolve, reject) => {
-          const req = store.get(id);
-          req.onsuccess = () => resolve(req.result || null);
-          req.onerror  = () => reject(req.error);
-        });
-      }
+        return db.projects.get(id) || null;
+    }
 
 
 // Import/Export functions moved from options.js
 async function exportDashboardsJSON() {
-    const db = await initDB();
-    const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readonly');
-    const dashboardStore = tx.objectStore('dashboards');
-    const projectStore = tx.objectStore('projects');
-    const tileStore = tx.objectStore('tiles');
-
-    const dashboards = await new Promise((resolve) => {
-        const request = dashboardStore.getAll();
-        request.onsuccess = () => resolve(request.result || []);
-    });
-
-    const projects = await new Promise((resolve) => {
-        const request = projectStore.getAll();
-        request.onsuccess = () => resolve(request.result || []);
-    });
-
-    const tiles = await new Promise((resolve) => {
-        const request = tileStore.getAll();
-        request.onsuccess = () => resolve(request.result || []);
-    });
+    const dashboards = await db.dashboards.toArray();
+    const projects = await db.projects.toArray();
+    const tiles = await db.tiles.toArray();
 
     const exportData = {
         dashboards,
@@ -3654,29 +2817,17 @@ async function importDashboardsJSON() {
         reader.onload = async (e) => {
             try {
                 const importData = JSON.parse(e.target.result);
-                const db = await initDB();
 
                 // Check for and remove empty default "My Dashboard" before importing
-                const checkTx = db.transaction(['dashboards', 'projects'], 'readwrite');
-                const existingDashboards = await new Promise(resolve => {
-                    const req = checkTx.objectStore('dashboards').getAll();
-                    req.onsuccess = () => resolve(req.result || []);
-                });
-
+                const existingDashboards = await db.dashboards.toArray();
                 for (const dash of existingDashboards) {
                     if (dash.name === 'My Dashboard') {
-                        const projects = await new Promise(resolve => {
-                            const req = checkTx.objectStore('projects').index('dashboardId').getAll(dash.id);
-                            req.onsuccess = () => resolve(req.result || []);
-                        });
-                        // Delete if empty
-                        if (projects.length === 0) {
-                            checkTx.objectStore('dashboards').delete(dash.id);
+                        const projectCount = await db.projects.where('dashboardId').equals(dash.id).count();
+                        if (projectCount === 0) {
+                            await db.dashboards.delete(dash.id);
                         }
                     }
                 }
-
-                const tx = db.transaction(['dashboards', 'projects', 'tiles'], 'readwrite');
 
                 // Import new data while preserving existing
                 for (const dashboard of importData.dashboards) {
@@ -3684,7 +2835,7 @@ async function importDashboardsJSON() {
                         ...dashboard,
                         id: Date.now().toString() + Math.random() // Generate new ID to avoid conflicts
                     };
-                    await tx.objectStore('dashboards').add(newDashboard);
+                    await db.dashboards.add(newDashboard);
 
                     // Update project references to new dashboard ID
                     const dashboardProjects = importData.projects.filter(p => p.dashboardId === dashboard.id);
@@ -3694,15 +2845,14 @@ async function importDashboardsJSON() {
                             ...project,
                             id: Date.now().toString() + Math.random(),
                             dashboardId: newDashboard.id,
-                            // Preserve imported order if present, otherwise assign incrementally
                             order: Number.isFinite(+project.order) ? project.order : projectOrder++
                         };
-                        await tx.objectStore('projects').add(newProject);
+                        await db.projects.add(newProject);
 
                         // Update tile references to new project ID
                         const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
                         for (const tile of projectTiles) {
-                            await tx.objectStore('tiles').add({
+                            await db.tiles.add({
                                 ...tile,
                                 id: Date.now().toString() + Math.random(),
                                 projectId: newProject.id,
@@ -3796,22 +2946,16 @@ async function importGoogleBookmarks() {
     modal.appendChild(content);
     document.body.appendChild(modal);
 
-    // Populate dashboard select using IndexedDB
+    // Populate dashboard select using Dexie
     try {
-        const db = await initDB();
-        const tx = db.transaction(['dashboards'], 'readonly');
-        const store = tx.objectStore('dashboards');
-        const request = store.getAll();
-
-        request.onsuccess = () => {
-            const select = document.getElementById('dashboard-select');
-            request.result.forEach(dashboard => {
-                const option = document.createElement('option');
-                option.value = dashboard.id;
-                option.textContent = dashboard.name;
-                select.appendChild(option);
-            });
-        };
+        const dashboards = await db.dashboards.toArray();
+        const select = document.getElementById('dashboard-select');
+        dashboards.forEach(dashboard => {
+            const option = document.createElement('option');
+            option.value = dashboard.id;
+            option.textContent = dashboard.name;
+            select.appendChild(option);
+        });
     } catch (error) {
         console.error('Error loading dashboards:', error);
         modal.remove();
@@ -3827,22 +2971,14 @@ async function importGoogleBookmarks() {
     document.getElementById('confirm-import').onclick = () => {
         const selectedDashboardId = document.getElementById('dashboard-select').value;
 
-        chrome.bookmarks.getTree(function(bookmarkTree) {
-            // The bookmarks bar is the first child in the bookmark tree
-            const bookmarkBar = bookmarkTree[0].children[0];
-            const projects = processBookmarksBar(bookmarkBar);
-
-            // Save imported projects using IndexedDB
-            initDB().then(async db => {
-                const tx = db.transaction(['projects', 'tiles'], 'readwrite');
-                const projectStore = tx.objectStore('projects');
-                const tileStore = tx.objectStore('tiles');
+        chrome.bookmarks.getTree(async function(bookmarkTree) {
+            try {
+                // The bookmarks bar is the first child in the bookmark tree
+                const bookmarkBar = bookmarkTree[0].children[0];
+                const projects = processBookmarksBar(bookmarkBar);
 
                 // Get existing projects to determine starting order
-                const existingProjects = await new Promise((resolve) => {
-                    const request = projectStore.index('dashboardId').getAll(selectedDashboardId);
-                    request.onsuccess = () => resolve(request.result || []);
-                });
+                const existingProjects = await db.projects.where('dashboardId').equals(selectedDashboardId).toArray();
 
                 // Calculate next order value from existing projects
                 let maxOrder = -1;
@@ -3857,29 +2993,29 @@ async function importGoogleBookmarks() {
                     project.dashboardId = selectedDashboardId;
                     project.order = nextOrder++;
                     // Save project
-                    await projectStore.add(project);
+                    await db.projects.add(project);
 
                     // Add tiles for this project
                     if (project.tiles) {
                         for (const tile of project.tiles) {
                             tile.projectId = project.id;
                             tile.dashboardId = selectedDashboardId;
-                            await tileStore.put(tile);
+                            await db.tiles.put(tile);
                         }
                     }
                 }
 
                 modal.remove();
                 showStatus('Bookmarks imported successfully!');
-                
+
                 // Delay reload to allow status message to be seen
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
-            }).catch(error => {
+            } catch (error) {
                 console.error('Error importing bookmarks:', error);
                 showStatus('Error importing bookmarks');
-            });
+            }
         });
     };
 }
@@ -4080,40 +3216,17 @@ function showStatus(message) {
 
         if (!confirm(message)) return;
 
-        const db = await initDB();
-
-        // Delete projects
+        // Delete projects and their tiles
         const projectIds = selected.filter(s => s.type === 'project').map(s => s.id);
-        if (projectIds.length > 0) {
-            const projectTx = db.transaction(['projects', 'tiles'], 'readwrite');
-            const projectStore = projectTx.objectStore('projects');
-            const tileStore = projectTx.objectStore('tiles');
-
-            for (const projectId of projectIds) {
-                // Delete all tiles in the project
-                const tilesIndex = tileStore.index('projectId');
-                const tilesRequest = tilesIndex.openCursor(IDBKeyRange.only(projectId));
-                tilesRequest.onsuccess = (e) => {
-                    const cursor = e.target.result;
-                    if (cursor) {
-                        tileStore.delete(cursor.value.id);
-                        cursor.continue();
-                    }
-                };
-
-                // Delete the project
-                projectStore.delete(projectId);
-            }
+        for (const projectId of projectIds) {
+            await db.tiles.where('projectId').equals(projectId).delete();
+            await db.projects.delete(projectId);
         }
 
         // Delete individual tiles
         const tileIds = selected.filter(s => s.type === 'tile').map(s => s.id);
-        if (tileIds.length > 0) {
-            const tileTx = db.transaction(['tiles'], 'readwrite');
-            const tileStore = tileTx.objectStore('tiles');
-            for (const tileId of tileIds) {
-                tileStore.delete(tileId);
-            }
+        for (const tileId of tileIds) {
+            await db.tiles.delete(tileId);
         }
 
         // Remove elements from DOM
@@ -4230,16 +3343,7 @@ function showStatus(message) {
 
     // Helper: Show move projects dialog
     async function showMoveProjectsDialog(projects) {
-        const db = await initDB();
-        let dashboards = await new Promise((resolve, reject) => {
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const store = tx.objectStore('dashboards');
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-
-        // Sort by order property
+        let dashboards = await db.dashboards.toArray();
         dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
         const currentDashboardId = window.currentDashboardId;
@@ -4251,17 +3355,8 @@ function showStatus(message) {
         }
 
         showTargetModal('Move to Dashboard', otherDashboards, async (targetDashboard) => {
-            const db = await initDB();
-
             // Get max order in target dashboard
-            const existingProjects = await new Promise((resolve, reject) => {
-                const tx = db.transaction(['projects'], 'readonly');
-                const store = tx.objectStore('projects');
-                const index = store.index('dashboardId');
-                const req = index.getAll(targetDashboard.id);
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => reject(req.error);
-            });
+            const existingProjects = await db.projects.where('dashboardId').equals(targetDashboard.id).toArray();
 
             let maxOrder = -1;
             existingProjects.forEach(p => {
@@ -4272,23 +3367,9 @@ function showStatus(message) {
 
             // Update each project's dashboardId and order
             for (const proj of projects) {
-                await new Promise((resolve, reject) => {
-                    const tx = db.transaction(['projects'], 'readwrite');
-                    const store = tx.objectStore('projects');
-                    const req = store.get(proj.id);
-                    req.onsuccess = () => {
-                        const project = req.result;
-                        if (project) {
-                            project.dashboardId = targetDashboard.id;
-                            project.order = nextOrder++;
-                            const putReq = store.put(project);
-                            putReq.onsuccess = () => resolve();
-                            putReq.onerror = () => reject(putReq.error);
-                        } else {
-                            resolve();
-                        }
-                    };
-                    req.onerror = () => reject(req.error);
+                await db.projects.update(proj.id, {
+                    dashboardId: targetDashboard.id,
+                    order: nextOrder++
                 });
             }
 
@@ -4313,24 +3394,11 @@ function showStatus(message) {
         confirmBtn.classList.remove('enabled');
         confirmBtn.style.backgroundColor = '';
 
-        const db = await initDB();
-
-        // Get all dashboards
-        let dashboards = await new Promise((resolve, reject) => {
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const req = tx.objectStore('dashboards').getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-        });
+        // Get all dashboards and projects
+        let dashboards = await db.dashboards.toArray();
         dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-        // Get all projects
-        let allProjects = await new Promise((resolve, reject) => {
-            const tx = db.transaction(['projects'], 'readonly');
-            const req = tx.objectStore('projects').getAll();
-            req.onsuccess = () => resolve(req.result || []);
-            req.onerror = () => reject(req.error);
-        });
+        let allProjects = await db.projects.toArray();
 
         let selectedProject = null;
         let pendingCreateProject = null; // Reference to active createProject function
@@ -4458,13 +3526,7 @@ function showStatus(message) {
                     // Force visual update
                     confirmBtn.style.backgroundColor = 'var(--color-success)';
 
-                    await new Promise((resolve, reject) => {
-                        const tx = db.transaction(['projects'], 'readwrite');
-                        const store = tx.objectStore('projects');
-                        const req = store.add(newProject);
-                        req.onsuccess = () => resolve();
-                        req.onerror = () => reject(req.error);
-                    });
+                    await db.projects.add(newProject);
 
                     // Add to allProjects for future reference
                     allProjects.push(newProject);
@@ -4575,27 +3637,13 @@ function showStatus(message) {
     // Helper: Show move tiles dialog
     async function showMoveTilesDialog(tiles) {
         showTreeTargetModal('Move to Project', async (targetProject) => {
-            const db = await initDB();
+            // Get max order in target project to append at end
+            const existingTiles = await db.tiles.where('projectId').equals(targetProject.id).toArray();
+            let nextOrder = existingTiles.reduce((max, t) => Math.max(max, t.order ?? -1), -1) + 1;
 
-            // Update each tile's projectId
+            // Update each tile's projectId and order
             for (const tile of tiles) {
-                await new Promise((resolve, reject) => {
-                    const tx = db.transaction(['tiles'], 'readwrite');
-                    const store = tx.objectStore('tiles');
-                    const req = store.get(tile.id);
-                    req.onsuccess = () => {
-                        const tileData = req.result;
-                        if (tileData) {
-                            tileData.projectId = targetProject.id;
-                            const putReq = store.put(tileData);
-                            putReq.onsuccess = () => resolve();
-                            putReq.onerror = () => reject(putReq.error);
-                        } else {
-                            resolve();
-                        }
-                    };
-                    req.onerror = () => reject(req.error);
-                });
+                await db.tiles.update(tile.id, { projectId: targetProject.id, order: nextOrder++ });
             }
 
             // Move tile elements to target container (only works if on same dashboard)
@@ -4625,30 +3673,12 @@ function showStatus(message) {
 
     // Helper: Show copy projects dialog
     async function showCopyProjectsDialog(projects) {
-        const db = await initDB();
-        let dashboards = await new Promise((resolve, reject) => {
-            const tx = db.transaction(['dashboards'], 'readonly');
-            const store = tx.objectStore('dashboards');
-            const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
-
-        // Sort by order property
+        let dashboards = await db.dashboards.toArray();
         dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
         showTargetModal('Copy to Dashboard', dashboards, async (targetDashboard) => {
-            const db = await initDB();
-
             // Get max order in target dashboard
-            const existingProjects = await new Promise((resolve, reject) => {
-                const tx = db.transaction(['projects'], 'readonly');
-                const store = tx.objectStore('projects');
-                const index = store.index('dashboardId');
-                const req = index.getAll(targetDashboard.id);
-                req.onsuccess = () => resolve(req.result || []);
-                req.onerror = () => reject(req.error);
-            });
+            const existingProjects = await db.projects.where('dashboardId').equals(targetDashboard.id).toArray();
 
             let maxOrder = -1;
             existingProjects.forEach(p => {
@@ -4658,14 +3688,7 @@ function showStatus(message) {
             let nextOrder = maxOrder + 1;
 
             for (const proj of projects) {
-                const originalProject = await new Promise((resolve, reject) => {
-                    const tx = db.transaction(['projects'], 'readonly');
-                    const store = tx.objectStore('projects');
-                    const req = store.get(proj.id);
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => reject(req.error);
-                });
-
+                const originalProject = await db.projects.get(proj.id);
                 if (!originalProject) continue;
 
                 const newProjectId = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
@@ -4677,27 +3700,15 @@ function showStatus(message) {
                     order: nextOrder++
                 };
 
-                const projectTx = db.transaction(['projects'], 'readwrite');
-                projectTx.objectStore('projects').add(newProject);
+                await db.projects.add(newProject);
 
-                const originalTiles = await new Promise((resolve, reject) => {
-                    const tx = db.transaction(['tiles'], 'readonly');
-                    const store = tx.objectStore('tiles');
-                    const index = store.index('projectId');
-                    const req = index.getAll(IDBKeyRange.only(proj.id));
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => reject(req.error);
-                });
-
-                const tileTx = db.transaction(['tiles'], 'readwrite');
-                const tileStore = tileTx.objectStore('tiles');
+                const originalTiles = await db.tiles.where('projectId').equals(proj.id).toArray();
                 for (const tile of originalTiles) {
-                    const newTile = {
+                    await db.tiles.add({
                         ...tile,
                         id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
                         projectId: newProjectId
-                    };
-                    tileStore.add(newTile);
+                    });
                 }
             }
 
@@ -4713,17 +3724,9 @@ function showStatus(message) {
     // Helper: Show copy tiles dialog
     async function showCopyTilesDialog(tiles) {
         showTreeTargetModal('Copy to Project', async (targetProject) => {
-            const db = await initDB();
-
             const newTiles = [];
             for (const tile of tiles) {
-                const originalTile = await new Promise((resolve, reject) => {
-                    const readTx = db.transaction(['tiles'], 'readonly');
-                    const store = readTx.objectStore('tiles');
-                    const req = store.get(tile.id);
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => reject(req.error);
-                });
+                const originalTile = await db.tiles.get(tile.id);
 
                 if (originalTile) {
                     const newTile = {
@@ -4731,13 +3734,7 @@ function showStatus(message) {
                         id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
                         projectId: targetProject.id
                     };
-                    await new Promise((resolve, reject) => {
-                        const tx = db.transaction(['tiles'], 'readwrite');
-                        const store = tx.objectStore('tiles');
-                        const req = store.add(newTile);
-                        req.onsuccess = () => resolve();
-                        req.onerror = () => reject(req.error);
-                    });
+                    await db.tiles.add(newTile);
                     newTiles.push(newTile);
                 }
             }
