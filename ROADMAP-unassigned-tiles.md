@@ -1,21 +1,21 @@
-# Loose Tiles Feature Roadmap
+# Unassigned Tiles Feature Roadmap
 
 ## Overview
-Add a "loose tiles" system that allows users to save bookmarks without immediately assigning them to a project. Two levels:
-1. **Global loose tiles** - quick-save default, appears above dashboards in sidebar
-2. **Per-dashboard loose tiles** - tiles assigned to a dashboard but not yet a project
+Add an "unassigned tiles" system that allows users to save bookmarks without immediately assigning them to a project. Two levels:
+1. **Global unassigned tiles** - quick-save default, appears above dashboards in sidebar
+2. **Per-dashboard unassigned tiles** - tiles assigned to a dashboard but not yet a project
 
 ---
 
 ## Design Summary
 
 ### Data Model
-- One global loose project (`dashboardId: null` or special flag)
-- One loose project per dashboard (auto-created, `isLoose: true` or similar)
+- One global unassigned project (`dashboardId: null` or special flag)
+- One unassigned project per dashboard (auto-created, `isUnassigned: true` or similar)
 
 ### Sidebar
 ```
-📌 Loose Tiles (global)        ← clickable, shows global loose view
+📌 Unassigned Tiles (global)    ← clickable, shows global unassigned view
 ─────────────────
 📊 Dashboard 1  [📁]           ← folder icon replaces blue dot
 📊 Dashboard 2  [📁]
@@ -26,7 +26,7 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 ### Main Content Area (Dashboard View)
 ```
 ┌─────────────────────────────┐
-│ 📌 Loose Tiles (3)          │  ← dashboard's loose, no project header
+│ 📌 Unassigned Tiles (3)     │  ← dashboard's unassigned, no project header
 │ [tile] [tile] [tile]        │
 ├─────────────────────────────┤
 │ ▼ Project A                 │
@@ -39,11 +39,11 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 ### Popup
 ```
 ┌─────────────────────────────┐
-│ [━━━━━━ Save ━━━━━━]        │  ← saves to global loose
+│ [━━━━━━ Save ━━━━━━]        │  ← saves to global unassigned
 │                             │
 │ ▼ Save to project...        │
 │   ▼ Dashboard 1             │
-│      📌 Loose               │
+│      📌 Unassigned          │
 │      📁 Project A           │
 │      📁 Project B           │
 │      + New Project          │
@@ -54,23 +54,23 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 ```
 
 ### Drag Behavior
-- Global loose → collapsed dashboard in sidebar = dashboard's loose tiles
-- Global loose → expanded project in sidebar = that project
-- Dashboard loose → project (within same view) = that project
+- Global unassigned → collapsed dashboard in sidebar = dashboard's unassigned tiles
+- Global unassigned → expanded project in sidebar = that project
+- Dashboard unassigned → project (within same view) = that project
 
 ---
 
 ## Phase 1: Data Model
 
 ### Schema Changes
-- Add `isLoose: true` flag to project schema (or use reserved name like `__loose__`)
-- Global loose project: `{ id: 'global-loose', dashboardId: null, isLoose: true, name: 'Loose Tiles' }`
-- Per-dashboard loose: `{ id: '{dashboardId}-loose', dashboardId: '{id}', isLoose: true, name: 'Loose Tiles' }`
+- Add `isUnassigned: true` flag to project schema (or use reserved name like `__unassigned__`)
+- Global unassigned project: `{ id: 'global-unassigned', dashboardId: null, isUnassigned: true, name: 'Unassigned Tiles' }`
+- Per-dashboard unassigned: `{ id: '{dashboardId}-unassigned', dashboardId: '{id}', isUnassigned: true, name: 'Unassigned Tiles' }`
 
 ### Auto-creation
-- Create global loose project on first run (if not exists)
-- Create per-dashboard loose project when dashboard is created
-- Migration: create loose projects for existing dashboards
+- Create global unassigned project on first run (if not exists)
+- Create per-dashboard unassigned project when dashboard is created
+- Migration: create unassigned projects for existing dashboards
 
 ---
 
@@ -78,7 +78,7 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 
 ### Sidebar Redesign
 ```
-📌 Loose Tiles (global)        ← clickable, shows global loose view
+📌 Unassigned Tiles (global)    ← clickable, shows global unassigned view
 ─────────────────
 📊 Dashboard 1  [📁]           ← folder icon replaces blue dot
 📊 Dashboard 2  [📁]
@@ -87,7 +87,7 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 ```
 
 ### Implementation
-- [ ] Add "Loose Tiles" section above dashboard list
+- [ ] Add "Unassigned Tiles" section above dashboard list
 - [ ] Replace selected indicator (blue dot) with folder icon
 - [ ] Folder icon click → toggle inline project list
 - [ ] Click dashboard name → load dashboard (existing behavior)
@@ -97,16 +97,16 @@ Add a "loose tiles" system that allows users to save bookmarks without immediate
 
 ## Phase 3: Main Page UI - Content Area
 
-### Global Loose View
-When "Loose Tiles" clicked in sidebar:
+### Global Unassigned View
+When "Unassigned Tiles" clicked in sidebar:
 - Flat grid of tiles, no project structure
 - No project headers or collapse controls
 - Drag tiles to sidebar dashboards/projects to organize
 
-### Dashboard View with Loose Section
+### Dashboard View with Unassigned Section
 ```
 ┌─────────────────────────────┐
-│ 📌 Loose Tiles (3)          │  ← subtle header, not collapsible
+│ 📌 Unassigned Tiles (3)     │  ← subtle header, not collapsible
 │ [tile] [tile] [tile]        │
 ├─────────────────────────────┤
 │ ▼ Project A                 │  ← normal project rendering
@@ -115,10 +115,10 @@ When "Loose Tiles" clicked in sidebar:
 ```
 
 ### Implementation
-- [ ] New view mode for global loose tiles
-- [ ] Render dashboard loose tiles above projects
-- [ ] Hide loose section if empty (or show placeholder?)
-- [ ] Loose tiles should be draggable to projects below
+- [ ] New view mode for global unassigned tiles
+- [ ] Render dashboard unassigned tiles above projects
+- [ ] Hide unassigned section if empty (or show placeholder?)
+- [ ] Unassigned tiles should be draggable to projects below
 
 ---
 
@@ -127,13 +127,13 @@ When "Loose Tiles" clicked in sidebar:
 ### Drag Behaviors
 | From | To | Result |
 |------|-----|--------|
-| Global loose tile | Collapsed dashboard in sidebar | → Dashboard's loose tiles |
-| Global loose tile | Expanded project in sidebar | → That project |
-| Global loose tile | Project in content area | → That project |
-| Dashboard loose tile | Project in same dashboard | → That project |
+| Global unassigned tile | Collapsed dashboard in sidebar | → Dashboard's unassigned tiles |
+| Global unassigned tile | Expanded project in sidebar | → That project |
+| Global unassigned tile | Project in content area | → That project |
+| Dashboard unassigned tile | Project in same dashboard | → That project |
 
 ### Implementation
-- [ ] Enable drag from global loose view to sidebar
+- [ ] Enable drag from global unassigned view to sidebar
 - [ ] Detect drop target (dashboard vs project)
 - [ ] Update tile's `projectId` accordingly
 - [ ] Visual feedback during drag (highlight valid targets)
@@ -145,11 +145,11 @@ When "Loose Tiles" clicked in sidebar:
 ### New Layout
 ```
 ┌─────────────────────────────┐
-│ [━━━━━━ Save ━━━━━━]        │  ← saves to global loose
+│ [━━━━━━ Save ━━━━━━]        │  ← saves to global unassigned
 │                             │
 │ ▼ Save to project...        │
 │   ▼ Dashboard 1             │
-│      📌 Loose               │
+│      📌 Unassigned          │
 │      📁 Project A           │
 │      📁 Project B           │
 │      + New Project          │
@@ -160,9 +160,9 @@ When "Loose Tiles" clicked in sidebar:
 ```
 
 ### Implementation
-- [ ] Top "Save" button → saves to global loose project
+- [ ] Top "Save" button → saves to global unassigned project
 - [ ] Collapsible dashboard tree with projects
-- [ ] Each dashboard shows its loose option + projects
+- [ ] Each dashboard shows its unassigned option + projects
 - [ ] "+ New Project" inside each dashboard
 - [ ] "+ New Dashboard" at bottom
 - [ ] Remove old project dropdown UI
@@ -171,38 +171,38 @@ When "Loose Tiles" clicked in sidebar:
 
 ## Phase 6: Polish & Edge Cases
 
-- [ ] Empty states (no loose tiles messaging)
-- [ ] Bulk operations on loose tiles
-- [ ] Search includes loose tiles
+- [ ] Empty states (no unassigned tiles messaging)
+- [ ] Bulk operations on unassigned tiles
+- [ ] Search includes unassigned tiles
 - [ ] Keyboard navigation in new popup
 - [ ] Animation for drag feedback
-- [ ] Sync loose tile counts in sidebar badges?
+- [ ] Sync unassigned tile counts in sidebar badges?
 
 ---
 
 ## Implementation Order
 
 1. **Data model** - schema + auto-creation (foundation)
-2. **Dashboard loose section** - render loose above projects (visible progress)
-3. **Sidebar loose section** - global loose clickable area
-4. **Global loose view** - flat grid when clicked
+2. **Dashboard unassigned section** - render unassigned above projects (visible progress)
+3. **Sidebar unassigned section** - global unassigned clickable area
+4. **Global unassigned view** - flat grid when clicked
 5. **Sidebar folder expansion** - show projects inline
-6. **Drag to organize** - drag loose → dashboard/project
+6. **Drag to organize** - drag unassigned → dashboard/project
 7. **Popup redesign** - new save flow
 
 ---
 
 ## Questions to Resolve
 
-- Should empty loose sections be hidden or show a placeholder?
-- Badge/count for loose tiles in sidebar?
-- Limit on loose tiles before prompting to organize?
-- Should global loose tiles be synced across devices differently?
+- Should empty unassigned sections be hidden or show a placeholder?
+- Badge/count for unassigned tiles in sidebar?
+- Limit on unassigned tiles before prompting to organize?
+- Should global unassigned tiles be synced across devices differently?
 
 ---
 
 ## Notes
 
-- Keep existing tile schema, only add `isLoose` to projects
-- Loose projects are hidden from normal project lists
+- Keep existing tile schema, only add `isUnassigned` to projects
+- Unassigned projects are hidden from normal project lists
 - Consider feature flag for gradual rollout
