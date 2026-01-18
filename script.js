@@ -1,5 +1,8 @@
 const __ltOnsiteBlocked = new Set();
 
+// Global unassigned project ID (special project for tiles not assigned to any dashboard)
+const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
+
 let lifetilesBC = null;
 
 let __ltRefreshScheduled = false;
@@ -332,6 +335,42 @@ function wireLiveUpdates() {
     }
   }
 
+/**
+ * Ensure unassigned projects exist:
+ * - One global unassigned project (dashboardId: null)
+ * - One per-dashboard unassigned project for each dashboard
+ */
+async function ensureUnassignedProjects() {
+    // Ensure global unassigned project exists
+    const globalUnassigned = await db.projects.get(GLOBAL_UNASSIGNED_ID);
+    if (!globalUnassigned) {
+        await db.projects.add({
+            id: GLOBAL_UNASSIGNED_ID,
+            dashboardId: null,
+            name: 'Unassigned Tiles',
+            isUnassigned: true,
+            order: -1 // Always first
+        });
+        console.log('Created global unassigned project');
+    }
+
+    // Ensure each dashboard has an unassigned project
+    const dashboards = await db.dashboards.toArray();
+    for (const dashboard of dashboards) {
+        const unassignedId = `${dashboard.id}-unassigned`;
+        const existing = await db.projects.get(unassignedId);
+        if (!existing) {
+            await db.projects.add({
+                id: unassignedId,
+                dashboardId: dashboard.id,
+                name: 'Unassigned Tiles',
+                isUnassigned: true,
+                order: -1 // Always first within dashboard
+            });
+            console.log(`Created unassigned project for dashboard: ${dashboard.name}`);
+        }
+    }
+}
 
 document.addEventListener("DOMContentLoaded", async function () {
     wireLiveUpdates();
@@ -643,7 +682,11 @@ document.addEventListener("DOMContentLoaded", async function () {
     let currentProjectContainer = null;
     let currentProjectId = null;
     let currentDashboardId = null;
+    let isViewingGlobalUnassigned = false; // Track if viewing global unassigned view
     let draggedProjectId = null; // Track project being dragged to sidebar
+    let draggedTileId = null; // Track tile being dragged (for sidebar drops)
+    let draggedTileElement = null; // Track tile element being dragged
+    let tileDroppedOnSidebar = false; // Flag when tile dropped on sidebar
 
     // Helper: Get the next available order for a new project in a dashboard
     async function getNextProjectOrder(dashboardId) {
@@ -911,6 +954,9 @@ new Sortable(document.getElementById('projects-list'), {
     // Storage functions
     async function loadDashboards() {
         try {
+            // Ensure unassigned projects exist (global + per-dashboard)
+            await ensureUnassignedProjects();
+
             // Get all dashboards
             let dashboards = await db.dashboards.toArray();
 
@@ -961,14 +1007,27 @@ new Sortable(document.getElementById('projects-list'), {
             projectsList.innerHTML = '';
 
             // Load projects for current dashboard
-            const projects = await db.projects.where('dashboardId').equals(validCurrentId).toArray();
+            const allProjects = await db.projects.where('dashboardId').equals(validCurrentId).toArray();
 
-            // Load all tiles for the projects
-            for (const project of projects) {
+            // Separate unassigned project from regular projects
+            const unassignedProject = allProjects.find(p => p.isUnassigned);
+            const regularProjects = allProjects.filter(p => !p.isUnassigned);
+
+            // Load tiles for unassigned project
+            if (unassignedProject) {
+                unassignedProject.tiles = await db.tiles.where('projectId').equals(unassignedProject.id).toArray();
+            }
+
+            // Load all tiles for regular projects
+            for (const project of regularProjects) {
                 project.tiles = await db.tiles.where('projectId').equals(project.id).toArray();
             }
 
-            loadProjects(projects);
+            // Render unassigned section above projects
+            await renderUnassignedSection(unassignedProject);
+
+            // Render regular projects
+            await loadProjects(regularProjects);
             currentDashboardId = validCurrentId;
 
             return dashboards;
@@ -997,11 +1056,89 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     // Render sidebar with all dashboards
-    function renderSidebar(dashboards, currentId) {
+    async function renderSidebar(dashboards, currentId) {
         const list = document.getElementById('sidebar-list');
         if (!list) return;
 
         list.innerHTML = '';
+
+        // Add global unassigned entry at the top
+        const globalUnassignedLi = document.createElement('li');
+        globalUnassignedLi.className = 'sidebar-item sidebar-item-unassigned';
+        globalUnassignedLi.setAttribute('role', 'option');
+        globalUnassignedLi.dataset.dashboardId = GLOBAL_UNASSIGNED_ID;
+
+        // Get count of global unassigned tiles
+        const globalUnassignedTiles = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).toArray();
+        const tileCount = globalUnassignedTiles.length;
+
+        globalUnassignedLi.innerHTML = `
+            <span class="unassigned-icon">📌</span>
+            <span class="label">Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}</span>
+        `;
+
+        // Set selected state
+        globalUnassignedLi.setAttribute('aria-selected', String(isViewingGlobalUnassigned));
+        globalUnassignedLi.tabIndex = isViewingGlobalUnassigned ? 0 : -1;
+
+        // Click to view global unassigned
+        globalUnassignedLi.addEventListener('click', () => {
+            switchToGlobalUnassigned();
+        });
+
+        // Make it a drop target for tiles
+        globalUnassignedLi.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            globalUnassignedLi.classList.add('drag-hover');
+        });
+
+        globalUnassignedLi.addEventListener('dragleave', (e) => {
+            if (!globalUnassignedLi.contains(e.relatedTarget)) {
+                globalUnassignedLi.classList.remove('drag-hover');
+            }
+        });
+
+        globalUnassignedLi.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            globalUnassignedLi.classList.remove('drag-hover');
+
+            if (draggedTileId) {
+                // Set flag SYNCHRONOUSLY so Sortable's onEnd knows to skip processing
+                tileDroppedOnSidebar = true;
+
+                // Capture the ID before any async operations
+                const tileId = draggedTileId;
+
+                // Remove the tile from DOM immediately (sync)
+                const tileEl = document.querySelector(`.tile[data-tile-id="${tileId}"]`);
+                if (tileEl) tileEl.remove();
+
+                // Do DB operations async
+                (async () => {
+                    // Move tile to global unassigned in DB
+                    await db.tiles.update(tileId, { projectId: GLOBAL_UNASSIGNED_ID });
+
+                    // Update the count in sidebar
+                    const newCount = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).count();
+                    const label = globalUnassignedLi.querySelector('.label');
+                    if (label) {
+                        label.textContent = `Unassigned${newCount > 0 ? ` (${newCount})` : ''}`;
+                    }
+
+                    // Update source container's empty state
+                    updateUnassignedEmptyState();
+                })();
+            }
+        });
+
+        list.appendChild(globalUnassignedLi);
+
+        // Add separator
+        const separator = document.createElement('li');
+        separator.className = 'sidebar-separator';
+        separator.setAttribute('role', 'separator');
+        list.appendChild(separator);
 
         // Sort dashboards by order
         const sortedDashboards = dashboards.slice().sort((a, b) => {
@@ -1012,8 +1149,10 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         sortedDashboards.forEach(dashboard => {
             const li = createSidebarItem(dashboard);
-            li.setAttribute('aria-selected', String(dashboard.id === currentId));
-            li.tabIndex = dashboard.id === currentId ? 0 : -1;
+            // Only select dashboard if not viewing global unassigned
+            const isSelected = !isViewingGlobalUnassigned && dashboard.id === currentId;
+            li.setAttribute('aria-selected', String(isSelected));
+            li.tabIndex = isSelected ? 0 : -1;
 
             // Click to select dashboard
             li.addEventListener('click', (e) => {
@@ -1037,15 +1176,65 @@ window.__lifetilesRefresh = () => loadDashboards();
                 deleteDashboardFromSidebar(dashboard.id);
             });
 
+            // Make dashboard a drop target for tiles (goes to dashboard's unassigned)
+            li.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                li.classList.add('drag-hover');
+            });
+
+            li.addEventListener('dragleave', (e) => {
+                if (!li.contains(e.relatedTarget)) {
+                    li.classList.remove('drag-hover');
+                }
+            });
+
+            li.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                li.classList.remove('drag-hover');
+
+                if (draggedTileId) {
+                    // Get the dashboard's unassigned project ID
+                    const unassignedProjectId = `${dashboard.id}-unassigned`;
+
+                    // Set flag SYNCHRONOUSLY so Sortable's onEnd knows to skip processing
+                    tileDroppedOnSidebar = true;
+
+                    // Capture the ID before any async operations
+                    const tileId = draggedTileId;
+
+                    // Remove the tile from DOM immediately (sync)
+                    const tileEl = document.querySelector(`.tile[data-tile-id="${tileId}"]`);
+                    if (tileEl) tileEl.remove();
+
+                    // Do DB operations async
+                    (async () => {
+                        // Move tile to dashboard's unassigned in DB
+                        await db.tiles.update(tileId, { projectId: unassignedProjectId });
+
+                        // Update source container's empty state
+                        updateUnassignedEmptyState();
+
+                        // If we're currently viewing this dashboard, refresh to show the tile
+                        if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
+                            await loadProjectsForDashboard(dashboard.id);
+                        }
+                    })();
+                }
+            });
+
             list.appendChild(li);
         });
 
-        // Optional: Make sidebar sortable for reordering
+        // Optional: Make sidebar sortable for reordering (exclude unassigned and separator)
         if (window.Sortable && !list.__sortable) {
             list.__sortable = new Sortable(list, {
                 animation: 150,
+                filter: '.sidebar-item-unassigned, .sidebar-separator',
                 onEnd: async () => {
-                    const ids = [...list.querySelectorAll('.sidebar-item')].map(li => li.dataset.dashboardId);
+                    const ids = [...list.querySelectorAll('.sidebar-item:not(.sidebar-item-unassigned)')]
+                        .map(li => li.dataset.dashboardId)
+                        .filter(id => id && id !== GLOBAL_UNASSIGNED_ID);
                     await updateDashboardOrderFromSidebar(ids);
                 }
             });
@@ -1298,8 +1487,17 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     async function switchDashboard(dashboardId) {
-        // Skip if already on this dashboard
-        if (dashboardId === currentDashboardId) return;
+        // Skip if already on this dashboard and not viewing global unassigned
+        if (dashboardId === currentDashboardId && !isViewingGlobalUnassigned) return;
+
+        // Exit global unassigned view
+        isViewingGlobalUnassigned = false;
+
+        // Show project controls (hidden in global unassigned view)
+        const newProjectBtn = document.getElementById('new-project');
+        const projectControlsRight = document.querySelector('.project-controls-right');
+        if (newProjectBtn) newProjectBtn.style.display = '';
+        if (projectControlsRight) projectControlsRight.style.display = '';
 
         // Update active sidebar item and get dashboard name
         let dashboardName = '';
@@ -1307,7 +1505,7 @@ window.__lifetilesRefresh = () => loadDashboards();
             const isActive = item.dataset.dashboardId === dashboardId;
             item.setAttribute('aria-selected', String(isActive));
             item.tabIndex = isActive ? 0 : -1;
-            if (isActive) {
+            if (isActive && !item.classList.contains('sidebar-item-unassigned')) {
                 const nameSpan = item.querySelector('.label');
                 dashboardName = nameSpan ? nameSpan.textContent : '';
             }
@@ -1325,6 +1523,252 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         // Load projects for selected dashboard
         await loadProjectsForDashboard(dashboardId);
+    }
+
+    /**
+     * Switch to viewing global unassigned tiles
+     */
+    async function switchToGlobalUnassigned() {
+        // Skip if already viewing
+        if (isViewingGlobalUnassigned) return;
+
+        isViewingGlobalUnassigned = true;
+
+        // Update active sidebar item
+        document.querySelectorAll('.sidebar-item').forEach(item => {
+            const isUnassigned = item.classList.contains('sidebar-item-unassigned');
+            item.setAttribute('aria-selected', String(isUnassigned));
+            item.tabIndex = isUnassigned ? 0 : -1;
+        });
+
+        // Update dashboard title
+        if (currentDashboardTitle) currentDashboardTitle.textContent = 'Unassigned Tiles';
+
+        // Hide project controls (not applicable in global unassigned view)
+        const newProjectBtn = document.getElementById('new-project');
+        const projectControlsRight = document.querySelector('.project-controls-right');
+        if (newProjectBtn) newProjectBtn.style.display = 'none';
+        if (projectControlsRight) projectControlsRight.style.display = 'none';
+
+        // Clear projects list
+        projectsList.innerHTML = '';
+
+        // Load and display global unassigned tiles
+        await loadGlobalUnassignedView();
+    }
+
+    /**
+     * Load and display the global unassigned tiles view (flat grid, no projects)
+     */
+    async function loadGlobalUnassignedView() {
+        const tiles = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).toArray();
+
+        // Sort tiles by order
+        tiles.sort((a, b) => {
+            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+            return ao - bo || String(a.id).localeCompare(String(b.id));
+        });
+
+        // Create container for global unassigned view
+        const container = document.createElement('div');
+        container.className = 'global-unassigned-view';
+
+        if (tiles.length === 0) {
+            // Empty state
+            container.innerHTML = `
+                <div class="global-unassigned-empty">
+                    <p>No unassigned tiles</p>
+                    <p class="hint">Save tiles from the browser extension without assigning them to a project, and they'll appear here.</p>
+                </div>
+            `;
+        } else {
+            // Tiles grid
+            container.innerHTML = `<div class="tiles-grid global-unassigned-tiles"></div>`;
+            const tilesGrid = container.querySelector('.global-unassigned-tiles');
+
+            for (const tile of tiles) {
+                await createTileElement(tilesGrid, tile);
+            }
+
+            // Make tiles sortable
+            if (window.Sortable) {
+                new Sortable(tilesGrid, {
+                    group: 'tiles',
+                    animation: 150,
+                    draggable: '.tile',
+                    ghostClass: 'sortable-ghost',
+                    chosenClass: 'sortable-chosen',
+                    dragClass: 'sortable-drag',
+                    onStart: function(evt) {
+                        document.body.classList.add('dragging');
+                        draggedTileId = evt.item.dataset.tileId;
+                        draggedTileElement = evt.item;
+                    },
+                    onEnd: async function(evt) {
+                        document.body.classList.remove('dragging');
+
+                        // If tile was dropped on sidebar, skip processing
+                        if (tileDroppedOnSidebar) {
+                            tileDroppedOnSidebar = false;
+                            draggedTileId = null;
+                            draggedTileElement = null;
+                            return;
+                        }
+
+                        // Resequence tiles
+                        const resequenceContainer = async (container) => {
+                            if (!container) return;
+                            const tileEls = [...container.querySelectorAll('.tile[data-tile-id]')];
+                            await Promise.all(tileEls.map((el, idx) =>
+                                db.tiles.update(el.dataset.tileId, {
+                                    projectId: GLOBAL_UNASSIGNED_ID,
+                                    order: idx
+                                })
+                            ));
+                        };
+
+                        await resequenceContainer(evt.from);
+                        if (evt.to !== evt.from) {
+                            await resequenceContainer(evt.to);
+                        }
+
+                        // Clear tracked tile
+                        draggedTileId = null;
+                        draggedTileElement = null;
+                    }
+                });
+            }
+        }
+
+        projectsList.appendChild(container);
+    }
+
+    /**
+     * Render the unassigned tiles section above regular projects.
+     * Always shows a tiles grid (even when empty) for drag-drop support.
+     */
+    async function renderUnassignedSection(unassignedProject) {
+        // Remove existing unassigned section if any
+        const existingSection = document.getElementById('unassigned-section');
+        if (existingSection) existingSection.remove();
+
+        const tiles = unassignedProject?.tiles || [];
+        const section = document.createElement('div');
+        section.id = 'unassigned-section';
+        section.className = 'unassigned-section';
+        section.dataset.projectId = unassignedProject?.id || '';
+
+        if (tiles.length === 0) {
+            section.classList.add('empty');
+        }
+
+        // Always create the structure with tiles grid for drop support
+        section.innerHTML = `
+            <div class="unassigned-header">
+                <span class="unassigned-label">📌 Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
+            </div>
+            <div class="unassigned-tiles tiles-grid"></div>
+        `;
+
+        const tilesGrid = section.querySelector('.unassigned-tiles');
+
+        if (tiles.length > 0) {
+            // Sort and render tiles
+            tiles.sort((a, b) => {
+                const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+                const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+                return ao - bo || String(a.id).localeCompare(String(b.id));
+            });
+
+            for (const tile of tiles) {
+                await createTileElement(tilesGrid, tile);
+            }
+        }
+
+        // Make tiles sortable within this section (same group as project tiles)
+        if (window.Sortable && unassignedProject?.id) {
+            new Sortable(tilesGrid, {
+                group: 'tiles',
+                animation: 150,
+                draggable: '.tile',
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                dragClass: 'sortable-drag',
+                emptyInsertThreshold: 50, // Pixels from empty zone to trigger insert
+                onStart: function(evt) {
+                    document.body.classList.add('dragging');
+                    section.classList.add('drag-active');
+                    // Track dragged tile for sidebar drops
+                    draggedTileId = evt.item.dataset.tileId;
+                    draggedTileElement = evt.item;
+                },
+                onEnd: async function(evt) {
+                    document.body.classList.remove('dragging');
+                    section.classList.remove('drag-active');
+
+                    // If tile was dropped on sidebar, skip processing
+                    if (tileDroppedOnSidebar) {
+                        tileDroppedOnSidebar = false;
+                        draggedTileId = null;
+                        draggedTileElement = null;
+                        return;
+                    }
+
+                    // Resequence tiles in both source and target containers
+                    const resequenceContainer = async (container) => {
+                        if (!container) return;
+                        const parent = container.closest('.project') || container.closest('.unassigned-section');
+                        if (!parent) return;
+                        const projectId = String(parent.dataset.projectId);
+
+                        const tileEls = [...container.querySelectorAll('.tile[data-tile-id]')];
+                        await Promise.all(tileEls.map((el, idx) =>
+                            db.tiles.update(el.dataset.tileId, {
+                                projectId: projectId,
+                                order: idx
+                            })
+                        ));
+                    };
+
+                    await resequenceContainer(evt.from);
+                    await resequenceContainer(evt.to);
+
+                    // Update empty state
+                    updateUnassignedEmptyState();
+
+                    // Clear tracked tile
+                    draggedTileId = null;
+                    draggedTileElement = null;
+                }
+            });
+        }
+
+        // Insert at the top of projects list
+        projectsList.insertBefore(section, projectsList.firstChild);
+    }
+
+    /**
+     * Update the empty state class on unassigned section
+     */
+    function updateUnassignedEmptyState() {
+        const section = document.getElementById('unassigned-section');
+        if (!section) return;
+
+        const tilesGrid = section.querySelector('.unassigned-tiles');
+        const tileCount = tilesGrid?.querySelectorAll('.tile').length || 0;
+
+        if (tileCount === 0) {
+            section.classList.add('empty');
+        } else {
+            section.classList.remove('empty');
+        }
+
+        // Update count in label
+        const label = section.querySelector('.unassigned-label');
+        if (label) {
+            label.textContent = `📌 Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
+        }
     }
 
     async function loadProjects(projects = []) {
@@ -1368,8 +1812,22 @@ window.__lifetilesRefresh = () => loadDashboards();
     }
 
     async function loadProjectsForDashboard(dashboardId) {
-        const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
-        await loadProjects(projects);
+        const allProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+
+        // Separate unassigned project from regular projects
+        const unassignedProject = allProjects.find(p => p.isUnassigned);
+        const regularProjects = allProjects.filter(p => !p.isUnassigned);
+
+        // Load tiles for unassigned project
+        if (unassignedProject) {
+            unassignedProject.tiles = await db.tiles.where('projectId').equals(unassignedProject.id).toArray();
+        }
+
+        // Render unassigned section
+        await renderUnassignedSection(unassignedProject);
+
+        // Load regular projects
+        await loadProjects(regularProjects);
     }
 
     async function saveProject(projectData) {
@@ -1795,12 +2253,12 @@ window.__lifetilesRefresh = () => loadDashboards();
                     btn.classList.add('dragging-disabled');
                 });
 
-                // Ensure the dragged item has its tile ID
-                const tileId = evt.item.dataset.tileId;
-                if (!tileId) {
+                // Track dragged tile for sidebar drops
+                draggedTileId = evt.item.dataset.tileId;
+                draggedTileElement = evt.item;
+
+                if (!draggedTileId) {
                     console.error('Dragged tile missing ID:', evt.item);
-                } else {
-                    console.log('Starting drag for tile:', tileId);
                 }
             },
             onEnd: async function (evt) {
@@ -1815,6 +2273,14 @@ window.__lifetilesRefresh = () => loadDashboards();
                     });
                 });
 
+                // If tile was dropped on sidebar, skip Sortable processing
+                if (tileDroppedOnSidebar) {
+                    tileDroppedOnSidebar = false;
+                    draggedTileId = null;
+                    draggedTileElement = null;
+                    return;
+                }
+
                 // Move the add tile button to the end
                 const addTileButton = evt.to.querySelector('.add-tile-button');
                 if (addTileButton) {
@@ -1823,7 +2289,8 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                 const resequence = async (container) => {
                     if (!container) return;
-                    const projEl = container.closest('.project');
+                    // Check for project or unassigned section
+                    const projEl = container.closest('.project') || container.closest('.unassigned-section');
                     if (!projEl) return;
                     const projectId = String(projEl.dataset.projectId);
 
@@ -1840,6 +2307,13 @@ window.__lifetilesRefresh = () => loadDashboards();
                 // handle same-project and cross-project moves
                 await resequence(evt.from);
                 await resequence(evt.to);
+
+                // Update unassigned section empty state if involved
+                updateUnassignedEmptyState();
+
+                // Clear tracked tile
+                draggedTileId = null;
+                draggedTileElement = null;
             },
             onMove: function(evt) {
                 return !evt.related.classList.contains('add-tile-button');

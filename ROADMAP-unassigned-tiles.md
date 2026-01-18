@@ -87,7 +87,7 @@ Add an "unassigned tiles" system that allows users to save bookmarks without imm
 ```
 
 ### Implementation
-- [ ] Add "Unassigned Tiles" section above dashboard list
+- [x] Add "Unassigned Tiles" section above dashboard list
 - [ ] Replace selected indicator (blue dot) with folder icon
 - [ ] Folder icon click → toggle inline project list
 - [ ] Click dashboard name → load dashboard (existing behavior)
@@ -115,10 +115,10 @@ When "Unassigned Tiles" clicked in sidebar:
 ```
 
 ### Implementation
-- [ ] New view mode for global unassigned tiles
-- [ ] Render dashboard unassigned tiles above projects
-- [ ] Hide unassigned section if empty (or show placeholder?)
-- [ ] Unassigned tiles should be draggable to projects below
+- [x] New view mode for global unassigned tiles
+- [x] Render dashboard unassigned tiles above projects
+- [x] Hide unassigned section if empty (or show placeholder?) → Shows drop zone with dashed border
+- [x] Unassigned tiles should be draggable to projects below
 
 ---
 
@@ -133,10 +133,10 @@ When "Unassigned Tiles" clicked in sidebar:
 | Dashboard unassigned tile | Project in same dashboard | → That project |
 
 ### Implementation
-- [ ] Enable drag from global unassigned view to sidebar
-- [ ] Detect drop target (dashboard vs project)
-- [ ] Update tile's `projectId` accordingly
-- [ ] Visual feedback during drag (highlight valid targets)
+- [x] Enable drag from global unassigned view to sidebar
+- [x] Detect drop target (dashboard vs project)
+- [x] Update tile's `projectId` accordingly
+- [x] Visual feedback during drag (highlight valid targets)
 
 ---
 

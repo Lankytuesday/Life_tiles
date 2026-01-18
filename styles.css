@@ -245,6 +245,24 @@
     background: var(--color-brand);
 }
 
+/* Sidebar unassigned item */
+.sidebar-item-unassigned {
+    margin-bottom: 4px;
+}
+
+.sidebar-item-unassigned .unassigned-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* Sidebar separator */
+.sidebar-separator {
+    height: 1px;
+    background: var(--color-border);
+    margin: 8px 12px;
+    list-style: none;
+}
+
 .sidebar-item .label {
     flex: 1;
     min-width: 0;
@@ -699,6 +717,111 @@ body.dragging {
     box-shadow: 0 1px 2px rgba(60,64,67,0.3);
     width: auto;
     margin: 0;
+}
+
+/* Unassigned tiles section */
+.unassigned-section {
+    margin-bottom: 16px;
+    border-radius: var(--radius-lg);
+}
+
+.unassigned-section .unassigned-tiles {
+    padding: 0 12px 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(106px, 106px));
+    gap: 12px;
+    align-items: start;
+    justify-content: start;
+    min-height: 0;
+    transition: min-height 0.2s ease;
+}
+
+/* Maintain height during drag to prevent layout shift */
+body.dragging .unassigned-section .unassigned-tiles {
+    min-height: 60px;
+}
+
+/* Empty state - show dashed border and hint text */
+.unassigned-section.empty .unassigned-tiles {
+    display: flex;
+    min-height: 60px;
+    border: 2px dashed rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-md);
+    margin: 0 12px 12px;
+    padding: 0;
+    justify-content: center;
+    align-items: center;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.unassigned-section.empty .unassigned-tiles::after {
+    content: 'Drop tiles here';
+    color: var(--color-text-muted);
+    opacity: 0.5;
+    font-size: 13px;
+}
+
+.unassigned-section.empty:hover .unassigned-tiles,
+body.dragging .unassigned-section.empty .unassigned-tiles {
+    border-color: var(--color-brand);
+    background: rgba(26, 115, 232, 0.05);
+}
+
+.unassigned-section.empty:hover .unassigned-tiles::after,
+body.dragging .unassigned-section.empty .unassigned-tiles::after {
+    opacity: 1;
+}
+
+/* Hide border/text when tiles are present */
+.unassigned-section:not(.empty) .unassigned-tiles {
+    border: none;
+    background: none;
+}
+
+.unassigned-section:not(.empty) .unassigned-tiles::after {
+    display: none;
+}
+
+.unassigned-header {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.unassigned-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+/* Global unassigned view (when clicking sidebar unassigned) */
+.global-unassigned-view {
+    padding: 16px 0;
+}
+
+.global-unassigned-empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--color-text-muted);
+}
+
+.global-unassigned-empty p {
+    margin: 0 0 8px;
+}
+
+.global-unassigned-empty .hint {
+    font-size: 13px;
+    opacity: 0.8;
+}
+
+.global-unassigned-tiles {
+    padding: 0 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(106px, 106px));
+    gap: 12px;
+    align-items: start;
+    justify-content: start;
 }
 
 .project {
