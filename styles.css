@@ -274,10 +274,12 @@
     width: 24px;
     height: 24px;
     padding: 0;
+    margin-top: 1px;
+    margin-bottom: -1px;
     border-radius: var(--radius-sm);
     color: var(--color-text-muted);
     transition: background-color var(--transition);
-    line-height: 0;
+    line-height: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -285,7 +287,6 @@
 
 .sidebar-item-btn::before {
     content: '×';
-    transform: translateY(-4px);
 }
 
 .sidebar-item-btn:hover {
