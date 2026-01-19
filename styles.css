@@ -858,7 +858,7 @@ body.quick-save-view .dashboard-title {
     grid-template-columns: repeat(auto-fill, minmax(106px, 106px));
     gap: 12px;
     align-items: start;
-    justify-content: start;
+    justify-content: center;
 }
 
 .project {
