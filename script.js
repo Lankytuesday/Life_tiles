@@ -542,6 +542,8 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     // Edit dashboard title inline using contenteditable
     async function editDashboardTitleInline() {
+        // Don't allow editing in Quick Save view
+        if (isViewingGlobalUnassigned) return;
         if (!currentDashboardId || !currentDashboardTitle) return;
 
         const currentName = currentDashboardTitle.textContent;
@@ -791,15 +793,18 @@ new Sortable(document.getElementById('projects-list'), {
       document.removeEventListener('mousemove', handleDragMouseMove);
 
       // Check if dropped over a sidebar item using last known mouse position
+      // Skip Quick Save (sidebar-item-unassigned) - projects can't be dropped there
       let droppedOnDashboard = null;
 
       document.querySelectorAll('.sidebar-item').forEach(item => {
+        item.classList.remove('drag-hover');
+        // Skip Quick Save item - projects can only be moved to dashboards
+        if (item.classList.contains('sidebar-item-unassigned')) return;
         const rect = item.getBoundingClientRect();
         if (lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
             lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom) {
           droppedOnDashboard = item.dataset.dashboardId;
         }
-        item.classList.remove('drag-hover');
       });
 
       if (droppedOnDashboard && draggedProjectId) {
@@ -1086,8 +1091,10 @@ window.__lifetilesRefresh = () => loadDashboards();
             switchToGlobalUnassigned();
         });
 
-        // Make it a drop target for tiles
+        // Make it a drop target for tiles only (not projects)
         globalUnassignedLi.addEventListener('dragover', (e) => {
+            // Only allow tile drops, not project drops
+            if (!draggedTileId || draggedProjectId) return;
             e.preventDefault();
             globalUnassignedLi.classList.add('drag-hover');
         });
@@ -1120,11 +1127,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     await db.tiles.update(tileId, { projectId: GLOBAL_UNASSIGNED_ID });
 
                     // Update the count in sidebar
-                    const newCount = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).count();
-                    const label = globalUnassignedLi.querySelector('.label');
-                    if (label) {
-                        label.textContent = `Quick Save${newCount > 0 ? ` (${newCount})` : ''}`;
-                    }
+                    await updateQuickSaveCount();
 
                     // Update source container's empty state
                     updateUnassignedEmptyState();
@@ -1232,6 +1235,9 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                         // Update source container's empty state
                         updateUnassignedEmptyState();
+
+                        // Update Quick Save count (tile was moved out of Quick Save)
+                        await updateQuickSaveCount();
 
                         // If we're currently viewing this dashboard, refresh to show the tile
                         if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
@@ -1510,12 +1516,25 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         // Exit global unassigned view
         isViewingGlobalUnassigned = false;
+        document.body.classList.remove('quick-save-view');
 
         // Show project controls (hidden in global unassigned view)
         const newProjectBtn = document.getElementById('new-project');
-        const projectControlsRight = document.querySelector('.project-controls-right');
         if (newProjectBtn) newProjectBtn.style.display = '';
-        if (projectControlsRight) projectControlsRight.style.display = '';
+
+        // Show all control buttons (some hidden in Quick Save view)
+        const expandAllBtn = document.getElementById('expand-all');
+        const collapseAllBtn = document.getElementById('collapse-all');
+        const bulkSelectBtn = document.getElementById('bulk-select');
+        if (expandAllBtn) expandAllBtn.style.display = '';
+        if (collapseAllBtn) collapseAllBtn.style.display = '';
+        if (bulkSelectBtn) bulkSelectBtn.style.display = '';
+
+        // Restore title editable behavior
+        if (currentDashboardTitle) {
+            currentDashboardTitle.title = 'Double-click to edit';
+            currentDashboardTitle.style.cursor = '';
+        }
 
         // Update active sidebar item and get dashboard name
         let dashboardName = '';
@@ -1551,6 +1570,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         if (isViewingGlobalUnassigned) return;
 
         isViewingGlobalUnassigned = true;
+        document.body.classList.add('quick-save-view');
 
         // Update active sidebar item
         document.querySelectorAll('.sidebar-item').forEach(item => {
@@ -1559,14 +1579,24 @@ window.__lifetilesRefresh = () => loadDashboards();
             item.tabIndex = isUnassigned ? 0 : -1;
         });
 
-        // Update dashboard title
-        if (currentDashboardTitle) currentDashboardTitle.textContent = 'Quick Save';
+        // Update dashboard title (non-editable for Quick Save)
+        if (currentDashboardTitle) {
+            currentDashboardTitle.textContent = 'Quick Save';
+            currentDashboardTitle.title = ''; // Remove "Double-click to edit" tooltip
+            currentDashboardTitle.style.cursor = 'default';
+        }
 
-        // Hide project controls (not applicable in global unassigned view)
+        // Hide new project button
         const newProjectBtn = document.getElementById('new-project');
-        const projectControlsRight = document.querySelector('.project-controls-right');
         if (newProjectBtn) newProjectBtn.style.display = 'none';
-        if (projectControlsRight) projectControlsRight.style.display = 'none';
+
+        // Show only the Select button, hide Expand/Collapse
+        const expandAllBtn = document.getElementById('expand-all');
+        const collapseAllBtn = document.getElementById('collapse-all');
+        const bulkSelectBtn = document.getElementById('bulk-select');
+        if (expandAllBtn) expandAllBtn.style.display = 'none';
+        if (collapseAllBtn) collapseAllBtn.style.display = 'none';
+        if (bulkSelectBtn) bulkSelectBtn.style.display = '';
 
         // Clear projects list
         projectsList.innerHTML = '';
@@ -1640,21 +1670,19 @@ window.__lifetilesRefresh = () => loadDashboards();
                             evt.to.appendChild(addTileButton);
                         }
 
-                        // Resequence tiles
-                        const resequenceContainer = async (container) => {
-                            if (!container) return;
-                            const tileEls = [...container.querySelectorAll('.tile[data-tile-id]')];
-                            await Promise.all(tileEls.map((el, idx) =>
-                                db.tiles.update(el.dataset.tileId, {
-                                    projectId: GLOBAL_UNASSIGNED_ID,
-                                    order: idx
-                                })
-                            ));
-                        };
+                        // Resequence remaining tiles in Quick Save only
+                        const tileEls = [...evt.from.querySelectorAll('.tile[data-tile-id]')];
+                        await Promise.all(tileEls.map((el, idx) =>
+                            db.tiles.update(el.dataset.tileId, {
+                                projectId: GLOBAL_UNASSIGNED_ID,
+                                order: idx
+                            })
+                        ));
 
-                        await resequenceContainer(evt.from);
+                        // If tile was moved to a different container (e.g., a project),
+                        // update Quick Save count. The destination's Sortable handles the projectId update.
                         if (evt.to !== evt.from) {
-                            await resequenceContainer(evt.to);
+                            updateQuickSaveCount();
                         }
 
                         // Clear tracked tile
@@ -1767,6 +1795,11 @@ window.__lifetilesRefresh = () => loadDashboards();
                     // Update empty state
                     updateUnassignedEmptyState();
 
+                    // Update Quick Save count if tiles were moved from/to Quick Save
+                    if (evt.from !== evt.to) {
+                        updateQuickSaveCount();
+                    }
+
                     // Clear tracked tile
                     draggedTileId = null;
                     draggedTileElement = null;
@@ -1798,6 +1831,20 @@ window.__lifetilesRefresh = () => loadDashboards();
         const label = section.querySelector('.unassigned-label');
         if (label) {
             label.textContent = `📄 Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
+        }
+    }
+
+    /**
+     * Update the Quick Save count in the sidebar
+     */
+    async function updateQuickSaveCount() {
+        const quickSaveItem = document.querySelector('.sidebar-item-unassigned');
+        if (!quickSaveItem) return;
+
+        const count = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).count();
+        const label = quickSaveItem.querySelector('.label');
+        if (label) {
+            label.textContent = `Quick Save${count > 0 ? ` (${count})` : ''}`;
         }
     }
 
@@ -2340,6 +2387,11 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                 // Update unassigned section empty state if involved
                 updateUnassignedEmptyState();
+
+                // Update Quick Save count if tiles were moved from/to Quick Save
+                if (evt.from !== evt.to) {
+                    updateQuickSaveCount();
+                }
 
                 // Clear tracked tile
                 draggedTileId = null;
@@ -3063,6 +3115,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             if (confirm('Are you sure you want to remove this tile?')) {
                 await db.tiles.delete(tileData.id);
                 tile.remove();
+                // Update Quick Save count in case this was a Quick Save tile
+                updateQuickSaveCount();
             }
         };
 
@@ -3740,6 +3794,9 @@ function showStatus(message) {
             }
         });
 
+        // Update Quick Save count in case any were Quick Save tiles
+        updateQuickSaveCount();
+
         exitBulkMode();
         showStatus(`Deleted ${selected.length} item${selected.length > 1 ? 's' : ''}`);
     });
@@ -4170,6 +4227,8 @@ function showStatus(message) {
                     await window.__lifetilesRefresh();
                 }
             }
+            // Update Quick Save count in case tiles were moved from/to Quick Save
+            updateQuickSaveCount();
             exitBulkMode();
             showStatus(`Moved ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
         });

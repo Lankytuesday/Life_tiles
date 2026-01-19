@@ -832,6 +832,11 @@ body.dragging .unassigned-section.empty:not(.drag-active) .unassigned-tiles::aft
     padding: 16px 0;
 }
 
+/* Quick Save view - add margin to title */
+body.quick-save-view .dashboard-title {
+    margin-top: 8px;
+}
+
 .global-unassigned-empty {
     text-align: center;
     padding: 48px 24px;
