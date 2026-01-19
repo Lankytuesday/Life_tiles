@@ -1074,7 +1074,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
         globalUnassignedLi.innerHTML = `
             <span class="unassigned-icon">📌</span>
-            <span class="label">Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}</span>
+            <span class="label">Quick Save${tileCount > 0 ? ` (${tileCount})` : ''}</span>
         `;
 
         // Set selected state
@@ -1123,7 +1123,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                     const newCount = await db.tiles.where('projectId').equals(GLOBAL_UNASSIGNED_ID).count();
                     const label = globalUnassignedLi.querySelector('.label');
                     if (label) {
-                        label.textContent = `Unassigned${newCount > 0 ? ` (${newCount})` : ''}`;
+                        label.textContent = `Quick Save${newCount > 0 ? ` (${newCount})` : ''}`;
                     }
 
                     // Update source container's empty state
@@ -1139,6 +1139,24 @@ window.__lifetilesRefresh = () => loadDashboards();
         separator.className = 'sidebar-separator';
         separator.setAttribute('role', 'separator');
         list.appendChild(separator);
+
+        // Add Dashboards heading with + button
+        const dashboardsHeader = document.createElement('li');
+        dashboardsHeader.className = 'sidebar-section-header';
+        dashboardsHeader.innerHTML = `
+            <span class="section-title">Dashboards</span>
+            <button class="section-add-btn" title="New dashboard" aria-label="Add new dashboard">+</button>
+        `;
+        dashboardsHeader.querySelector('.section-add-btn').addEventListener('click', () => {
+            const modal = document.getElementById('dashboard-modal');
+            const input = document.getElementById('dashboard-name-input');
+            modal.style.display = 'flex';
+            if (input) {
+                input.value = '';
+                input.focus();
+            }
+        });
+        list.appendChild(dashboardsHeader);
 
         // Sort dashboards by order
         const sortedDashboards = dashboards.slice().sort((a, b) => {
@@ -1230,7 +1248,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         if (window.Sortable && !list.__sortable) {
             list.__sortable = new Sortable(list, {
                 animation: 150,
-                filter: '.sidebar-item-unassigned, .sidebar-separator',
+                filter: '.sidebar-item-unassigned, .sidebar-separator, .sidebar-section-header',
                 onEnd: async () => {
                     const ids = [...list.querySelectorAll('.sidebar-item:not(.sidebar-item-unassigned)')]
                         .map(li => li.dataset.dashboardId)
@@ -1542,7 +1560,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         });
 
         // Update dashboard title
-        if (currentDashboardTitle) currentDashboardTitle.textContent = 'Unassigned Tiles';
+        if (currentDashboardTitle) currentDashboardTitle.textContent = 'Quick Save';
 
         // Hide project controls (not applicable in global unassigned view)
         const newProjectBtn = document.getElementById('new-project');
@@ -1616,6 +1634,12 @@ window.__lifetilesRefresh = () => loadDashboards();
                             return;
                         }
 
+                        // Move add-tile button to end IMMEDIATELY if dropped into a project
+                        const addTileButton = evt.to.querySelector('.add-tile-button');
+                        if (addTileButton) {
+                            evt.to.appendChild(addTileButton);
+                        }
+
                         // Resequence tiles
                         const resequenceContainer = async (container) => {
                             if (!container) return;
@@ -1666,7 +1690,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         // Always create the structure with tiles grid for drop support
         section.innerHTML = `
             <div class="unassigned-header">
-                <span class="unassigned-label">📌 Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
+                <span class="unassigned-label">📄 Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
             </div>
             <div class="unassigned-tiles tiles-grid"></div>
         `;
@@ -1713,6 +1737,12 @@ window.__lifetilesRefresh = () => loadDashboards();
                         draggedTileId = null;
                         draggedTileElement = null;
                         return;
+                    }
+
+                    // Move add-tile button to end IMMEDIATELY if dropped into a project
+                    const addTileButton = evt.to.querySelector('.add-tile-button');
+                    if (addTileButton) {
+                        evt.to.appendChild(addTileButton);
                     }
 
                     // Resequence tiles in both source and target containers
@@ -1767,7 +1797,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         // Update count in label
         const label = section.querySelector('.unassigned-label');
         if (label) {
-            label.textContent = `📌 Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
+            label.textContent = `📄 Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
         }
     }
 
