@@ -1042,7 +1042,16 @@ new Sortable(document.getElementById('projects-list'), {
         }
     }
 // make the dashboard reload callable from outside this closure
-window.__lifetilesRefresh = () => loadDashboards();
+// Preserve the current view state (Quick Save vs dashboard) when refreshing
+window.__lifetilesRefresh = async () => {
+    if (isViewingGlobalUnassigned) {
+        // Refresh Quick Save view without switching views
+        await loadGlobalUnassignedView();
+        await updateQuickSaveCount();
+    } else {
+        await loadDashboards();
+    }
+};
 
 // Create sidebar item element
     function createSidebarItem(dashboard) {
@@ -1682,7 +1691,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                         // If tile was moved to a different container (e.g., a project),
                         // update Quick Save count. The destination's Sortable handles the projectId update.
                         if (evt.to !== evt.from) {
-                            updateQuickSaveCount();
+                            await updateQuickSaveCount();
                         }
 
                         // Clear tracked tile
@@ -1797,7 +1806,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                     // Update Quick Save count if tiles were moved from/to Quick Save
                     if (evt.from !== evt.to) {
-                        updateQuickSaveCount();
+                        await updateQuickSaveCount();
                     }
 
                     // Clear tracked tile
@@ -1847,6 +1856,8 @@ window.__lifetilesRefresh = () => loadDashboards();
             label.textContent = `Quick Save${count > 0 ? ` (${count})` : ''}`;
         }
     }
+    // Expose for use in bulk mode IIFE
+    window.__updateQuickSaveCount = updateQuickSaveCount;
 
     async function loadProjects(projects = []) {
         if (projects && projects.length > 0) {
@@ -2423,7 +2434,7 @@ window.__lifetilesRefresh = () => loadDashboards();
 
                 // Update Quick Save count if tiles were moved from/to Quick Save
                 if (evt.from !== evt.to) {
-                    updateQuickSaveCount();
+                    await updateQuickSaveCount();
                 }
 
                 // Clear tracked tile
@@ -3149,7 +3160,7 @@ window.__lifetilesRefresh = () => loadDashboards();
                 await db.tiles.delete(tileData.id);
                 tile.remove();
                 // Update Quick Save count in case this was a Quick Save tile
-                updateQuickSaveCount();
+                await updateQuickSaveCount();
             }
         };
 
@@ -3828,7 +3839,7 @@ function showStatus(message) {
         });
 
         // Update Quick Save count in case any were Quick Save tiles
-        updateQuickSaveCount();
+        if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
 
         exitBulkMode();
         showStatus(`Deleted ${selected.length} item${selected.length > 1 ? 's' : ''}`);
@@ -4261,7 +4272,7 @@ function showStatus(message) {
                 }
             }
             // Update Quick Save count in case tiles were moved from/to Quick Save
-            updateQuickSaveCount();
+            if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
             exitBulkMode();
             showStatus(`Moved ${tiles.length} tile${tiles.length > 1 ? 's' : ''} to ${targetProject.name}`);
         });
