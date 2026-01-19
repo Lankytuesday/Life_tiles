@@ -8,11 +8,26 @@
 </head>
 <body>
     <div class="app-shell">
+        <!-- Main toolbar spanning full width -->
+        <div class="main-toolbar">
+          <div class="toolbar-logo">
+            <img src="headericon.svg" alt="Lifetiles Logo" class="sidebar-logo">
+          </div>
+          <div class="toolbar-search-container">
+            <input type="text" id="sidebar-search" class="toolbar-search" placeholder="Search dashboards, projects, tiles..." aria-label="Search dashboards, projects, and tiles">
+            <div id="search-results" class="search-results hidden"></div>
+          </div>
+          <button id="open-settings" class="settings-btn" title="Settings" aria-label="Settings">
+            <!-- filled gear (legible at small sizes) -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                 viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.49-.4-1.05-.72-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.41l-.36 2.54c-.58.23-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.72 7.98a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.36 2.54c.05.24.25.41.49.41h3.8c.24 0 .44-.17.49-.41l.36-2.54c.58-.23 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
+            </svg>
+          </button>
+        </div>
+
         <!-- Sidebar -->
         <aside id="sidebar" class="sidebar" aria-label="Dashboards navigation">
-            <div class="sidebar-header">
-                <img src="headericon.svg" alt="Lifetiles Logo" class="sidebar-logo">
-            </div>
             <ul id="sidebar-list" class="sidebar-list" role="listbox" aria-label="Project dashboards">
                 <!-- Dashboard items will be inserted here -->
             </ul>
@@ -20,19 +35,6 @@
 
         <!-- Main content area -->
         <main id="main">
-                <div class="main-toolbar">
-                  <div class="toolbar-search-container">
-                    <input type="text" id="sidebar-search" class="toolbar-search" placeholder="Search dashboards, projects, tiles..." aria-label="Search dashboards, projects, and tiles">
-                    <div id="search-results" class="search-results hidden"></div>
-                  </div>
-                  <button id="open-settings" class="settings-btn" title="Settings" aria-label="Settings">
-                    <!-- filled gear (legible at small sizes) -->
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
-                         viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.49-.4-1.05-.72-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.8a.5.5 0 0 0-.49.41l-.36 2.54c-.58.23-1.13.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.72 7.98a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.5.41 1.05.72 1.63.94l.36 2.54c.05.24.25.41.49.41h3.8c.24 0 .44-.17.49-.41l.36-2.54c.58-.23 1.13-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/>
-                    </svg>
-                  </button>
-                </div>
               
                 <div id="projects-container">
                     <div class="project-controls">

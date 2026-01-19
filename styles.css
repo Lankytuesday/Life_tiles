@@ -34,6 +34,7 @@
 .app-shell {
     display: grid;
     grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-rows: var(--toolbar-h) 1fr;
     height: 100dvh;
 }
 
@@ -43,24 +44,18 @@
     border-right: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    height: 100dvh;
     overflow: hidden;
-    position: sticky;
-    top: 0;
+    grid-row: 2;
 }
 
-.sidebar-header {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--color-bg-light);
-    height: var(--toolbar-h);
-    padding: 0 12px;
+/* Toolbar logo area - matches sidebar width */
+.toolbar-logo {
+    width: var(--sidebar-w);
+    height: 100%;
     display: flex;
     align-items: center;
-    gap: 12px;
+    padding: 0 12px;
     box-sizing: border-box;
-    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
@@ -69,19 +64,12 @@
     width: auto;
 }
 
-.sidebar-title {
-    font-size: 18px;
-    font-weight: 600;
-    margin: 0;
-    flex: 1;
-    color: var(--color-text);
-}
-
 /* Toolbar search */
 .toolbar-search-container {
     position: relative;
     width: 100%;
     max-width: 400px;
+    margin-left: 12px;
 }
 
 .toolbar-search {
@@ -372,6 +360,14 @@ body.dragging {
 
     .sidebar {
         display: none; /* Hide sidebar on mobile for now */
+    }
+
+    .toolbar-logo {
+        display: none; /* Hide logo area on mobile */
+    }
+
+    .main-toolbar {
+        padding-left: 12px;
     }
 }
 
@@ -671,11 +667,12 @@ body.dragging {
 }
 
 .main-toolbar {
-    position: sticky;
-    top: 0;
+    grid-column: 1 / -1;
+    grid-row: 1;
     z-index: 500;
     height: var(--toolbar-h);
-    padding: 0 12px;
+    padding: 0;
+    padding-right: 12px;
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -730,7 +727,7 @@ body.dragging {
 }
 
 #main {
-    height: 100dvh;
+    grid-row: 2;
     overflow: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
