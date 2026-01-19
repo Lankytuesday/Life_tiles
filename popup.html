@@ -70,7 +70,7 @@
             font-weight: normal;
             color: #000;
         }
-        button:not(:disabled):not(.new-project-button):hover {
+        button:not(:disabled):not(.new-project-button):not(.quick-save-half-btn):hover {
             background-color: #45a049;
         }
         #tile-details {
@@ -99,6 +99,31 @@
         }
         #dashboard-link:hover {
             background: #1557b0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            transform: translateY(-1px);
+        }
+        .quick-save-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .quick-save-half-btn {
+            flex: 1;
+            padding: 8px 4px;
+            text-align: center;
+            background: white;
+            color: #1a73e8;
+            cursor: pointer;
+            border-radius: 4px;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+            font-size: 13px;
+            margin: 0;
+            width: auto;
+        }
+        .quick-save-half-btn:hover {
+            background: #f8f9fa;
             box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             transform: translateY(-1px);
         }
@@ -156,10 +181,17 @@
 <body>
     <div id="dashboard-link">Go to Dashboard</div>
 
-    <!-- Quick Save button (shown when last project is remembered) -->
+    <!-- Quick Save buttons row -->
+    <div class="quick-save-row">
+        <button id="quick-save-tab-btn" class="quick-save-half-btn">Quick Save tab</button>
+        <button id="quick-save-all-btn" class="quick-save-half-btn">Quick Save all tabs</button>
+    </div>
+
+    <!-- ARCHIVED: Quick Save to last-used project button (commented out for now)
     <button id="quick-save-btn" style="display: none;">
         Quick Save to <span class="quick-save-project-name"></span>
     </button>
+    -->
 
     <!-- Project selection dropdown -->
     <div id="custom-dropdown-container">

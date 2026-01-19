@@ -1,5 +1,8 @@
 // --- Session Buddy–style helpers (no top-level await) ---
 
+// Global unassigned project ID (must match script.js)
+const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
+
 // Get the last-focused normal Chrome window id (not the popup)
 async function getTargetWindowId() {
     try {
@@ -81,7 +84,90 @@ async function getTargetWindowId() {
           });
         }
       }
-  
+
+      // Quick Save tab button - saves current tab to global unassigned
+      const quickSaveTabBtn = document.getElementById('quick-save-tab-btn');
+      if (quickSaveTabBtn) {
+        quickSaveTabBtn.addEventListener('click', async () => {
+          try {
+            const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!currentTab || !currentTab.url || isInternalUrl(currentTab.url)) {
+              console.log('Cannot save this tab');
+              return;
+            }
+
+            const tileData = {
+              id: Date.now().toString() + Math.random(),
+              name: currentTab.title || 'Untitled',
+              url: currentTab.url,
+              projectId: GLOBAL_UNASSIGNED_ID,
+              dashboardId: null
+            };
+            await db.tiles.add(tileData);
+
+            // Notify dashboard
+            try {
+              const bc = new BroadcastChannel('lifetiles');
+              bc.postMessage({ type: 'tiles:changed' });
+              bc.close();
+            } catch {}
+            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+              try {
+                chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                  void chrome.runtime.lastError;
+                });
+              } catch {}
+            }
+
+            window.close();
+          } catch (err) {
+            console.error('Quick save tab failed:', err);
+          }
+        });
+      }
+
+      // Quick Save all tabs button - saves all tabs from window to global unassigned
+      const quickSaveAllBtn = document.getElementById('quick-save-all-btn');
+      if (quickSaveAllBtn) {
+        quickSaveAllBtn.addEventListener('click', async () => {
+          try {
+            const tabs = await chrome.tabs.query({ currentWindow: true });
+            let savedCount = 0;
+
+            for (const tab of tabs) {
+              if (!tab.url || isInternalUrl(tab.url)) continue;
+              const tileData = {
+                id: Date.now().toString() + Math.random(),
+                name: tab.title || 'Untitled',
+                url: tab.url,
+                projectId: GLOBAL_UNASSIGNED_ID,
+                dashboardId: null
+              };
+              await db.tiles.add(tileData);
+              savedCount++;
+            }
+
+            // Notify dashboard
+            try {
+              const bc = new BroadcastChannel('lifetiles');
+              bc.postMessage({ type: 'tiles:changed' });
+              bc.close();
+            } catch {}
+            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+              try {
+                chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                  void chrome.runtime.lastError;
+                });
+              } catch {}
+            }
+
+            window.close();
+          } catch (err) {
+            console.error('Quick save all tabs failed:', err);
+          }
+        });
+      }
+
 
     const dropdownContainer = document.getElementById('custom-dropdown-container');
     const dropdownHeader = document.getElementById('dropdown-header');
@@ -97,7 +183,8 @@ async function getTargetWindowId() {
     const saveCurrentOption = document.getElementById('save-current-option');
     const saveAllOption = document.getElementById('save-all-option');
     const saveButton = document.getElementById('save-button');
-    const quickSaveBtn = document.getElementById('quick-save-btn');
+    // ARCHIVED: Quick Save to last-used project button
+    // const quickSaveBtn = document.getElementById('quick-save-btn');
 
     // Track selected project value and save mode
     let selectedProjectValue = '';
@@ -115,21 +202,17 @@ async function getTargetWindowId() {
         tileUrlInput.value = currentTab.url || '';
     }
 
-    // Check for last used project
-    const lastProjectData = localStorage.getItem('lifetiles_lastProject');
+    // Check for last used project (for pre-selecting in dropdown)
     let lastProject = null;
+    const lastProjectData = localStorage.getItem('lifetiles_lastProject');
     if (lastProjectData) {
         try {
             lastProject = JSON.parse(lastProjectData);
-            // Verify the project still exists before showing Quick Save
+            // Verify the project still exists
             if (lastProject && lastProject.value) {
                 const { projectId } = JSON.parse(lastProject.value);
                 const existingProject = await db.projects.get(projectId);
-
-                if (existingProject && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
-                    quickSaveBtn.style.display = 'block';
-                    quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
-                } else if (!existingProject) {
+                if (!existingProject) {
                     // Clear stale reference
                     localStorage.removeItem('lifetiles_lastProject');
                     lastProject = null;
@@ -137,10 +220,17 @@ async function getTargetWindowId() {
             }
         } catch (e) {
             console.error('Failed to parse last project:', e);
+            lastProject = null;
         }
     }
 
-    // Quick Save button handler
+    // ARCHIVED: Quick Save to last-used project button and handler
+    /*
+    if (existingProject && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
+        quickSaveBtn.style.display = 'block';
+        quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
+    }
+
     quickSaveBtn.addEventListener('click', async () => {
         if (!lastProject || !lastProject.value) return;
 
@@ -177,6 +267,7 @@ async function getTargetWindowId() {
             console.error('Quick save failed:', e);
         }
     });
+    */
 
     // Toggle project dropdown visibility
     dropdownHeader.addEventListener('click', (event) => {
@@ -227,9 +318,9 @@ async function getTargetWindowId() {
         localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
         localStorage.setItem('lifetiles_lastDashboard', String(projectData.dashboardId));
 
-        // Update lastProject variable and hide Quick Save button (user is in full flow now)
+        // ARCHIVED: Update lastProject variable and hide Quick Save button
         lastProject = savedProject;
-        quickSaveBtn.style.display = 'none';
+        // quickSaveBtn.style.display = 'none';
 
         tileDetails.style.display = 'block';
         validateInputs();
@@ -308,15 +399,28 @@ async function getTargetWindowId() {
             });
 
             if (projects.length > 0) {
-                // Sort projects by order property to match dashboard order
+                // Sort projects: unassigned first, then by order
                 const ord = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-                projects.sort((a, b) => ord(a) - ord(b) || String(a.id).localeCompare(String(b.id)));
+                projects.sort((a, b) => {
+                    // Unassigned projects come first
+                    if (a.isUnassigned && !b.isUnassigned) return -1;
+                    if (!a.isUnassigned && b.isUnassigned) return 1;
+                    return ord(a) - ord(b) || String(a.id).localeCompare(String(b.id));
+                });
 
                 // Add projects from this dashboard
                 projects.forEach(project => {
                     const projectOption = document.createElement('div');
                     projectOption.className = 'dropdown-option';
-                    projectOption.textContent = project.name;
+
+                    // Show icon and "Unassigned" for unassigned projects
+                    if (project.isUnassigned) {
+                        projectOption.innerHTML = '<span class="unassigned-icon">&#128196;</span> Unassigned';
+                        projectOption.classList.add('unassigned-option');
+                    } else {
+                        projectOption.textContent = project.name;
+                    }
+
                     projectOption.dataset.value = JSON.stringify({
                         dashboardId: dashboard.id,
                         projectId: project.id
@@ -328,24 +432,26 @@ async function getTargetWindowId() {
 
                     projectsContainer.appendChild(projectOption);
                 });
-            } else {
-                // Empty dashboard - show inline "+ New Project" button
-                const inlineNewProject = document.createElement('div');
-                inlineNewProject.className = 'dropdown-option inline-new-project';
-                inlineNewProject.textContent = '+ New Project';
-                inlineNewProject.dataset.dashboardId = dashboard.id;
-                inlineNewProjectButtons.push(inlineNewProject);
-                projectsContainer.appendChild(inlineNewProject);
             }
+
+            // Always add inline "+ New Project" button at end of each dashboard
+            const inlineNewProject = document.createElement('div');
+            inlineNewProject.className = 'dropdown-option inline-new-project';
+            inlineNewProject.textContent = '+ New Project';
+            inlineNewProject.dataset.dashboardId = dashboard.id;
+            inlineNewProjectButtons.push(inlineNewProject);
+            projectsContainer.appendChild(inlineNewProject);
 
             scrollArea.appendChild(projectsContainer);
         }
 
-        // Add new project button
+        // ARCHIVED: Add new project button at bottom of dropdown
+        /*
         const newProjectButton = document.createElement('button');
         newProjectButton.className = 'new-project-button';
         newProjectButton.textContent = '+ New Project';
         dropdownOptions.appendChild(newProjectButton);
+        */
 
         // Mark last used project as selected (visually) but DON'T expand tile details
         // Quick Save button is already shown - this just pre-selects in the dropdown
@@ -392,6 +498,8 @@ async function getTargetWindowId() {
             }
         });
 
+        // ARCHIVED: Click handler for bottom new project button
+        /*
         newProjectButton.addEventListener('click', () => {
             projectModal.style.display = 'flex';
             projectNameInput.value = '';
@@ -399,6 +507,7 @@ async function getTargetWindowId() {
             projectNameInput.focus();
             dropdownOptions.classList.add('dropdown-hidden');
         });
+        */
 
         // Add click handlers for inline new project buttons (pre-select dashboard)
         inlineNewProjectButtons.forEach(btn => {
