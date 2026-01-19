@@ -273,25 +273,31 @@ async function getTargetWindowId() {
     dropdownHeader.addEventListener('click', (event) => {
         event.stopPropagation();
         dropdownOptions.classList.toggle('dropdown-hidden');
+        dropdownHeader.classList.toggle('dropdown-open', !dropdownOptions.classList.contains('dropdown-hidden'));
         // Hide save options dropdown if open
         saveOptionsList.classList.add('dropdown-hidden');
+        saveOptionsHeader.classList.remove('dropdown-open');
     });
 
     // Toggle save options dropdown visibility
     saveOptionsHeader.addEventListener('click', (event) => {
         event.stopPropagation();
         saveOptionsList.classList.toggle('dropdown-hidden');
+        saveOptionsHeader.classList.toggle('dropdown-open', !saveOptionsList.classList.contains('dropdown-hidden'));
         // Hide project dropdown if open
         dropdownOptions.classList.add('dropdown-hidden');
+        dropdownHeader.classList.remove('dropdown-open');
     });
 
     // Close dropdowns when clicking outside
     document.addEventListener('click', (event) => {
         if (!dropdownContainer.contains(event.target)) {
             dropdownOptions.classList.add('dropdown-hidden');
+            dropdownHeader.classList.remove('dropdown-open');
         }
         if (!saveOptionsContainer.contains(event.target)) {
             saveOptionsList.classList.add('dropdown-hidden');
+            saveOptionsHeader.classList.remove('dropdown-open');
         }
     });
 
@@ -307,6 +313,7 @@ async function getTargetWindowId() {
         selectedProjectValue = projectValue;
         selectedProjectName = projectName;
         dropdownOptions.classList.add('dropdown-hidden');
+        dropdownHeader.classList.remove('dropdown-open');
 
         // Save last-used project to localStorage
         const projectData = JSON.parse(projectValue);
@@ -340,11 +347,6 @@ async function getTargetWindowId() {
     const scrollArea = document.createElement('div');
     scrollArea.className = 'dropdown-scroll-area';
 
-    // Add initial instructions
-    const instructionElement = document.createElement('div');
-    instructionElement.className = 'dropdown-placeholder';
-    instructionElement.textContent = '-- Select a project --';
-    scrollArea.appendChild(instructionElement);
     dropdownOptions.innerHTML = '';
     dropdownOptions.appendChild(scrollArea);
 
@@ -378,7 +380,12 @@ async function getTargetWindowId() {
             if (!shouldExpand) {
                 dashboardLabel.classList.add('collapsed');
             }
-            dashboardLabel.textContent = dashboard.name;
+            dashboardLabel.innerHTML = `
+                <svg class="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span class="dropdown-group-name">${dashboard.name}</span>
+            `;
             dashboardLabel.title = "Click to expand/collapse";
             dashboardLabel.dataset.dashboardId = dashboard.id;
             scrollArea.appendChild(dashboardLabel);
@@ -415,10 +422,21 @@ async function getTargetWindowId() {
 
                     // Show icon and "Unassigned" for unassigned projects
                     if (project.isUnassigned) {
-                        projectOption.innerHTML = '<span class="unassigned-icon">&#128196;</span> Unassigned';
+                        projectOption.innerHTML = `
+                            <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="9" y1="3" x2="9" y2="21"/>
+                            </svg>
+                            <span>Unassigned</span>
+                        `;
                         projectOption.classList.add('unassigned-option');
                     } else {
-                        projectOption.textContent = project.name;
+                        projectOption.innerHTML = `
+                            <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <span>${project.name}</span>
+                        `;
                     }
 
                     projectOption.dataset.value = JSON.stringify({
@@ -427,7 +445,7 @@ async function getTargetWindowId() {
                     });
 
                     projectOption.addEventListener('click', async function() {
-                        selectProject(this.dataset.value, this.textContent);
+                        selectProject(this.dataset.value, this.querySelector('span').textContent);
                     });
 
                     projectsContainer.appendChild(projectOption);
@@ -437,7 +455,13 @@ async function getTargetWindowId() {
             // Always add inline "+ New Project" button at end of each dashboard
             const inlineNewProject = document.createElement('div');
             inlineNewProject.className = 'dropdown-option inline-new-project';
-            inlineNewProject.textContent = '+ New Project';
+            inlineNewProject.innerHTML = `
+                <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"/>
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                <span>New Project</span>
+            `;
             inlineNewProject.dataset.dashboardId = dashboard.id;
             inlineNewProjectButtons.push(inlineNewProject);
             projectsContainer.appendChild(inlineNewProject);

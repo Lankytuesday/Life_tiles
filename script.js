@@ -4036,12 +4036,24 @@ function showStatus(message) {
                 const projEl = document.createElement('div');
                 projEl.className = 'target-tree-project';
                 projEl.dataset.projectId = project.id;
-                projEl.innerHTML = `
-                    <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                    </svg>
-                    <span>${project.name}</span>
-                `;
+
+                // Use different icon for unassigned projects
+                if (project.isUnassigned) {
+                    projEl.innerHTML = `
+                        <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                            <line x1="9" y1="3" x2="9" y2="21"/>
+                        </svg>
+                        <span>Unassigned</span>
+                    `;
+                } else {
+                    projEl.innerHTML = `
+                        <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span>${project.name}</span>
+                    `;
+                }
                 projEl.addEventListener('click', () => {
                     // Deselect previous
                     treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
