@@ -80,9 +80,8 @@
 /* Toolbar search */
 .toolbar-search-container {
     position: relative;
-    flex: 1;
+    width: 100%;
     max-width: 400px;
-    margin-right: 12px;
 }
 
 .toolbar-search {
@@ -444,8 +443,8 @@ body.dragging {
     justify-content: center;
     align-items: center;
     cursor: grab;
-    opacity: 0;
-    transition: opacity 0.2s ease, background-color 0.2s ease;
+    opacity: 1;
+    transition: background-color 0.2s ease;
     flex-shrink: 0;
 }
 
@@ -468,9 +467,6 @@ body.dragging {
     background-repeat: repeat;
 }
 
-.project:hover .project-drag-handle {
-    opacity: 1;
-}
 
 .project-menu-trigger {
     width: 24px;
@@ -481,13 +477,13 @@ body.dragging {
     font-size: 20px;
     cursor: pointer;
     padding: 0;
-    opacity: 0;
-    visibility: hidden;
+    opacity: 1;
+    visibility: visible;
     display: flex;
     justify-content: center;
     align-items: center;
     border-radius: 50%;
-    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out;
     line-height: 1;
     flex-shrink: 0;
     margin-left: auto;
@@ -499,10 +495,6 @@ body.dragging {
     background-color: #f0f0f0;
 }
 
-.project:hover .project-menu-trigger {
-    opacity: 1;
-    visibility: visible;
-}
 
 .project-menu {
     position: absolute;
@@ -686,7 +678,7 @@ body.dragging {
     padding: 0 12px;
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     background: #fff;
     border-bottom: 1px solid var(--color-border);
     box-sizing: border-box;
@@ -700,6 +692,7 @@ body.dragging {
     height: 32px;
     padding: 0;
     margin: 0;
+    margin-left: auto;
     border: none;
     border-radius: var(--radius-md);
     background: none;
@@ -838,6 +831,10 @@ body.quick-save-view .dashboard-title {
     margin-top: 8px;
 }
 
+body.quick-save-view .project-controls-right {
+    margin-left: auto;
+}
+
 .global-unassigned-empty {
     text-align: center;
     padding: 48px 24px;
@@ -883,24 +880,20 @@ body.quick-save-view .dashboard-title {
     font-size: 20px;
     cursor: pointer;
     padding: 0;
-    opacity: 0;
-    visibility: hidden;
+    opacity: 1;
+    visibility: visible;
+    display: flex;
     justify-content: center;
     align-items: center;
     border-radius: 50%;
     z-index: 1001;
-    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out, background-color 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out;
 }
 
 .tile-menu-trigger:hover {
     background-color: rgba(200, 200, 200, 0.8);
 }
 
-.tile:hover .tile-menu-trigger {
-    opacity: 1;
-    visibility: visible;
-    display: flex;
-}
 
 .tile-menu {
     position: absolute;
