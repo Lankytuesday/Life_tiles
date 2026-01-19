@@ -877,20 +877,24 @@ body.quick-save-view .project-controls-right {
     font-size: 20px;
     cursor: pointer;
     padding: 0;
-    opacity: 1;
-    visibility: visible;
-    display: flex;
+    opacity: 0;
+    visibility: hidden;
     justify-content: center;
     align-items: center;
     border-radius: 50%;
     z-index: 1001;
-    transition: background-color 0.2s ease-in-out;
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out, background-color 0.2s ease-in-out;
 }
 
 .tile-menu-trigger:hover {
     background-color: rgba(200, 200, 200, 0.8);
 }
 
+.tile:hover .tile-menu-trigger {
+    opacity: 1;
+    visibility: visible;
+    display: flex;
+}
 
 .tile-menu {
     position: absolute;
