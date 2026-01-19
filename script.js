@@ -2089,6 +2089,38 @@ window.__lifetilesRefresh = () => loadDashboards();
     };
 
 
+    // Open All in Tabs button
+    const openAllButton = document.createElement("button");
+    openAllButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Open All in Tabs`;
+    openAllButton.onclick = async (e) => {
+        e.stopPropagation();
+        closeAllMenus();
+
+        const currentProjectEl = openAllButton.closest('.project');
+        if (!currentProjectEl) return;
+
+        const tiles = await db.tiles.where('projectId').equals(currentProjectEl.dataset.projectId).toArray();
+        if (tiles.length === 0) return;
+
+        // Sort tiles by order to match display order
+        tiles.sort((a, b) => {
+            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+            return ao - bo;
+        });
+
+        // Open each tile URL in a new tab (using chrome.tabs API for proper ordering)
+        for (const tile of tiles) {
+            if (tile.url) {
+                if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
+                    await chrome.tabs.create({ url: tile.url, active: false });
+                } else {
+                    window.open(tile.url, '_blank');
+                }
+            }
+        }
+    };
+
     // Move to Dashboard button
     const moveButton = document.createElement("button");
     moveButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Move to Dashboard`;
@@ -2290,6 +2322,7 @@ window.__lifetilesRefresh = () => loadDashboards();
         };
 
         menu.appendChild(editButton);
+        menu.appendChild(openAllButton);
         menu.appendChild(moveButton);
         menu.appendChild(copyButton);
         menu.appendChild(removeButton);
