@@ -70,7 +70,7 @@
             font-weight: normal;
             color: #000;
         }
-        button:not(:disabled):not(.new-project-button):not(.quick-save-half-btn):hover {
+        button:not(:disabled):not(.new-project-button):not(.quick-save-half-btn):not(.project-save-btn):hover {
             background-color: #45a049;
         }
         #tile-details {
@@ -203,10 +203,12 @@
 
     <div id="project-modal" class="project-modal">
         <div class="project-modal-content">
+            <select id="modal-dashboard-select"></select>
             <input type="text" id="project-name-input" placeholder="Project Name">
-            <label for="dashboard-select" style="font-size: 12px; color: #666; margin-top: 8px; display: block;">Select a dashboard</label>
-            <select id="dashboard-select"></select>
-            <button id="create-project">Save</button>
+            <div class="project-modal-buttons">
+                <button id="create-project-tab" class="project-save-btn" disabled>Save tab</button>
+                <button id="create-project-all" class="project-save-btn" disabled>Save all tabs</button>
+            </div>
         </div>
     </div>
 
