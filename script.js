@@ -778,7 +778,7 @@ new Sortable(document.getElementById('projects-list'), {
     fallbackOnBody: true, // Append ghost to body so it can move outside container
     fallbackTolerance: 3,
     onStart: function (evt) {
-      document.body.classList.add('dragging');
+      document.body.classList.add('dragging', 'dragging-project');
       document.body.style.cursor = 'grabbing';
       draggedProjectId = evt.item.dataset.projectId;
 
@@ -786,7 +786,7 @@ new Sortable(document.getElementById('projects-list'), {
       document.addEventListener('mousemove', handleDragMouseMove);
     },
     onEnd: function (evt) {
-      document.body.classList.remove('dragging');
+      document.body.classList.remove('dragging', 'dragging-project');
       document.body.style.cursor = '';
 
       // Stop tracking mouse movement
@@ -1658,15 +1658,15 @@ window.__lifetilesRefresh = async () => {
                     chosenClass: 'sortable-chosen',
                     dragClass: 'sortable-drag',
                     onStart: function(evt) {
-                        document.body.classList.add('dragging');
+                        document.body.classList.add('dragging', 'dragging-tile');
                         draggedTileId = evt.item.dataset.tileId;
                         draggedTileElement = evt.item;
                     },
                     onEnd: async function(evt) {
-                        document.body.classList.remove('dragging');
-
                         // If tile was dropped on sidebar, skip processing
                         if (tileDroppedOnSidebar) {
+                            document.body.classList.remove('dragging', 'dragging-tile');
+                            document.querySelectorAll('.unassigned-section').forEach(s => s.classList.remove('drag-nearby'));
                             tileDroppedOnSidebar = false;
                             draggedTileId = null;
                             draggedTileElement = null;
@@ -1693,6 +1693,12 @@ window.__lifetilesRefresh = async () => {
                         if (evt.to !== evt.from) {
                             await updateQuickSaveCount();
                         }
+
+                        // Delay cleanup to allow Sortable animation to complete
+                        setTimeout(() => {
+                            document.body.classList.remove('dragging', 'dragging-tile');
+                            document.querySelectorAll('.unassigned-section').forEach(s => s.classList.remove('drag-nearby'));
+                        }, 150);
 
                         // Clear tracked tile
                         draggedTileId = null;
@@ -1730,7 +1736,30 @@ window.__lifetilesRefresh = async () => {
                 <span class="unassigned-label">📄 Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
             </div>
             <div class="unassigned-tiles tiles-grid"></div>
+            <div class="unassigned-trigger-zone"></div>
         `;
+
+        // Show drop zone when tile is dragged over section or trigger zone
+        const triggerZone = section.querySelector('.unassigned-trigger-zone');
+
+        const showDropZone = () => {
+            if (draggedTileId && !draggedProjectId) {
+                section.classList.add('drag-nearby');
+            }
+        };
+
+        const hideDropZone = (e, element) => {
+            // Only hide if leaving both section and trigger zone
+            if (!section.contains(e.relatedTarget) && !triggerZone.contains(e.relatedTarget)) {
+                section.classList.remove('drag-nearby');
+            }
+        };
+
+        section.addEventListener('dragover', showDropZone);
+        triggerZone.addEventListener('dragover', showDropZone);
+
+        section.addEventListener('dragleave', (e) => hideDropZone(e, section));
+        triggerZone.addEventListener('dragleave', (e) => hideDropZone(e, triggerZone));
 
         const tilesGrid = section.querySelector('.unassigned-tiles');
 
@@ -1758,18 +1787,18 @@ window.__lifetilesRefresh = async () => {
                 dragClass: 'sortable-drag',
                 emptyInsertThreshold: 50, // Pixels from empty zone to trigger insert
                 onStart: function(evt) {
-                    document.body.classList.add('dragging');
+                    document.body.classList.add('dragging', 'dragging-tile');
                     section.classList.add('drag-active');
                     // Track dragged tile for sidebar drops
                     draggedTileId = evt.item.dataset.tileId;
                     draggedTileElement = evt.item;
                 },
                 onEnd: async function(evt) {
-                    document.body.classList.remove('dragging');
-                    section.classList.remove('drag-active');
-
                     // If tile was dropped on sidebar, skip processing
                     if (tileDroppedOnSidebar) {
+                        section.classList.remove('drag-active');
+                        document.body.classList.remove('dragging', 'dragging-tile');
+                        document.querySelectorAll('.unassigned-section').forEach(s => s.classList.remove('drag-nearby'));
                         tileDroppedOnSidebar = false;
                         draggedTileId = null;
                         draggedTileElement = null;
@@ -1801,8 +1830,17 @@ window.__lifetilesRefresh = async () => {
                     await resequenceContainer(evt.from);
                     await resequenceContainer(evt.to);
 
-                    // Update empty state
+                    // Update empty state BEFORE removing drag classes
                     updateUnassignedEmptyState();
+
+                    // Delay cleanup to allow Sortable animation to complete
+                    setTimeout(() => {
+                        section.classList.remove('drag-active');
+                        document.body.classList.remove('dragging', 'dragging-tile');
+                        document.querySelectorAll('.unassigned-section').forEach(s => s.classList.remove('drag-nearby'));
+                        // Re-check empty state after drag classes are removed
+                        updateUnassignedEmptyState();
+                    }, 150);
 
                     // Update Quick Save count if tiles were moved from/to Quick Save
                     if (evt.from !== evt.to) {
@@ -1830,9 +1868,10 @@ window.__lifetilesRefresh = async () => {
         const tilesGrid = section.querySelector('.unassigned-tiles');
         const tileCount = tilesGrid?.querySelectorAll('.tile').length || 0;
 
-        if (tileCount === 0) {
+        // Don't collapse to empty while dragging - wait until drop completes
+        if (tileCount === 0 && !document.body.classList.contains('dragging-tile')) {
             section.classList.add('empty');
-        } else {
+        } else if (tileCount > 0) {
             section.classList.remove('empty');
         }
 
@@ -2368,7 +2407,7 @@ window.__lifetilesRefresh = async () => {
             filter: '.add-tile-button', // Prevent sorting on add button
             preventOnFilter: false,
             onStart: function(evt) {
-                document.body.classList.add('dragging');
+                document.body.classList.add('dragging', 'dragging-tile');
                 // Disable all add buttons during drag
                 document.querySelectorAll('.add-tile-button').forEach(btn => {
                     btn.classList.add('dragging-disabled');
@@ -2383,9 +2422,6 @@ window.__lifetilesRefresh = async () => {
                 }
             },
             onEnd: async function (evt) {
-                // remove any drag state you set elsewhere
-                document.body.classList.remove('dragging');
-
                 // Re-enable all add buttons after drag
                 requestAnimationFrame(() => {
                     document.querySelectorAll('.add-tile-button').forEach(btn => {
@@ -2396,6 +2432,8 @@ window.__lifetilesRefresh = async () => {
 
                 // If tile was dropped on sidebar, skip Sortable processing
                 if (tileDroppedOnSidebar) {
+                    document.body.classList.remove('dragging', 'dragging-tile');
+                    document.querySelectorAll('.unassigned-section').forEach(s => s.classList.remove('drag-nearby'));
                     tileDroppedOnSidebar = false;
                     draggedTileId = null;
                     draggedTileElement = null;
@@ -2429,13 +2467,24 @@ window.__lifetilesRefresh = async () => {
                 await resequence(evt.from);
                 await resequence(evt.to);
 
-                // Update unassigned section empty state if involved
+                // Update unassigned section empty state BEFORE removing drag classes
                 updateUnassignedEmptyState();
 
                 // Update Quick Save count if tiles were moved from/to Quick Save
                 if (evt.from !== evt.to) {
                     await updateQuickSaveCount();
                 }
+
+                // Delay cleanup to allow Sortable animation to complete
+                setTimeout(() => {
+                    document.body.classList.remove('dragging', 'dragging-tile');
+                    document.querySelectorAll('.unassigned-section').forEach(s => {
+                        s.classList.remove('drag-nearby');
+                        s.classList.remove('drag-active');
+                    });
+                    // Re-check empty state after drag classes are removed
+                    updateUnassignedEmptyState();
+                }, 150);
 
                 // Clear tracked tile
                 draggedTileId = null;

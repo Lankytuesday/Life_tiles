@@ -681,6 +681,11 @@ body.dragging {
     box-sizing: border-box;
 }
 
+.settings-wrapper {
+    position: relative;
+    margin-left: auto;
+}
+
 .settings-btn {
     display: inline-flex;
     align-items: center;
@@ -689,7 +694,6 @@ body.dragging {
     height: 32px;
     padding: 0;
     margin: 0;
-    margin-left: auto;
     border: none;
     border-radius: var(--radius-md);
     background: none;
@@ -751,6 +755,7 @@ body.dragging {
 
 /* Unassigned tiles section */
 .unassigned-section {
+    position: relative; /* For trigger zone positioning */
     margin-bottom: 16px;
     border-radius: var(--radius-lg);
 }
@@ -767,17 +772,30 @@ body.dragging {
 }
 
 /* Maintain height during drag to prevent layout shift */
-body.dragging .unassigned-section .unassigned-tiles {
+body.dragging-tile .unassigned-section .unassigned-tiles {
     min-height: 60px;
 }
 
-/* Empty state - hidden by default, only show when dragging */
+/* Empty state - hidden by default, only show when dragging tiles */
 .unassigned-section.empty .unassigned-tiles {
     display: none;
 }
 
-/* Show drop zone only when a tile is being dragged */
-body.dragging .unassigned-section.empty:not(.drag-active) .unassigned-tiles {
+/* Keep tiles grid visible and sized while actively dragging from it */
+body.dragging-tile .unassigned-section.drag-active .unassigned-tiles {
+    display: grid !important;
+    min-height: 80px !important;
+    box-sizing: border-box;
+    transition: none !important; /* Disable transition during drag */
+}
+
+/* Preserve section height during drag to prevent layout shift */
+body.dragging-tile .unassigned-section.drag-active {
+    min-height: 120px; /* header (~40px) + tiles area (80px) */
+}
+
+/* Show drop zone only when a tile is being dragged AND hovering near it */
+body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unassigned-tiles {
     display: flex;
     min-height: 60px;
     border: 2px dashed var(--color-brand);
@@ -789,10 +807,24 @@ body.dragging .unassigned-section.empty:not(.drag-active) .unassigned-tiles {
     background: rgba(26, 115, 232, 0.05);
 }
 
-body.dragging .unassigned-section.empty:not(.drag-active) .unassigned-tiles::after {
+body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unassigned-tiles::after {
     content: 'Drop tiles here';
     color: var(--color-text-muted);
     font-size: 13px;
+}
+
+/* Trigger zone - invisible area below empty unassigned section to detect nearby drags */
+.unassigned-trigger-zone {
+    display: none;
+}
+
+body.dragging-tile .unassigned-section.empty .unassigned-trigger-zone {
+    position: absolute;
+    bottom: -40px; /* Position below the section */
+    left: 12px;
+    right: 12px;
+    display: block;
+    height: 40px;
 }
 
 /* Hide border/text when tiles are present */
