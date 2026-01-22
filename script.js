@@ -1,5 +1,10 @@
 const __ltOnsiteBlocked = new Set();
 
+// Immediately apply Quick Save view class if needed (prevents UI flash on refresh)
+if (localStorage.getItem('isViewingGlobalUnassigned') === 'true') {
+    document.body.classList.add('quick-save-view');
+}
+
 // Global unassigned project ID (special project for tiles not assigned to any dashboard)
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
 
@@ -374,7 +379,7 @@ async function ensureUnassignedProjects() {
 
 document.addEventListener("DOMContentLoaded", async function () {
     wireLiveUpdates();
-    
+
     // Add scroll isolation for sidebar
     const sidebar = document.getElementById('sidebar');
     if (sidebar) {
@@ -1002,7 +1007,27 @@ new Sortable(document.getElementById('projects-list'), {
                 currentDashboardId = validCurrentId;
             }
 
-            renderSidebar(dashboards, validCurrentId);
+            // Check if user was viewing Quick Save before refresh
+            const wasViewingQuickSave = localStorage.getItem('isViewingGlobalUnassigned') === 'true';
+
+            // Hide UI elements immediately if restoring Quick Save view (prevents flash)
+            if (wasViewingQuickSave) {
+                const newProjectBtn = document.getElementById('new-project');
+                const expandAllBtn = document.getElementById('expand-all');
+                const collapseAllBtn = document.getElementById('collapse-all');
+                if (newProjectBtn) newProjectBtn.style.display = 'none';
+                if (expandAllBtn) expandAllBtn.style.display = 'none';
+                if (collapseAllBtn) collapseAllBtn.style.display = 'none';
+                document.body.classList.add('quick-save-view');
+            }
+
+            renderSidebar(dashboards, wasViewingQuickSave ? GLOBAL_UNASSIGNED_ID : validCurrentId);
+
+            // If was viewing Quick Save, restore that view
+            if (wasViewingQuickSave) {
+                await switchToGlobalUnassigned();
+                return dashboards;
+            }
 
             // Update dashboard title
             const currentDash = dashboards.find(d => d.id === validCurrentId);
@@ -1046,6 +1071,8 @@ new Sortable(document.getElementById('projects-list'), {
 window.__lifetilesRefresh = async () => {
     if (isViewingGlobalUnassigned) {
         // Refresh Quick Save view without switching views
+        // Clear first to prevent duplicates
+        projectsList.innerHTML = '';
         await loadGlobalUnassignedView();
         await updateQuickSaveCount();
     } else {
@@ -1525,6 +1552,7 @@ window.__lifetilesRefresh = async () => {
 
         // Exit global unassigned view
         isViewingGlobalUnassigned = false;
+        localStorage.removeItem('isViewingGlobalUnassigned');
         document.body.classList.remove('quick-save-view');
 
         // Show project controls (hidden in global unassigned view)
@@ -1579,6 +1607,7 @@ window.__lifetilesRefresh = async () => {
         if (isViewingGlobalUnassigned) return;
 
         isViewingGlobalUnassigned = true;
+        localStorage.setItem('isViewingGlobalUnassigned', 'true');
         document.body.classList.add('quick-save-view');
 
         // Update active sidebar item

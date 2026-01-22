@@ -855,7 +855,13 @@ body.dragging-tile .unassigned-section.empty .unassigned-trigger-zone {
     padding: 16px 0;
 }
 
-/* Quick Save view - add margin to title */
+/* Quick Save view - hide controls not applicable */
+body.quick-save-view #new-project,
+body.quick-save-view #expand-all,
+body.quick-save-view #collapse-all {
+    display: none !important;
+}
+
 body.quick-save-view .dashboard-title {
     margin-top: 8px;
 }

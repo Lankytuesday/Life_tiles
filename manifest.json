@@ -8,6 +8,17 @@
     "default_popup": "popup.html",
     "default_title": "Lifetiles"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "commands": {
+    "save-current-tab": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Save current tab to Quick Save"
+    }
+  },
   "icons": {
     "16": "icon128.png",
     "48": "icon128.png",
