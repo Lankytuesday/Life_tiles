@@ -108,6 +108,33 @@ async function saveCurrentTab() {
 }
 
 /**
+ * Open or focus the Lifetiles dashboard
+ */
+async function openDashboard() {
+    try {
+        const dashboardUrl = chrome.runtime.getURL('index.html');
+
+        // Look for existing Lifetiles tab in any window
+        const matches = await chrome.tabs.query({
+            url: [dashboardUrl, `${dashboardUrl}*`]
+        });
+
+        if (matches.length) {
+            // Focus the most recently accessed one
+            matches.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+            const tab = matches[0];
+            await chrome.tabs.update(tab.id, { active: true });
+            await chrome.windows.update(tab.windowId, { focused: true });
+        } else {
+            // Create new tab in current window
+            await chrome.tabs.create({ url: dashboardUrl, active: true });
+        }
+    } catch (error) {
+        console.error('Error opening dashboard:', error);
+    }
+}
+
+/**
  * Open the Quick Save popup window for choosing a project
  */
 async function openQuickSavePopup() {
@@ -165,5 +192,7 @@ chrome.commands.onCommand.addListener((command) => {
         saveCurrentTab();
     } else if (command === 'open-quick-save') {
         openQuickSavePopup();
+    } else if (command === 'open-dashboard') {
+        openDashboard();
     }
 });

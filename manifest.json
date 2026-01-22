@@ -23,6 +23,12 @@
         "default": "Ctrl+Shift+D"
       },
       "description": "Save current tab to a project..."
+    },
+    "open-dashboard": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+O"
+      },
+      "description": "Open Lifetiles dashboard"
     }
   },
   "icons": {
