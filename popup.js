@@ -1,748 +1,505 @@
-// --- Session Buddy–style helpers (no top-level await) ---
+/**
+ * Lifetiles Popup - Redesigned to match quick-save modal aesthetic
+ */
 
-// Global unassigned project ID (must match script.js)
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
+
+// Track state
+let selectedProjectId = null;
+let selectedDashboardId = null;
+let saveMode = 'current'; // 'current' or 'all'
+let currentTab = null;
+
+// Helpers
+const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+function isInternalUrl(u) {
+    try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
+    catch { return true; }
+}
+
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
 
 // Get the last-focused normal Chrome window id (not the popup)
 async function getTargetWindowId() {
     try {
-      const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
-      if (w && typeof w.id === 'number') return w.id;
-    } catch (_) {
-      // ignore
-    }
-    // Fallback: use any normal window if none are focused (rare)
+        const w = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+        if (w && typeof w.id === 'number') return w.id;
+    } catch (_) {}
     const wins = await chrome.windows.getAll({ windowTypes: ['normal'] });
     return wins[0]?.id ?? null;
-  }
+}
 
-  // Focus existing dashboard tab in that window, or create it there
-  async function focusOrCreateDashboardInWindow(windowId) {
+// Focus existing dashboard tab in that window, or create it there
+async function focusOrCreateDashboardInWindow(windowId) {
     const dashboardUrl = chrome.runtime.getURL('index.html');
-
-    // Look for an existing Lifetiles tab in THIS window
     const matches = await chrome.tabs.query({
-      windowId,
-      url: [dashboardUrl, `${dashboardUrl}*`]
+        windowId,
+        url: [dashboardUrl, `${dashboardUrl}*`]
     });
 
     if (matches.length) {
-      // Prefer the most-recently-used if multiples exist
-      matches.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
-      await chrome.tabs.update(matches[0].id, { active: true });
-      await chrome.windows.update(windowId, { focused: true });
+        matches.sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+        await chrome.tabs.update(matches[0].id, { active: true });
+        await chrome.windows.update(windowId, { focused: true });
     } else {
-      // Create the tab *in that same window* (prevents Chrome from opening a new window)
-      await chrome.tabs.create({ windowId, url: dashboardUrl, active: true });
+        await chrome.tabs.create({ windowId, url: dashboardUrl, active: true });
     }
-  }
-  const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
-  function isInternalUrl(u) {
-    try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
-    catch { return true; }
-  }
+}
 
-  // Helper: Get the next available order for a new project in a dashboard
-  async function getNextProjectOrder(dashboardId) {
+// Notify other Lifetiles pages of changes
+function notifyChanges() {
+    try {
+        const bc = new BroadcastChannel('lifetiles');
+        bc.postMessage({ type: 'tiles:changed' });
+        bc.close();
+    } catch {}
+    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
+        try {
+            chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
+                void chrome.runtime.lastError;
+            });
+        } catch {}
+    }
+}
+
+// Get next order for a project
+async function getNextProjectOrder(dashboardId) {
     const existingProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
     let maxOrder = -1;
     existingProjects.forEach(p => {
-      const order = Number.isFinite(+p.order) ? +p.order : -1;
-      if (order > maxOrder) maxOrder = order;
+        const order = Number.isFinite(+p.order) ? +p.order : -1;
+        if (order > maxOrder) maxOrder = order;
     });
     return maxOrder + 1;
-  }
+}
 
+// Get next order for a tile in a project
+async function getNextTileOrder(projectId) {
+    const existingTiles = await db.tiles.where('projectId').equals(projectId).toArray();
+    return existingTiles.length;
+}
 
-  document.addEventListener('DOMContentLoaded', async function() {
-      // ✅ Replaced: Session Buddy–style “Go to dashboard”
-      {
-        const btn =
-          document.getElementById('dashboard-link') ||
-          Array.from(document.querySelectorAll('button,a')).find(
-            el => /go to dashboard/i.test(el.textContent || '')
-          );
-  
-        if (btn) {
-          btn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            try {
-              const windowId = await getTargetWindowId();
-              if (windowId == null) {
-                // No normal windows open — open one and bail
-                const url = chrome.runtime.getURL('index.html');
-                await chrome.windows.create({ url });
-              } else {
-                await focusOrCreateDashboardInWindow(windowId);
-              }
-            } catch (err) {
-              console.error('Go to dashboard failed:', err);
-            } finally {
-              // Nice UX: close the popup after jumping
-              window.close();
-            }
-          });
-        }
-      }
+// DOM Ready
+document.addEventListener('DOMContentLoaded', async function() {
+    // Get current tab info
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    currentTab = tab;
 
-      // Quick Save tab button - saves current tab to global unassigned
-      const quickSaveTabBtn = document.getElementById('quick-save-tab-btn');
-      if (quickSaveTabBtn) {
-        quickSaveTabBtn.addEventListener('click', async () => {
-          try {
-            const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!currentTab || !currentTab.url || isInternalUrl(currentTab.url)) {
-              console.log('Cannot save this tab');
-              return;
-            }
-
-            const tileData = {
-              id: Date.now().toString() + Math.random(),
-              name: currentTab.title || 'Untitled',
-              url: currentTab.url,
-              projectId: GLOBAL_UNASSIGNED_ID,
-              dashboardId: null
-            };
-            await db.tiles.add(tileData);
-
-            // Notify dashboard
-            try {
-              const bc = new BroadcastChannel('lifetiles');
-              bc.postMessage({ type: 'tiles:changed' });
-              bc.close();
-            } catch {}
-            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-              try {
-                chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                  void chrome.runtime.lastError;
-                });
-              } catch {}
-            }
-
-            window.close();
-          } catch (err) {
-            console.error('Quick save tab failed:', err);
-          }
-        });
-      }
-
-      // Quick Save all tabs button - saves all tabs from window to global unassigned
-      const quickSaveAllBtn = document.getElementById('quick-save-all-btn');
-      if (quickSaveAllBtn) {
-        quickSaveAllBtn.addEventListener('click', async () => {
-          try {
-            const tabs = await chrome.tabs.query({ currentWindow: true });
-            let savedCount = 0;
-
-            for (const tab of tabs) {
-              if (!tab.url || isInternalUrl(tab.url)) continue;
-              const tileData = {
-                id: Date.now().toString() + Math.random(),
-                name: tab.title || 'Untitled',
-                url: tab.url,
-                projectId: GLOBAL_UNASSIGNED_ID,
-                dashboardId: null
-              };
-              await db.tiles.add(tileData);
-              savedCount++;
-            }
-
-            // Notify dashboard
-            try {
-              const bc = new BroadcastChannel('lifetiles');
-              bc.postMessage({ type: 'tiles:changed' });
-              bc.close();
-            } catch {}
-            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-              try {
-                chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                  void chrome.runtime.lastError;
-                });
-              } catch {}
-            }
-
-            window.close();
-          } catch (err) {
-            console.error('Quick save all tabs failed:', err);
-          }
-        });
-      }
-
-
-    const dropdownContainer = document.getElementById('custom-dropdown-container');
-    const dropdownHeader = document.getElementById('dropdown-header');
-    const dropdownOptions = document.getElementById('dropdown-options');
+    // Elements
+    const dashboardLink = document.getElementById('dashboard-link');
+    const quickSaveTabBtn = document.getElementById('quick-save-tab-btn');
+    const quickSaveAllBtn = document.getElementById('quick-save-all-btn');
+    const projectTree = document.getElementById('project-tree');
     const tileDetails = document.getElementById('tile-details');
     const tileNameInput = document.getElementById('tile-name-input');
     const tileUrlInput = document.getElementById('tile-url-input');
-
-    // Save options elements
-    const saveOptionsContainer = document.getElementById('save-options-container');
-    const saveOptionsHeader = document.getElementById('save-options-header');
-    const saveOptionsList = document.getElementById('save-options-list');
-    const saveCurrentOption = document.getElementById('save-current-option');
-    const saveAllOption = document.getElementById('save-all-option');
+    const tileUrlDisplay = document.getElementById('tile-url-display');
+    const saveCurrentBtn = document.getElementById('save-current-btn');
+    const saveAllBtn = document.getElementById('save-all-btn');
     const saveButton = document.getElementById('save-button');
-    // ARCHIVED: Quick Save to last-used project button
-    // const quickSaveBtn = document.getElementById('quick-save-btn');
 
-    // Track selected project value and save mode
-    let selectedProjectValue = '';
-    let selectedProjectName = '';
-    let saveMode = 'current'; // 'current' or 'all'
+    // Modal elements
+    const projectModal = document.getElementById('project-modal');
+    const modalDashboardSelect = document.getElementById('modal-dashboard-select');
+    const projectNameInput = document.getElementById('project-name-input');
+    const modalCancel = document.getElementById('modal-cancel');
+    const createProjectBtn = document.getElementById('create-project-btn');
+    const modalSaveCurrent = document.getElementById('modal-save-current');
+    const modalSaveAll = document.getElementById('modal-save-all');
 
-    // Initially hide tile details and disable save button
-    tileDetails.style.display = 'none';
-    saveButton.disabled = true;
+    let modalSaveMode = 'current';
 
-    // Pre-populate tile name/URL immediately on popup load
-    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // Pre-populate tile info
     if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
         tileNameInput.value = currentTab.title || '';
         tileUrlInput.value = currentTab.url || '';
+        tileUrlDisplay.textContent = currentTab.url || '';
     }
 
-    // Check for last used project (for pre-selecting in dropdown)
-    let lastProject = null;
-    const lastProjectData = localStorage.getItem('lifetiles_lastProject');
-    if (lastProjectData) {
+    // Dashboard link handler
+    dashboardLink.addEventListener('click', async (e) => {
+        e.preventDefault();
         try {
-            lastProject = JSON.parse(lastProjectData);
-            // Verify the project still exists
-            if (lastProject && lastProject.value) {
-                const { projectId } = JSON.parse(lastProject.value);
-                const existingProject = await db.projects.get(projectId);
-                if (!existingProject) {
-                    // Clear stale reference
-                    localStorage.removeItem('lifetiles_lastProject');
-                    lastProject = null;
-                }
+            const windowId = await getTargetWindowId();
+            if (windowId == null) {
+                await chrome.windows.create({ url: chrome.runtime.getURL('index.html') });
+            } else {
+                await focusOrCreateDashboardInWindow(windowId);
             }
-        } catch (e) {
-            console.error('Failed to parse last project:', e);
-            lastProject = null;
+        } catch (err) {
+            console.error('Go to dashboard failed:', err);
+        } finally {
+            window.close();
         }
-    }
+    });
 
-    // ARCHIVED: Quick Save to last-used project button and handler
-    /*
-    if (existingProject && lastProject.name && currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
-        quickSaveBtn.style.display = 'block';
-        quickSaveBtn.querySelector('.quick-save-project-name').textContent = lastProject.name;
-    }
-
-    quickSaveBtn.addEventListener('click', async () => {
-        if (!lastProject || !lastProject.value) return;
-
-        const { dashboardId, projectId } = JSON.parse(lastProject.value);
-        const tileName = tileNameInput.value.trim() || currentTab.title || 'Untitled';
-        const tileUrl = currentTab.url;
-
-        if (!tileUrl || isInternalUrl(tileUrl)) return;
+    // Quick Save tab button
+    quickSaveTabBtn.addEventListener('click', async () => {
+        if (!currentTab || !currentTab.url || isInternalUrl(currentTab.url)) {
+            console.log('Cannot save this tab');
+            return;
+        }
 
         const tileData = {
-            id: Date.now().toString(),
-            name: tileName,
-            url: tileUrl,
-            projectId: projectId,
-            dashboardId: dashboardId
+            id: generateId(),
+            name: currentTab.title || 'Untitled',
+            url: currentTab.url,
+            projectId: GLOBAL_UNASSIGNED_ID,
+            dashboardId: null,
+            order: await getNextTileOrder(GLOBAL_UNASSIGNED_ID)
         };
+        await db.tiles.add(tileData);
+        notifyChanges();
+        window.close();
+    });
 
-        try {
+    // Quick Save all tabs button
+    quickSaveAllBtn.addEventListener('click', async () => {
+        const tabs = await chrome.tabs.query({ currentWindow: true });
+        let order = await getNextTileOrder(GLOBAL_UNASSIGNED_ID);
+
+        for (const tab of tabs) {
+            if (!tab.url || isInternalUrl(tab.url)) continue;
+            const tileData = {
+                id: generateId(),
+                name: tab.title || 'Untitled',
+                url: tab.url,
+                projectId: GLOBAL_UNASSIGNED_ID,
+                dashboardId: null,
+                order: order++
+            };
             await db.tiles.add(tileData);
-            try {
-                const bc = new BroadcastChannel('lifetiles');
-                bc.postMessage({ type: 'tiles:changed' });
-                bc.close();
-            } catch {}
-            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-                try {
-                    chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                        void chrome.runtime.lastError;
-                    });
-                } catch (_) {}
+        }
+
+        notifyChanges();
+        window.close();
+    });
+
+    // Save mode toggle
+    saveCurrentBtn.addEventListener('click', () => {
+        saveMode = 'current';
+        saveCurrentBtn.classList.add('active');
+        saveAllBtn.classList.remove('active');
+    });
+
+    saveAllBtn.addEventListener('click', () => {
+        saveMode = 'all';
+        saveAllBtn.classList.add('active');
+        saveCurrentBtn.classList.remove('active');
+    });
+
+    // Modal save mode toggle
+    modalSaveCurrent.addEventListener('click', () => {
+        modalSaveMode = 'current';
+        modalSaveCurrent.classList.add('active');
+        modalSaveAll.classList.remove('active');
+    });
+
+    modalSaveAll.addEventListener('click', () => {
+        modalSaveMode = 'all';
+        modalSaveAll.classList.add('active');
+        modalSaveCurrent.classList.remove('active');
+    });
+
+    // Validate save button
+    function validateSaveButton() {
+        const nameValid = tileNameInput.value.trim() !== '';
+        const projectValid = selectedProjectId !== null;
+        saveButton.disabled = !(nameValid && projectValid);
+    }
+
+    tileNameInput.addEventListener('input', validateSaveButton);
+
+    // Enter key to save
+    tileNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !saveButton.disabled) {
+            saveButton.click();
+        }
+    });
+
+    // Save button click
+    saveButton.addEventListener('click', async () => {
+        if (!selectedProjectId) return;
+
+        if (saveMode === 'all') {
+            const tabs = await chrome.tabs.query({ currentWindow: true });
+            let order = await getNextTileOrder(selectedProjectId);
+
+            for (const tab of tabs) {
+                if (!tab.url || isInternalUrl(tab.url)) continue;
+                const tileData = {
+                    id: generateId(),
+                    name: tab.title || 'Untitled',
+                    url: tab.url,
+                    projectId: selectedProjectId,
+                    dashboardId: selectedDashboardId,
+                    order: order++
+                };
+                await db.tiles.add(tileData);
             }
-            window.close();
-        } catch (e) {
-            console.error('Quick save failed:', e);
+        } else {
+            const tileName = tileNameInput.value.trim() || 'Untitled';
+            const tileData = {
+                id: generateId(),
+                name: tileName,
+                url: currentTab.url,
+                projectId: selectedProjectId,
+                dashboardId: selectedDashboardId,
+                order: await getNextTileOrder(selectedProjectId)
+            };
+            await db.tiles.add(tileData);
         }
-    });
-    */
 
-    // Toggle project dropdown visibility
-    dropdownHeader.addEventListener('click', (event) => {
-        event.stopPropagation();
-        dropdownOptions.classList.toggle('dropdown-hidden');
-        dropdownHeader.classList.toggle('dropdown-open', !dropdownOptions.classList.contains('dropdown-hidden'));
-        // Hide save options dropdown if open
-        saveOptionsList.classList.add('dropdown-hidden');
-        saveOptionsHeader.classList.remove('dropdown-open');
-    });
+        // Save last used project
+        localStorage.setItem('lifetiles_lastProject', JSON.stringify({
+            projectId: selectedProjectId,
+            dashboardId: selectedDashboardId
+        }));
+        localStorage.setItem('lifetiles_lastDashboard', String(selectedDashboardId));
 
-    // Toggle save options dropdown visibility
-    saveOptionsHeader.addEventListener('click', (event) => {
-        event.stopPropagation();
-        saveOptionsList.classList.toggle('dropdown-hidden');
-        saveOptionsHeader.classList.toggle('dropdown-open', !saveOptionsList.classList.contains('dropdown-hidden'));
-        // Hide project dropdown if open
-        dropdownOptions.classList.add('dropdown-hidden');
-        dropdownHeader.classList.remove('dropdown-open');
+        notifyChanges();
+        window.close();
     });
 
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', (event) => {
-        if (!dropdownContainer.contains(event.target)) {
-            dropdownOptions.classList.add('dropdown-hidden');
-            dropdownHeader.classList.remove('dropdown-open');
-        }
-        if (!saveOptionsContainer.contains(event.target)) {
-            saveOptionsList.classList.add('dropdown-hidden');
-            saveOptionsHeader.classList.remove('dropdown-open');
-        }
-    });
+    // Select a project
+    function selectProject(projectId, dashboardId, element) {
+        // Clear previous selection
+        document.querySelectorAll('.project-item.selected').forEach(el => el.classList.remove('selected'));
 
-    // Helper function to select a project
-    function selectProject(projectValue, projectName) {
-        document.querySelectorAll('.dropdown-option').forEach(opt => {
-            opt.classList.remove('selected');
-            if (opt.dataset.value === projectValue) {
-                opt.classList.add('selected');
-            }
-        });
-        dropdownHeader.textContent = projectName;
-        selectedProjectValue = projectValue;
-        selectedProjectName = projectName;
-        dropdownOptions.classList.add('dropdown-hidden');
-        dropdownHeader.classList.remove('dropdown-open');
+        // Set new selection
+        element.classList.add('selected');
+        selectedProjectId = projectId;
+        selectedDashboardId = dashboardId;
 
-        // Save last-used project to localStorage
-        const projectData = JSON.parse(projectValue);
-        const savedProject = {
-            value: projectValue,
-            name: projectName,
-            dashboardId: projectData.dashboardId
-        };
-        localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
-        localStorage.setItem('lifetiles_lastDashboard', String(projectData.dashboardId));
-
-        // ARCHIVED: Update lastProject variable and hide Quick Save button
-        lastProject = savedProject;
-        // quickSaveBtn.style.display = 'none';
-
-        tileDetails.style.display = 'block';
-        validateInputs();
+        // Show tile details
+        tileDetails.classList.remove('hidden');
+        validateSaveButton();
         tileNameInput.focus();
     }
 
-    // Load all projects from all dashboards into dropdown
-    let dashboards = await db.dashboards.toArray();
+    // Render project tree
+    async function renderProjectTree() {
+        projectTree.innerHTML = '';
 
-    // Sort dashboards by order property
-    if (dashboards && dashboards.length > 0) {
-        const orderNum = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-        dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
-    }
+        // Load dashboards
+        const dashboards = await db.dashboards.toArray();
+        dashboards.sort((a, b) => {
+            const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+            const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+            return ao - bo;
+        });
 
-    // Clear existing options
-    const scrollArea = document.createElement('div');
-    scrollArea.className = 'dropdown-scroll-area';
+        // Get last used dashboard
+        const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
 
-    dropdownOptions.innerHTML = '';
-    dropdownOptions.appendChild(scrollArea);
+        // Render each dashboard with its projects
+        for (const dashboard of dashboards) {
+            const group = document.createElement('div');
+            group.className = 'dashboard-group';
 
-    // Get last-used dashboard from localStorage
-    const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
-    console.log('Last used dashboard from localStorage:', lastUsedDashboardId);
+            // Dashboard header
+            const header = document.createElement('div');
+            header.className = 'dashboard-header';
 
-    // Create groups for each dashboard (including empty ones)
-    let firstDashboardId = null;
-
-    // Store references for inline new project buttons
-    const inlineNewProjectButtons = [];
-
-    for (const dashboard of dashboards) {
-        const projects = await db.projects.where('dashboardId').equals(dashboard.id).toArray();
-
-            // Track first dashboard with projects
-            if (projects.length > 0 && !firstDashboardId) {
-                firstDashboardId = String(dashboard.id);
-            }
-
-            // Determine if this dashboard should be expanded
-            const dashboardIdStr = String(dashboard.id);
+            // Expand last-used dashboard or first one
             const shouldExpand = lastUsedDashboardId
-                ? lastUsedDashboardId === dashboardIdStr
-                : (projects.length > 0 && dashboardIdStr === firstDashboardId);
+                ? lastUsedDashboardId === String(dashboard.id)
+                : dashboards.indexOf(dashboard) === 0;
 
-            // Add dashboard label (clickable for collapse/expand)
-            const dashboardLabel = document.createElement('div');
-            dashboardLabel.className = 'dropdown-group-label';
             if (!shouldExpand) {
-                dashboardLabel.classList.add('collapsed');
+                header.classList.add('collapsed');
             }
-            dashboardLabel.innerHTML = `
-                <svg class="dropdown-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"/>
+
+            header.innerHTML = `
+                <svg class="dashboard-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
-                <span class="dropdown-group-name">${dashboard.name}</span>
+                <svg class="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span class="dashboard-name">${dashboard.name}</span>
             `;
-            dashboardLabel.title = "Click to expand/collapse";
-            dashboardLabel.dataset.dashboardId = dashboard.id;
-            scrollArea.appendChild(dashboardLabel);
 
-            // Create collapsible container for projects
-            const projectsContainer = document.createElement('div');
-            projectsContainer.className = 'dashboard-projects';
+            // Projects list
+            const projectsList = document.createElement('div');
+            projectsList.className = 'projects-list';
             if (!shouldExpand) {
-                projectsContainer.classList.add('collapsed');
+                projectsList.classList.add('collapsed');
             }
-            projectsContainer.dataset.dashboardId = dashboard.id;
 
-            // Add click handler to toggle collapse
-            dashboardLabel.addEventListener('click', (e) => {
-                e.stopPropagation();
-                dashboardLabel.classList.toggle('collapsed');
-                projectsContainer.classList.toggle('collapsed');
+            // Load projects for this dashboard
+            const projects = await db.projects
+                .where('dashboardId')
+                .equals(dashboard.id)
+                .toArray();
+
+            // Separate unassigned and regular projects
+            const unassignedProject = projects.find(p => p.isUnassigned);
+            const regularProjects = projects.filter(p => !p.isUnassigned);
+            regularProjects.sort((a, b) => {
+                const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+                const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+                return ao - bo;
             });
 
-            if (projects.length > 0) {
-                // Sort projects: unassigned first, then by order
-                const ord = d => Number.isFinite(+d.order) ? +d.order : Number.MAX_SAFE_INTEGER;
-                projects.sort((a, b) => {
-                    // Unassigned projects come first
-                    if (a.isUnassigned && !b.isUnassigned) return -1;
-                    if (!a.isUnassigned && b.isUnassigned) return 1;
-                    return ord(a) - ord(b) || String(a.id).localeCompare(String(b.id));
-                });
-
-                // Add projects from this dashboard
-                projects.forEach(project => {
-                    const projectOption = document.createElement('div');
-                    projectOption.className = 'dropdown-option';
-
-                    // Show icon and "Unassigned" for unassigned projects
-                    if (project.isUnassigned) {
-                        projectOption.innerHTML = `
-                            <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                                <line x1="9" y1="3" x2="9" y2="21"/>
-                            </svg>
-                            <span>Unassigned</span>
-                        `;
-                        projectOption.classList.add('unassigned-option');
-                    } else {
-                        projectOption.innerHTML = `
-                            <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                            </svg>
-                            <span>${project.name}</span>
-                        `;
-                    }
-
-                    projectOption.dataset.value = JSON.stringify({
-                        dashboardId: dashboard.id,
-                        projectId: project.id
-                    });
-
-                    projectOption.addEventListener('click', async function() {
-                        selectProject(this.dataset.value, this.querySelector('span').textContent);
-                    });
-
-                    projectsContainer.appendChild(projectOption);
-                });
+            // Add unassigned project first if it exists
+            if (unassignedProject) {
+                const item = document.createElement('div');
+                item.className = 'project-item';
+                item.innerHTML = `
+                    <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                        <polyline points="13 2 13 9 20 9"></polyline>
+                    </svg>
+                    <span class="project-name">Unassigned</span>
+                `;
+                item.addEventListener('click', () => selectProject(unassignedProject.id, dashboard.id, item));
+                projectsList.appendChild(item);
             }
 
-            // Always add inline "+ New Project" button at end of each dashboard
-            const inlineNewProject = document.createElement('div');
-            inlineNewProject.className = 'dropdown-option inline-new-project';
-            inlineNewProject.innerHTML = `
-                <svg class="dropdown-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="12" y1="5" x2="12" y2="19"/>
-                    <line x1="5" y1="12" x2="19" y2="12"/>
+            // Add regular projects
+            for (const project of regularProjects) {
+                const item = document.createElement('div');
+                item.className = 'project-item';
+                item.innerHTML = `
+                    <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span class="project-name">${project.name}</span>
+                `;
+                item.addEventListener('click', () => selectProject(project.id, dashboard.id, item));
+                projectsList.appendChild(item);
+            }
+
+            // Add "New Project" item
+            const newProjectItem = document.createElement('div');
+            newProjectItem.className = 'project-item new-project-item';
+            newProjectItem.innerHTML = `
+                <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                <span>New Project</span>
+                <span class="project-name">New Project</span>
             `;
-            inlineNewProject.dataset.dashboardId = dashboard.id;
-            inlineNewProjectButtons.push(inlineNewProject);
-            projectsContainer.appendChild(inlineNewProject);
+            newProjectItem.addEventListener('click', () => {
+                modalDashboardSelect.value = dashboard.id;
+                projectModal.classList.remove('hidden');
+                projectNameInput.value = '';
+                createProjectBtn.disabled = true;
+                projectNameInput.focus();
+            });
+            projectsList.appendChild(newProjectItem);
 
-            scrollArea.appendChild(projectsContainer);
-        }
+            // Toggle collapse on header click
+            header.addEventListener('click', () => {
+                header.classList.toggle('collapsed');
+                projectsList.classList.toggle('collapsed');
+            });
 
-        // ARCHIVED: Add new project button at bottom of dropdown
-        /*
-        const newProjectButton = document.createElement('button');
-        newProjectButton.className = 'new-project-button';
-        newProjectButton.textContent = '+ New Project';
-        dropdownOptions.appendChild(newProjectButton);
-        */
+            group.appendChild(header);
+            group.appendChild(projectsList);
+            projectTree.appendChild(group);
 
-        // Mark last used project as selected (visually) but DON'T expand tile details
-        // Quick Save button is already shown - this just pre-selects in the dropdown
-        if (lastProject && lastProject.value && lastProject.name) {
-            // Verify the project still exists
-            const projectOption = document.querySelector(`.dropdown-option[data-value='${lastProject.value}']`);
-            if (projectOption) {
-                projectOption.classList.add('selected');
-                selectedProjectValue = lastProject.value;
-                selectedProjectName = lastProject.name;
-            }
-        }
-
-        // Project modal elements
-        const projectModal = document.getElementById('project-modal');
-        const projectNameInput = document.getElementById('project-name-input');
-        const createProjectTabBtn = document.getElementById('create-project-tab');
-        const createProjectAllBtn = document.getElementById('create-project-all');
-        const modalDashboardSelect = document.getElementById('modal-dashboard-select');
-
-        // Populate modal dashboard select
-        dashboards.forEach(dashboard => {
+            // Add dashboard to modal select
             const option = document.createElement('option');
             option.value = dashboard.id;
             option.textContent = dashboard.name;
             modalDashboardSelect.appendChild(option);
-        });
-
-        // Disable save buttons by default, enable when text is entered
-        createProjectTabBtn.disabled = true;
-        createProjectAllBtn.disabled = true;
-        projectNameInput.addEventListener('input', () => {
-            const hasName = projectNameInput.value.trim() !== '';
-            createProjectTabBtn.disabled = !hasName;
-            createProjectAllBtn.disabled = !hasName;
-        });
-
-        // Handle Enter key in project name input (default to save tab)
-        projectNameInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !createProjectTabBtn.disabled) {
-                createProjectTabBtn.click();
-            }
-        });
-
-        // ARCHIVED: Click handler for bottom new project button
-        /*
-        newProjectButton.addEventListener('click', () => {
-            projectModal.style.display = 'flex';
-            projectNameInput.value = '';
-            createProjectBtn.disabled = true;
-            projectNameInput.focus();
-            dropdownOptions.classList.add('dropdown-hidden');
-        });
-        */
-
-        // Add click handlers for inline new project buttons (pre-select dashboard)
-        inlineNewProjectButtons.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                modalDashboardSelect.value = btn.dataset.dashboardId;
-                projectModal.style.display = 'flex';
-                projectNameInput.value = '';
-                createProjectTabBtn.disabled = true;
-                createProjectAllBtn.disabled = true;
-                projectNameInput.focus();
-                dropdownOptions.classList.add('dropdown-hidden');
-            });
-        });
-
-        // Close modal when clicking outside
-        projectModal.addEventListener('click', (e) => {
-            if (e.target === projectModal) {
-                projectModal.style.display = 'none';
-            }
-        });
-
-        // Helper: Create project and save tiles
-        async function createProjectAndSaveTiles(saveAllTabs) {
-            const projectName = projectNameInput.value.trim();
-            const selectedDashboardId = modalDashboardSelect.value;
-            if (!projectName || !selectedDashboardId) return;
-
-            const nextOrder = await getNextProjectOrder(selectedDashboardId);
-
-            const projectData = {
-                id: Date.now().toString(),
-                name: projectName,
-                dashboardId: selectedDashboardId,
-                order: nextOrder
-            };
-
-            await db.projects.add(projectData);
-
-            // Save newly created project as last used
-            const projectValue = JSON.stringify({
-                dashboardId: selectedDashboardId,
-                projectId: projectData.id
-            });
-            const savedProject = {
-                value: projectValue,
-                name: projectName,
-                dashboardId: selectedDashboardId
-            };
-            localStorage.setItem('lifetiles_lastProject', JSON.stringify(savedProject));
-            localStorage.setItem('lifetiles_lastDashboard', String(selectedDashboardId));
-
-            if (saveAllTabs) {
-                // Save all tabs from current window
-                const tabs = await chrome.tabs.query({ currentWindow: true });
-                for (const tab of tabs) {
-                    if (!tab.url || isInternalUrl(tab.url)) continue;
-                    const tileData = {
-                        id: Date.now().toString() + Math.random(),
-                        name: tab.title || 'Untitled',
-                        url: tab.url,
-                        projectId: projectData.id,
-                        dashboardId: selectedDashboardId
-                    };
-                    await db.tiles.add(tileData);
-                }
-            } else {
-                // Save only current tab
-                const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (currentTab?.url && !isInternalUrl(currentTab.url)) {
-                    const tileData = {
-                        id: Date.now().toString() + Math.random(),
-                        name: currentTab.title || 'Untitled',
-                        url: currentTab.url,
-                        projectId: projectData.id,
-                        dashboardId: selectedDashboardId
-                    };
-                    await db.tiles.add(tileData);
-                }
-            }
-
-            // Notify dashboard of changes
-            try {
-                const bc = new BroadcastChannel('lifetiles');
-                bc.postMessage({ type: 'tiles:changed' });
-                bc.close();
-            } catch {}
-            projectModal.style.display = 'none';
-            window.close();
-        }
-
-        // Create new project and save current tab
-        createProjectTabBtn.addEventListener('click', () => createProjectAndSaveTiles(false));
-
-        // Create new project and save all tabs
-        createProjectAllBtn.addEventListener('click', () => createProjectAndSaveTiles(true));
-
-    // Handle save option selection
-    saveCurrentOption.addEventListener('click', () => {
-        saveMode = 'current';
-        saveOptionsHeader.textContent = 'Save current page';
-        saveOptionsList.classList.add('dropdown-hidden');
-    });
-
-    saveAllOption.addEventListener('click', () => {
-        saveMode = 'all';
-        saveOptionsHeader.textContent = 'Save all tabs from window';
-        saveOptionsList.classList.add('dropdown-hidden');
-    });
-
-    // Input validation
-    function validateInputs() {
-        const nameValid = tileNameInput.value.trim() !== "";
-        const urlValid = isValidUrl(tileUrlInput.value) && !isInternalUrl(tileUrlInput.value);
-        const projectValid = selectedProjectValue !== "";
-        saveButton.disabled = !(nameValid && urlValid && projectValid);
-    }
-
-    function isValidUrl(string) {
-        try {
-            new URL(string);
-            return true;
-        } catch (_) {
-            return false;
         }
     }
 
-    // Validate on input change
-    tileNameInput.addEventListener("input", validateInputs);
-
-    // Handle Enter key in name input
-    tileNameInput.addEventListener("keydown", function(event) {
-        if (event.key === 'Enter' && !saveButton.disabled) {
-            saveButton.click();
-        }
+    // Modal handlers
+    modalCancel.addEventListener('click', () => {
+        projectModal.classList.add('hidden');
     });
-    tileUrlInput.addEventListener("input", validateInputs);
 
-    // Optional: press Enter in URL field to save (if valid)
-    tileUrlInput.addEventListener("keydown", function (event) {
-        if (event.key === 'Enter' && !saveButton.disabled) {
-        saveButton.click();
+    projectModal.addEventListener('click', (e) => {
+        if (e.target === projectModal) {
+            projectModal.classList.add('hidden');
         }
     });
 
-    // Handle save button click
-    saveButton.addEventListener('click', async () => {
-        if (!selectedProjectValue) return;
+    projectNameInput.addEventListener('input', () => {
+        createProjectBtn.disabled = projectNameInput.value.trim() === '';
+    });
 
-        const { dashboardId, projectId } = JSON.parse(selectedProjectValue);
+    projectNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !createProjectBtn.disabled) {
+            createProjectBtn.click();
+        }
+    });
 
-        if (saveMode === 'all') {
+    createProjectBtn.addEventListener('click', async () => {
+        const projectName = projectNameInput.value.trim();
+        const dashboardId = modalDashboardSelect.value;
+        if (!projectName || !dashboardId) return;
+
+        const nextOrder = await getNextProjectOrder(dashboardId);
+
+        const projectData = {
+            id: generateId(),
+            name: projectName,
+            dashboardId: dashboardId,
+            order: nextOrder
+        };
+
+        await db.projects.add(projectData);
+
+        // Save tiles
+        if (modalSaveMode === 'all') {
             const tabs = await chrome.tabs.query({ currentWindow: true });
-
-            // Save all tabs using Dexie
+            let order = 0;
             for (const tab of tabs) {
                 if (!tab.url || isInternalUrl(tab.url)) continue;
                 const tileData = {
-                    id: Date.now().toString() + Math.random(),
+                    id: generateId(),
                     name: tab.title || 'Untitled',
                     url: tab.url,
-                    projectId: projectId,
-                    dashboardId: dashboardId
+                    projectId: projectData.id,
+                    dashboardId: dashboardId,
+                    order: order++
                 };
                 await db.tiles.add(tileData);
             }
-
-            // Notify dashboard(s) once all writes are done
-            try {
-                const bc = new BroadcastChannel('lifetiles');
-                bc.postMessage({ type: 'tiles:changed' });
-                bc.close();
-            } catch {}
-            if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-                try {
-                    chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                        void chrome.runtime.lastError;
-                    });
-                } catch (_) {}
-            }
-            window.close();
         } else {
-            const tileName = tileNameInput.value.trim();
-            const tileUrl = tileUrlInput.value;
-
-            if (tileName && isValidUrl(tileUrl) && !isInternalUrl(tileUrl)) {
+            if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
                 const tileData = {
-                    id: Date.now().toString(),
-                    name: tileName,
-                    url: tileUrl,
-                    projectId: projectId,
-                    dashboardId: dashboardId
+                    id: generateId(),
+                    name: currentTab.title || 'Untitled',
+                    url: currentTab.url,
+                    projectId: projectData.id,
+                    dashboardId: dashboardId,
+                    order: 0
                 };
+                await db.tiles.add(tileData);
+            }
+        }
 
-                try {
-                    await db.tiles.add(tileData);
-                    try {
-                        const bc = new BroadcastChannel('lifetiles');
-                        bc.postMessage({ type: 'tiles:changed' });
-                        bc.close();
-                    } catch {}
-                    if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-                        try {
-                            chrome.runtime.sendMessage({ type: 'tiles:changed' }, () => {
-                                void chrome.runtime.lastError;
-                            });
-                        } catch (_) {}
-                    }
-                    window.close();
-                } catch (e) {
-                    console.error('Failed to save tile:', e);
-                }
+        // Save as last used
+        localStorage.setItem('lifetiles_lastProject', JSON.stringify({
+            projectId: projectData.id,
+            dashboardId: dashboardId
+        }));
+        localStorage.setItem('lifetiles_lastDashboard', String(dashboardId));
+
+        notifyChanges();
+        window.close();
+    });
+
+    // Keyboard shortcut - Escape to close
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (!projectModal.classList.contains('hidden')) {
+                projectModal.classList.add('hidden');
             }
         }
     });
+
+    // Render the project tree
+    await renderProjectTree();
 });

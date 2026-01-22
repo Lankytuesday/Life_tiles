@@ -1,234 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lifetiles</title>
     <link rel="stylesheet" href="popup.css">
-    <style>
-        /* Override browser's default behavior for select options */
-        @supports (-webkit-appearance: none) or (-moz-appearance: none) {
-            select option:disabled {
-                color: #888 !important;
-                background-color: white !important;
-                background-image: none !important;
-            }
-        }
-        
-        body {
-            width: 300px;
-            padding: 10px;
-            font-family: Arial, sans-serif;
-        }
-        select, button, input {
-            width: 100%;
-            margin: 5px 0;
-            padding: 8px;
-            box-sizing: border-box;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:disabled, select option:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-            color: #888;
-        }
-        /* Style for the placeholder option */
-        select option:disabled:first-child,
-        select option:disabled[hidden] {
-            font-style: italic;
-            color: #888;
-            font-weight: normal;
-            -webkit-appearance: none;
-            appearance: none;
-        }
-        /* Additional styles to hide checkmarks on disabled options */
-        select option:disabled {
-            -webkit-appearance: none !important;
-            appearance: none !important;
-            background-image: none !important;
-        }
-        /* Style for optgroup labels (dashboard names) */
-        select optgroup {
-            font-weight: bold;
-            color: #333;
-            -webkit-appearance: none;
-            appearance: none;
-            background-image: none !important;
-        }
-        /* Prevent checkmarks on optgroups in all browsers */
-        select optgroup::before {
-            content: none !important;
-            display: none !important;
-        }
-        /* Style for actual project options */
-        select option:not(:disabled) {
-            font-weight: normal;
-            color: #000;
-        }
-        button:not(:disabled):not(.new-project-button):not(.quick-save-half-btn):not(.project-save-btn):hover {
-            background-color: #45a049;
-        }
-        #tile-details {
-            display: none;
-            margin-top: 10px;
-        }
-        input {
-            font-size: 14px;
-        }
-        #tile-url-input {
-            color: #666;
-            background-color: #f5f5f5;
-        }
-        #dashboard-link {
-            padding: 8px;
-            margin-bottom: 10px;
-            text-align: center;
-            background: #1a73e8;
-            color: white;
-            cursor: pointer;
-            border-radius: 4px;
-            border: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
-            font-size: 14px;
-        }
-        #dashboard-link:hover {
-            background: #1557b0;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transform: translateY(-1px);
-        }
-        .quick-save-row {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        .quick-save-half-btn {
-            flex: 1;
-            padding: 8px 4px;
-            text-align: center;
-            background: white;
-            color: #1a73e8;
-            cursor: pointer;
-            border-radius: 4px;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
-            font-size: 13px;
-            margin: 0;
-            width: auto;
-        }
-        .quick-save-half-btn:hover {
-            background: #f8f9fa;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transform: translateY(-1px);
-        }
-        #quick-save-btn {
-            padding: 8px;
-            margin-bottom: 10px;
-            text-align: center;
-            background: white;
-            color: #1a73e8;
-            cursor: pointer;
-            border-radius: 4px;
-            border: 1px solid #e0e0e0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
-            font-size: 14px;
-            width: 100%;
-        }
-        #quick-save-btn:hover {
-            background: #f8f9fa;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-            transform: translateY(-1px);
-        }
-        .input-icon-button {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 24px;
-            height: 24px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            cursor: pointer;
-            background-color: #f0f0f0; /* Light gray background */
-            margin-left: 5px; /* Add some spacing */
-        }
-
-        .input-icon-button svg {
-            fill: #555; /* Dark gray icon color */
-        }
-
-        .input-icon-button:hover {
-            background-color: #ddd; /* Slightly darker gray on hover */
-        }
-
-        .input-icon-button:focus {
-            outline: none;
-            box-shadow: 0 0 0 2px #4CAF50; /* Green focus ring */
-        }
-
-        .input-icon-button:active {
-            background-color: #ccc; /* Even darker gray on press */
-        }
-
-    </style>
 </head>
 <body>
-    <div id="dashboard-link">Go to Dashboard</div>
+    <div class="popup-container">
+        <!-- Header -->
+        <div class="popup-header">
+            <button id="dashboard-link" class="dashboard-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>Open Dashboard</span>
+            </button>
+        </div>
 
-    <!-- Quick Save buttons row -->
-    <div class="quick-save-row">
-        <button id="quick-save-tab-btn" class="quick-save-half-btn">Quick Save tab</button>
-        <button id="quick-save-all-btn" class="quick-save-half-btn">Quick Save all tabs</button>
-    </div>
+        <!-- Quick Save Row -->
+        <div class="quick-save-row">
+            <button id="quick-save-tab-btn" class="btn btn-quick">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                Quick Save tab
+            </button>
+            <button id="quick-save-all-btn" class="btn btn-quick">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="6" width="20" height="14" rx="2"></rect>
+                    <path d="M2 10h20"></path>
+                </svg>
+                Save all tabs
+            </button>
+        </div>
 
-    <!-- ARCHIVED: Quick Save to last-used project button (commented out for now)
-    <button id="quick-save-btn" style="display: none;">
-        Quick Save to <span class="quick-save-project-name"></span>
-    </button>
-    -->
+        <!-- Divider -->
+        <div class="divider">
+            <span>or save to project</span>
+        </div>
 
-    <!-- Project selection dropdown -->
-    <div id="custom-dropdown-container">
-        <div id="dropdown-header">Save page(s) to project</div>
-        <div id="dropdown-options" class="dropdown-hidden">
-            <!-- Options will be populated by JavaScript -->
+        <!-- Project Tree -->
+        <div class="project-picker">
+            <div id="project-tree" class="project-tree">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Page Info (shown when project selected) -->
+        <div id="tile-details" class="tile-details hidden">
+            <div class="page-info">
+                <input type="text" id="tile-name-input" class="page-title-input" placeholder="Page title">
+                <div id="tile-url-display" class="page-url"></div>
+                <input type="hidden" id="tile-url-input">
+            </div>
+
+            <!-- Save Mode Toggle -->
+            <div class="save-mode-toggle">
+                <button id="save-current-btn" class="mode-btn active">Current page</button>
+                <button id="save-all-btn" class="mode-btn">All tabs</button>
+            </div>
+
+            <button id="save-button" class="btn btn-primary" disabled>Save</button>
         </div>
     </div>
 
-    <div id="project-modal" class="project-modal">
-        <div class="project-modal-content">
-            <select id="modal-dashboard-select"></select>
-            <input type="text" id="project-name-input" placeholder="Project Name">
-            <div class="project-modal-buttons">
-                <button id="create-project-tab" class="project-save-btn" disabled>Save tab</button>
-                <button id="create-project-all" class="project-save-btn" disabled>Save all tabs</button>
+    <!-- New Project Modal -->
+    <div id="project-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">New Project</div>
+            <select id="modal-dashboard-select" class="modal-select"></select>
+            <input type="text" id="project-name-input" class="modal-input" placeholder="Project name">
+            <div class="modal-actions">
+                <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="create-project-btn" class="btn btn-primary" disabled>Create & Save</button>
+            </div>
+            <div class="save-mode-toggle modal-save-mode">
+                <button id="modal-save-current" class="mode-btn active">Current page</button>
+                <button id="modal-save-all" class="mode-btn">All tabs</button>
             </div>
         </div>
     </div>
-
-    <div id="tile-details">
-        <input type="text" id="tile-name-input" placeholder="Enter tile name">
-        <input type="url" id="tile-url-input" readonly>
-        
-        <!-- Save options dropdown -->
-        <div id="save-options-container" class="custom-dropdown-container">
-            <div id="save-options-header">Save current page</div>
-            <div id="save-options-list" class="dropdown-hidden">
-                <div class="dropdown-option" id="save-current-option">Save current page</div>
-                <div class="dropdown-option" id="save-all-option">Save all tabs from window</div>
-            </div>
-        </div>
-        
-        <button id="save-button" disabled>Save</button>
-    </div>
-
-
 
     <script src="dexie.min.js"></script>
     <script src="db.js"></script>
