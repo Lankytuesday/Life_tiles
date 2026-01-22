@@ -17,6 +17,12 @@
         "default": "Ctrl+Shift+S"
       },
       "description": "Save current tab to Quick Save"
+    },
+    "open-quick-save": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D"
+      },
+      "description": "Save current tab to a project..."
     }
   },
   "icons": {

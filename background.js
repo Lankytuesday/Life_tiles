@@ -107,9 +107,63 @@ async function saveCurrentTab() {
     }
 }
 
+/**
+ * Open the Quick Save popup window for choosing a project
+ */
+async function openQuickSavePopup() {
+    try {
+        // Get the active tab
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+        if (!tab || !tab.url) {
+            console.error('No active tab found');
+            return;
+        }
+
+        // Skip chrome:// and other restricted URLs
+        if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+            console.log('Cannot save browser internal pages');
+            return;
+        }
+
+        // Build URL with tab info as parameters
+        const popupUrl = new URL(chrome.runtime.getURL('quick-save.html'));
+        popupUrl.searchParams.set('title', tab.title || 'Untitled');
+        popupUrl.searchParams.set('url', tab.url);
+        if (tab.favIconUrl) {
+            popupUrl.searchParams.set('favicon', tab.favIconUrl);
+        }
+
+        // Calculate center position
+        const width = 400;
+        const height = 500;
+
+        // Get the current window to center the popup
+        const currentWindow = await chrome.windows.getCurrent();
+        const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
+        const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
+
+        // Open popup window
+        await chrome.windows.create({
+            url: popupUrl.toString(),
+            type: 'popup',
+            width: width,
+            height: height,
+            left: left,
+            top: top,
+            focused: true
+        });
+
+    } catch (error) {
+        console.error('Error opening quick save popup:', error);
+    }
+}
+
 // Listen for keyboard shortcut commands
 chrome.commands.onCommand.addListener((command) => {
     if (command === 'save-current-tab') {
         saveCurrentTab();
+    } else if (command === 'open-quick-save') {
+        openQuickSavePopup();
     }
 });
