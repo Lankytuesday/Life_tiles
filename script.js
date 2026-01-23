@@ -2122,6 +2122,22 @@ window.__lifetilesRefresh = async () => {
             e.stopPropagation();
             closeAllMenus(); // Close any open menus first
             menuTrigger.classList.toggle("active");
+
+            // Check if menu would go off-screen and flip if needed
+            if (menuTrigger.classList.contains("active")) {
+                requestAnimationFrame(() => {
+                    const menu = menuTrigger.nextElementSibling;
+                    if (menu) {
+                        const rect = menu.getBoundingClientRect();
+                        const viewportHeight = window.innerHeight;
+                        if (rect.bottom > viewportHeight) {
+                            menu.classList.add("flip-up");
+                        } else {
+                            menu.classList.remove("flip-up");
+                        }
+                    }
+                });
+            }
         });
 
         // Collapse caret

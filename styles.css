@@ -504,6 +504,11 @@ body.dragging {
     min-width: 120px;
 }
 
+.project-menu.flip-up {
+    top: auto;
+    bottom: 100%;
+}
+
 .project-menu-trigger.active + .project-menu {
     display: flex;
     flex-direction: column;
