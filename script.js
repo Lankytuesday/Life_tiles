@@ -1921,7 +1921,7 @@ window.__lifetilesRefresh = async () => {
         // Update count in label
         const label = section.querySelector('.unassigned-label');
         if (label) {
-            label.textContent = `📄 Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
+            label.textContent = `Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
         }
     }
 
