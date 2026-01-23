@@ -4128,8 +4128,7 @@ function showStatus(message) {
         treeEl.innerHTML = '';
         confirmBtn.disabled = true;
         confirmBtn.classList.remove('enabled');
-        confirmBtn.style.backgroundColor = '';
-
+        
         // Get all dashboards and projects
         let dashboards = await db.dashboards.toArray();
         dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -4153,6 +4152,12 @@ function showStatus(message) {
             headerEl.innerHTML = `
                 <svg class="target-tree-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <svg class="target-tree-dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="3" width="7" height="7"></rect>
+                    <rect x="14" y="14" width="7" height="7"></rect>
+                    <rect x="3" y="14" width="7" height="7"></rect>
                 </svg>
                 <span class="target-tree-dashboard-name">${dashboard.name}</span>
             `;
@@ -4195,8 +4200,7 @@ function showStatus(message) {
                     selectedProject = project;
                     confirmBtn.disabled = false;
                     confirmBtn.classList.add('enabled');
-                    confirmBtn.style.backgroundColor = 'var(--color-success)';
-                });
+                                    });
                 projectsEl.appendChild(projEl);
             }
 
@@ -4224,12 +4228,10 @@ function showStatus(message) {
                     if (input.value.trim()) {
                         confirmBtn.disabled = false;
                         confirmBtn.classList.add('enabled');
-                        confirmBtn.style.backgroundColor = 'var(--color-success)';
-                    } else {
+                                            } else {
                         confirmBtn.disabled = true;
                         confirmBtn.classList.remove('enabled');
-                        confirmBtn.style.backgroundColor = '';
-                    }
+                                            }
                 });
 
                 let isCreating = false;
@@ -4272,8 +4274,7 @@ function showStatus(message) {
                     confirmBtn.disabled = false;
                     confirmBtn.classList.add('enabled');
                     // Force visual update
-                    confirmBtn.style.backgroundColor = 'var(--color-success)';
-
+                    
                     await db.projects.add(newProject);
 
                     // Add to allProjects for future reference
@@ -4297,8 +4298,7 @@ function showStatus(message) {
                         selectedProject = newProject;
                         confirmBtn.disabled = false;
                         confirmBtn.classList.add('enabled');
-                        confirmBtn.style.backgroundColor = 'var(--color-success)';
-                    });
+                                            });
 
                     // Deselect others and select this one
                     treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
@@ -4308,8 +4308,7 @@ function showStatus(message) {
                     selectedProject = newProject;
                     confirmBtn.disabled = false;
                     confirmBtn.classList.add('enabled');
-                    confirmBtn.style.backgroundColor = 'var(--color-success)';
-
+                    
                     // Reset new project button
                     newProjEl.innerHTML = `
                         <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -4330,8 +4329,7 @@ function showStatus(message) {
                         pendingCreateProject = null;
                         confirmBtn.disabled = true;
                         confirmBtn.classList.remove('enabled');
-                        confirmBtn.style.backgroundColor = '';
-                        newProjEl.innerHTML = `
+                                                newProjEl.innerHTML = `
                             <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"/>
                                 <line x1="5" y1="12" x2="19" y2="12"/>
@@ -4384,7 +4382,7 @@ function showStatus(message) {
 
     // Helper: Show move tiles dialog
     async function showMoveTilesDialog(tiles) {
-        showTreeTargetModal('Move to Project', async (targetProject) => {
+        showTreeTargetModal('Move to', async (targetProject) => {
             // Get max order in target project to append at end
             const existingTiles = await db.tiles.where('projectId').equals(targetProject.id).toArray();
             let nextOrder = existingTiles.reduce((max, t) => Math.max(max, t.order ?? -1), -1) + 1;
@@ -4473,7 +4471,7 @@ function showStatus(message) {
 
     // Helper: Show copy tiles dialog
     async function showCopyTilesDialog(tiles) {
-        showTreeTargetModal('Copy to Project', async (targetProject) => {
+        showTreeTargetModal('Copy to', async (targetProject) => {
             const newTiles = [];
             for (const tile of tiles) {
                 const originalTile = await db.tiles.get(tile.id);
