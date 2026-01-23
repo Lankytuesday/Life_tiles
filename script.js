@@ -3757,6 +3757,7 @@ function showStatus(message) {
 (function initBulkMode() {
     const bulkSelectBtn = document.getElementById('bulk-select');
     const bulkActionBar = document.getElementById('bulk-action-bar');
+    const bulkToggleAllBtn = document.getElementById('bulk-toggle-all');
     const selectionCountEl = document.getElementById('selection-count');
     const bulkDeleteBtn = document.getElementById('bulk-delete');
     const bulkMoveBtn = document.getElementById('bulk-move');
@@ -3818,6 +3819,12 @@ function showStatus(message) {
         bulkDeleteBtn.disabled = !hasSelection;
         bulkMoveBtn.disabled = !hasSelection;
         bulkCopyBtn.disabled = !hasSelection;
+
+        // Update toggle all button state
+        const allCheckboxes = document.querySelectorAll('.bulk-checkbox');
+        const allSelected = allCheckboxes.length > 0 &&
+            Array.from(allCheckboxes).every(cb => cb.checked);
+        bulkToggleAllBtn.classList.toggle('all-selected', allSelected);
     }
 
     // Toggle bulk mode
@@ -3832,6 +3839,26 @@ function showStatus(message) {
     // Cancel button in bulk action bar
     bulkCancelBtn.addEventListener('click', () => {
         exitBulkMode();
+    });
+
+    // Toggle all selection
+    bulkToggleAllBtn.addEventListener('click', () => {
+        const allCheckboxes = document.querySelectorAll('.bulk-checkbox');
+        const allSelected = allCheckboxes.length > 0 &&
+            Array.from(allCheckboxes).every(cb => cb.checked);
+
+        // If all selected, deselect all; otherwise select all
+        const newState = !allSelected;
+        allCheckboxes.forEach(cb => {
+            cb.checked = newState;
+            const type = cb.dataset.type;
+            const element = cb.closest(type === 'project' ? '.project' : '.tile');
+            if (element) {
+                element.classList.toggle('bulk-selected', newState);
+            }
+        });
+
+        updateSelectionCount();
     });
 
     // Handle checkbox changes using event delegation

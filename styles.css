@@ -1547,6 +1547,49 @@ html, body {
     font-weight: 500;
 }
 
+.bulk-toggle-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: white;
+    cursor: pointer;
+    margin-right: 8px;
+    transition: all var(--transition);
+}
+
+.bulk-toggle-all:hover {
+    background: var(--color-bg-light);
+    border-color: var(--color-primary);
+}
+
+.bulk-toggle-all svg {
+    width: 18px;
+    height: 18px;
+    color: var(--color-text-secondary);
+}
+
+.bulk-toggle-all:hover svg {
+    color: var(--color-primary);
+}
+
+.bulk-toggle-all .checkmark {
+    opacity: 0.3;
+    transition: opacity var(--transition);
+}
+
+.bulk-toggle-all.all-selected .checkmark {
+    opacity: 1;
+}
+
+.bulk-toggle-all.all-selected svg {
+    color: var(--color-primary);
+}
+
 .bulk-action-buttons {
     display: flex;
     gap: 8px;
