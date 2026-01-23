@@ -49,18 +49,15 @@
                         </div>
                     </div>
                     <div id="bulk-action-bar" class="bulk-action-bar hidden">
-                        <div class="bulk-selection-info">
-                            <button id="bulk-toggle-all" class="bulk-toggle-all" title="Select all / Deselect all">
+                        <span id="selection-count">0 selected</span>
+                        <div class="bulk-action-buttons">
+                            <button id="bulk-toggle-all" class="bulk-btn bulk-toggle-all" title="Select all / Deselect all">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <rect x="3" y="3" width="18" height="18" rx="2"/>
                                     <path class="checkmark" d="M9 12l2 2 4-4"/>
                                 </svg>
-                                <span class="toggle-label">Select all</span>
+                                Select all
                             </button>
-                            <span class="bulk-divider">·</span>
-                            <span id="selection-count">0 selected</span>
-                        </div>
-                        <div class="bulk-action-buttons">
                             <button id="bulk-delete" class="bulk-btn bulk-delete" disabled>Delete</button>
                             <button id="bulk-move" class="bulk-btn" disabled>Move to...</button>
                             <button id="bulk-copy" class="bulk-btn" disabled>Copy to...</button>

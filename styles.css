@@ -1541,48 +1541,21 @@ html, body {
     display: none;
 }
 
-.bulk-selection-info {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
 #selection-count {
-    font-size: 13px;
-    color: var(--color-text-secondary);
-}
-
-.bulk-divider {
-    color: var(--color-border);
-    font-size: 16px;
+    font-size: 14px;
+    color: var(--color-text);
+    font-weight: 500;
 }
 
 .bulk-toggle-all {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 8px;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    cursor: pointer;
-    transition: all var(--transition);
-    font-size: 13px;
-    color: var(--color-text);
-}
-
-.bulk-toggle-all:hover {
-    background: var(--color-bg-hover);
 }
 
 .bulk-toggle-all svg {
-    width: 16px;
-    height: 16px;
-    color: var(--color-text-secondary);
-}
-
-.bulk-toggle-all:hover svg {
-    color: var(--color-primary);
+    width: 14px;
+    height: 14px;
 }
 
 .bulk-toggle-all .checkmark {
@@ -1594,12 +1567,9 @@ html, body {
     opacity: 1;
 }
 
-.bulk-toggle-all.all-selected svg {
+.bulk-toggle-all.all-selected {
+    border-color: var(--color-primary);
     color: var(--color-primary);
-}
-
-.toggle-label {
-    font-weight: 500;
 }
 
 .bulk-action-buttons {
@@ -1619,8 +1589,9 @@ html, body {
 }
 
 .bulk-btn:hover:not(:disabled) {
-    background: var(--color-bg-hover);
-    border-color: #ccc;
+    background: white;
+    border-color: var(--color-primary);
+    color: var(--color-primary);
 }
 
 .bulk-btn:disabled {
