@@ -1541,35 +1541,43 @@ html, body {
     display: none;
 }
 
+.bulk-selection-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
 #selection-count {
-    font-size: 14px;
-    color: var(--color-text);
-    font-weight: 500;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.bulk-divider {
+    color: var(--color-border);
+    font-size: 16px;
 }
 
 .bulk-toggle-all {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid var(--color-border);
+    gap: 6px;
+    padding: 4px 8px;
+    border: none;
     border-radius: var(--radius-sm);
-    background: white;
+    background: transparent;
     cursor: pointer;
-    margin-right: 8px;
     transition: all var(--transition);
+    font-size: 13px;
+    color: var(--color-text);
 }
 
 .bulk-toggle-all:hover {
-    background: var(--color-bg-light);
-    border-color: var(--color-primary);
+    background: var(--color-bg-hover);
 }
 
 .bulk-toggle-all svg {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     color: var(--color-text-secondary);
 }
 
@@ -1588,6 +1596,10 @@ html, body {
 
 .bulk-toggle-all.all-selected svg {
     color: var(--color-primary);
+}
+
+.toggle-label {
+    font-weight: 500;
 }
 
 .bulk-action-buttons {
