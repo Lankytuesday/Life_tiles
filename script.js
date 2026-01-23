@@ -1550,6 +1550,11 @@ window.__lifetilesRefresh = async () => {
         // Skip if already on this dashboard and not viewing global unassigned
         if (dashboardId === currentDashboardId && !isViewingGlobalUnassigned) return;
 
+        // Exit bulk mode if active
+        if (typeof window.__exitBulkMode === 'function') {
+            window.__exitBulkMode();
+        }
+
         // Exit global unassigned view
         isViewingGlobalUnassigned = false;
         localStorage.removeItem('isViewingGlobalUnassigned');
@@ -1605,6 +1610,11 @@ window.__lifetilesRefresh = async () => {
     async function switchToGlobalUnassigned() {
         // Skip if already viewing
         if (isViewingGlobalUnassigned) return;
+
+        // Exit bulk mode if active
+        if (typeof window.__exitBulkMode === 'function') {
+            window.__exitBulkMode();
+        }
 
         isViewingGlobalUnassigned = true;
         localStorage.setItem('isViewingGlobalUnassigned', 'true');
@@ -2716,9 +2726,19 @@ window.__lifetilesRefresh = async () => {
         const isMenuOrTrigger = (el) =>
             el.closest('.project-menu, .tile-menu, .dashboard-actions-menu, .project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
 
+        const isNotesArea = (el) =>
+            el.closest('.project-notes-section, .project-notes-toggle');
+
         const outsideClose = (e) => {
             if (isMenuOrTrigger(e.target)) return; // clicked inside a menu or on its trigger
             closeAllMenus();                       // otherwise, close everything
+
+            // Collapse project notes if clicking outside of notes area
+            if (!isNotesArea(e.target)) {
+                document.querySelectorAll('.project-notes-section.expanded').forEach(notes => {
+                    notes.classList.remove('expanded');
+                });
+            }
         };
 
         // Use capture so we're not defeated by stopPropagation in nested UIs
@@ -3773,6 +3793,8 @@ function showStatus(message) {
         });
         updateSelectionCount();
     }
+    // Expose for use outside bulk mode IIFE
+    window.__exitBulkMode = exitBulkMode;
 
     function getSelectedItems() {
         const selected = [];
