@@ -1772,7 +1772,11 @@ window.__lifetilesRefresh = async () => {
         // Always create the structure with tiles grid for drop support
         section.innerHTML = `
             <div class="unassigned-header">
-                <span class="unassigned-label">📄 Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
+                <svg class="unassigned-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+                    <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
+                </svg>
+                <span class="unassigned-label">Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
             </div>
             <div class="unassigned-tiles tiles-grid"></div>
             <div class="unassigned-trigger-zone"></div>
@@ -4168,8 +4172,8 @@ function showStatus(message) {
                 if (project.isUnassigned) {
                     projEl.innerHTML = `
                         <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                            <line x1="9" y1="3" x2="9" y2="21"/>
+                            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
+                            <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
                         </svg>
                         <span>Unassigned</span>
                     `;
