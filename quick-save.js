@@ -63,12 +63,169 @@ async function init() {
     document.getElementById('save-btn').addEventListener('click', handleSave);
     document.getElementById('cancel-btn').addEventListener('click', () => window.close());
 
+    // Project modal handlers
+    const projectModal = document.getElementById('project-modal');
+    const modalDashboardSelect = document.getElementById('modal-dashboard-select');
+    const projectNameInput = document.getElementById('project-name-input');
+    const projectCancel = document.getElementById('project-cancel');
+    const projectCreate = document.getElementById('project-create');
+
+    projectCancel.addEventListener('click', () => {
+        projectModal.classList.add('hidden');
+    });
+
+    projectModal.addEventListener('click', (e) => {
+        if (e.target === projectModal) {
+            projectModal.classList.add('hidden');
+        }
+    });
+
+    projectNameInput.addEventListener('input', () => {
+        projectCreate.disabled = projectNameInput.value.trim() === '';
+    });
+
+    projectNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !projectCreate.disabled) {
+            projectCreate.click();
+        }
+    });
+
+    projectCreate.addEventListener('click', async () => {
+        const projectName = projectNameInput.value.trim();
+        const dashboardId = modalDashboardSelect.value;
+        if (!projectName || !dashboardId) return;
+
+        // Get next order for project
+        const existingProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+        let maxOrder = -1;
+        existingProjects.forEach(p => {
+            const order = Number.isFinite(+p.order) ? +p.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+
+        const projectData = {
+            id: generateId(),
+            name: projectName,
+            dashboardId: dashboardId,
+            order: maxOrder + 1
+        };
+
+        await db.projects.add(projectData);
+
+        // Save the tile to the new project
+        const title = document.getElementById('page-title').value.trim() || 'Untitled';
+        const newTile = {
+            id: generateId(),
+            projectId: projectData.id,
+            dashboardId: dashboardId,
+            name: title,
+            url: tabInfo.url,
+            order: 0
+        };
+
+        await db.tiles.add(newTile);
+
+        // Notify other Lifetiles pages
+        chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
+        try {
+            const bc = new BroadcastChannel('lifetiles');
+            bc.postMessage({ type: 'tiles:changed' });
+            bc.close();
+        } catch (e) {}
+
+        window.close();
+    });
+
+    // Dashboard modal handlers
+    const dashboardModal = document.getElementById('dashboard-modal');
+    const dashboardNameInput = document.getElementById('dashboard-name-input');
+    const dashboardCancel = document.getElementById('dashboard-cancel');
+    const dashboardCreate = document.getElementById('dashboard-create');
+
+    dashboardCancel.addEventListener('click', () => {
+        dashboardModal.classList.add('hidden');
+    });
+
+    dashboardModal.addEventListener('click', (e) => {
+        if (e.target === dashboardModal) {
+            dashboardModal.classList.add('hidden');
+        }
+    });
+
+    dashboardNameInput.addEventListener('input', () => {
+        dashboardCreate.disabled = dashboardNameInput.value.trim() === '';
+    });
+
+    dashboardNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !dashboardCreate.disabled) {
+            dashboardCreate.click();
+        }
+    });
+
+    dashboardCreate.addEventListener('click', async () => {
+        const dashboardName = dashboardNameInput.value.trim();
+        if (!dashboardName) return;
+
+        // Get next order for dashboard
+        const dashboards = await db.dashboards.toArray();
+        const maxOrder = dashboards.reduce((max, d) => Math.max(max, d.order ?? 0), -1);
+
+        const dashboardData = {
+            id: generateId(),
+            name: dashboardName,
+            order: maxOrder + 1
+        };
+
+        await db.dashboards.add(dashboardData);
+
+        // Create unassigned project for this dashboard
+        const unassignedId = `${dashboardData.id}-unassigned`;
+        await db.projects.add({
+            id: unassignedId,
+            dashboardId: dashboardData.id,
+            name: 'Unassigned',
+            isUnassigned: true,
+            order: -1
+        });
+
+        // Save the tile to the unassigned project
+        const title = document.getElementById('page-title').value.trim() || 'Untitled';
+        const newTile = {
+            id: generateId(),
+            projectId: unassignedId,
+            dashboardId: dashboardData.id,
+            name: title,
+            url: tabInfo.url,
+            order: 0
+        };
+
+        await db.tiles.add(newTile);
+
+        // Notify other Lifetiles pages
+        chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
+        try {
+            const bc = new BroadcastChannel('lifetiles');
+            bc.postMessage({ type: 'tiles:changed' });
+            bc.close();
+        } catch (e) {}
+
+        window.close();
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            window.close();
-        } else if (e.key === 'Enter') {
-            // Save on Enter (works even when editing title)
+            if (!projectModal.classList.contains('hidden')) {
+                projectModal.classList.add('hidden');
+            } else if (!dashboardModal.classList.contains('hidden')) {
+                dashboardModal.classList.add('hidden');
+            } else {
+                window.close();
+            }
+        } else if (e.key === 'Enter' &&
+                   projectModal.classList.contains('hidden') &&
+                   dashboardModal.classList.contains('hidden')) {
+            // Save on Enter (only if no modal is open)
             e.preventDefault();
             handleSave();
         }
@@ -80,7 +237,9 @@ async function init() {
  */
 async function renderProjectTree() {
     const tree = document.getElementById('project-tree');
+    const modalDashboardSelect = document.getElementById('modal-dashboard-select');
     tree.innerHTML = '';
+    modalDashboardSelect.innerHTML = '';
 
     // Add Quick Save option at top
     const quickSaveItem = document.createElement('div');
@@ -174,6 +333,25 @@ async function renderProjectTree() {
             projectsList.appendChild(item);
         }
 
+        // Add "New Project" item at end of projects list
+        const newProjectItem = document.createElement('div');
+        newProjectItem.className = 'project-item new-project-item';
+        newProjectItem.innerHTML = `
+            <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span class="project-name">New Project</span>
+        `;
+        newProjectItem.addEventListener('click', () => {
+            modalDashboardSelect.value = dashboard.id;
+            document.getElementById('project-modal').classList.remove('hidden');
+            document.getElementById('project-name-input').value = '';
+            document.getElementById('project-create').disabled = true;
+            document.getElementById('project-name-input').focus();
+        });
+        projectsList.appendChild(newProjectItem);
+
         // Toggle collapse on header click
         header.addEventListener('click', () => {
             header.classList.toggle('collapsed');
@@ -183,7 +361,35 @@ async function renderProjectTree() {
         group.appendChild(header);
         group.appendChild(projectsList);
         tree.appendChild(group);
+
+        // Add dashboard to modal select
+        const option = document.createElement('option');
+        option.value = dashboard.id;
+        option.textContent = dashboard.name;
+        modalDashboardSelect.appendChild(option);
     }
+
+    // Add "New Dashboard" item at bottom of tree
+    const newDashboardItem = document.createElement('div');
+    newDashboardItem.className = 'dashboard-group new-dashboard-item';
+    newDashboardItem.innerHTML = `
+        <div class="dashboard-header new-dashboard-header">
+            <svg class="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            <span class="dashboard-name">New Dashboard</span>
+        </div>
+    `;
+    newDashboardItem.addEventListener('click', () => {
+        const modal = document.getElementById('dashboard-modal');
+        const input = document.getElementById('dashboard-name-input');
+        modal.classList.remove('hidden');
+        input.value = '';
+        document.getElementById('dashboard-create').disabled = true;
+        input.focus();
+    });
+    tree.appendChild(newDashboardItem);
 }
 
 /**

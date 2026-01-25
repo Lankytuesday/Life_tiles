@@ -1175,6 +1175,7 @@ button:disabled {
 .add-tile-button {
     max-width: 94px;
     justify-self: start;
+    order: 9999;
 }
 
 .tile {

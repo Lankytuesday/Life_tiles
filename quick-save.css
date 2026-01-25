@@ -290,3 +290,105 @@ body {
 .project-tree::-webkit-scrollbar-thumb:hover {
     background: #bbb;
 }
+
+/* New Dashboard item */
+.new-dashboard-item {
+    border-top: 1px solid #e0e0e0;
+}
+
+.new-dashboard-header {
+    color: #1a73e8;
+    font-style: italic;
+    background: transparent;
+}
+
+.new-dashboard-header:hover {
+    background: rgba(26, 115, 232, 0.08);
+}
+
+.new-dashboard-header .dashboard-icon {
+    color: #1a73e8;
+}
+
+/* Hidden utility */
+.hidden {
+    display: none !important;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    width: calc(100% - 32px);
+    max-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.modal-header {
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.modal-input {
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+}
+
+.modal-input:focus {
+    border-color: #1a73e8;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.modal-actions .btn {
+    flex: 1;
+}
+
+.modal-select {
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+}
+
+.modal-select:focus {
+    border-color: #1a73e8;
+}
+
+/* New Project item */
+.new-project-item {
+    color: #1a73e8;
+    font-style: italic;
+}
+
+.new-project-item .project-icon {
+    color: #1a73e8;
+}
+
+.new-project-item:hover {
+    background: rgba(26, 115, 232, 0.08);
+}

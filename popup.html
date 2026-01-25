@@ -87,6 +87,22 @@
         </div>
     </div>
 
+    <!-- New Dashboard Modal -->
+    <div id="dashboard-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">New Dashboard</div>
+            <input type="text" id="dashboard-name-input" class="modal-input" placeholder="Dashboard name">
+            <div class="modal-actions">
+                <button id="dashboard-modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="create-dashboard-btn" class="btn btn-primary" disabled>Create & Save</button>
+            </div>
+            <div class="save-mode-toggle modal-save-mode">
+                <button id="dashboard-save-current" class="mode-btn active">Current page</button>
+                <button id="dashboard-save-all" class="mode-btn">All tabs</button>
+            </div>
+        </div>
+    </div>
+
     <script src="dexie.min.js"></script>
     <script src="db.js"></script>
     <script src="popup.js"></script>

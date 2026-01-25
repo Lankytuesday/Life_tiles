@@ -1712,11 +1712,13 @@ window.__lifetilesRefresh = async () => {
                             return;
                         }
 
-                        // Move add-tile button to end IMMEDIATELY if dropped into a project
-                        const addTileButton = evt.to.querySelector('.add-tile-button');
-                        if (addTileButton) {
-                            evt.to.appendChild(addTileButton);
-                        }
+                        // Move add-tile buttons to end in both containers
+                        requestAnimationFrame(() => {
+                            [evt.from, evt.to].forEach(container => {
+                                const btn = container?.querySelector('.add-tile-button');
+                                if (btn) container.appendChild(btn);
+                            });
+                        });
 
                         // Resequence remaining tiles in Quick Save only
                         const tileEls = [...evt.from.querySelectorAll('.tile[data-tile-id]')];
@@ -1848,11 +1850,13 @@ window.__lifetilesRefresh = async () => {
                         return;
                     }
 
-                    // Move add-tile button to end IMMEDIATELY if dropped into a project
-                    const addTileButton = evt.to.querySelector('.add-tile-button');
-                    if (addTileButton) {
-                        evt.to.appendChild(addTileButton);
-                    }
+                    // Move add-tile buttons to end in both containers
+                    requestAnimationFrame(() => {
+                        [evt.from, evt.to].forEach(container => {
+                            const btn = container?.querySelector('.add-tile-button');
+                            if (btn) container.appendChild(btn);
+                        });
+                    });
 
                     // Resequence tiles in both source and target containers
                     const resequenceContainer = async (container) => {
@@ -2499,11 +2503,15 @@ window.__lifetilesRefresh = async () => {
                     return;
                 }
 
-                // Move the add tile button to the end
-                const addTileButton = evt.to.querySelector('.add-tile-button');
-                if (addTileButton) {
-                    evt.to.appendChild(addTileButton);
-                }
+                // Move add tile buttons to the end in both source and target containers
+                requestAnimationFrame(() => {
+                    [evt.from, evt.to].forEach(container => {
+                        const addTileButton = container?.querySelector('.add-tile-button');
+                        if (addTileButton) {
+                            container.appendChild(addTileButton);
+                        }
+                    });
+                });
 
                 const resequence = async (container) => {
                     if (!container) return;

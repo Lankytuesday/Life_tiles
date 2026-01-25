@@ -229,6 +229,25 @@ body {
     color: #1a73e8;
 }
 
+/* New Dashboard item */
+.new-dashboard-item {
+    border-top: 1px solid #e0e0e0;
+}
+
+.new-dashboard-header {
+    color: #1a73e8;
+    font-style: italic;
+    background: transparent;
+}
+
+.new-dashboard-header:hover {
+    background: rgba(26, 115, 232, 0.08);
+}
+
+.new-dashboard-header .dashboard-icon {
+    color: #1a73e8;
+}
+
 /* Tile Details */
 .tile-details {
     display: flex;

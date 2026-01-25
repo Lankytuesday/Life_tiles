@@ -29,6 +29,31 @@
         </div>
     </div>
 
+    <!-- New Project Modal -->
+    <div id="project-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">New Project</div>
+            <select id="modal-dashboard-select" class="modal-select"></select>
+            <input type="text" id="project-name-input" class="modal-input" placeholder="Project name">
+            <div class="modal-actions">
+                <button id="project-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="project-create" class="btn btn-primary" disabled>Create & Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Dashboard Modal -->
+    <div id="dashboard-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">New Dashboard</div>
+            <input type="text" id="dashboard-name-input" class="modal-input" placeholder="Dashboard name">
+            <div class="modal-actions">
+                <button id="dashboard-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="dashboard-create" class="btn btn-primary" disabled>Create & Save</button>
+            </div>
+        </div>
+    </div>
+
     <script src="dexie.min.js"></script>
     <script src="quick-save.js"></script>
 </body>

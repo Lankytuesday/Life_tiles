@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const saveAllBtn = document.getElementById('save-all-btn');
     const saveButton = document.getElementById('save-button');
 
-    // Modal elements
+    // Project Modal elements
     const projectModal = document.getElementById('project-modal');
     const modalDashboardSelect = document.getElementById('modal-dashboard-select');
     const projectNameInput = document.getElementById('project-name-input');
@@ -109,7 +109,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     const modalSaveCurrent = document.getElementById('modal-save-current');
     const modalSaveAll = document.getElementById('modal-save-all');
 
+    // Dashboard Modal elements
+    const dashboardModal = document.getElementById('dashboard-modal');
+    const dashboardNameInput = document.getElementById('dashboard-name-input');
+    const dashboardModalCancel = document.getElementById('dashboard-modal-cancel');
+    const createDashboardBtn = document.getElementById('create-dashboard-btn');
+    const dashboardSaveCurrent = document.getElementById('dashboard-save-current');
+    const dashboardSaveAll = document.getElementById('dashboard-save-all');
+
     let modalSaveMode = 'current';
+    let dashboardModalSaveMode = 'current';
 
     // Pre-populate tile info
     if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
@@ -411,6 +420,26 @@ document.addEventListener('DOMContentLoaded', async function() {
             option.textContent = dashboard.name;
             modalDashboardSelect.appendChild(option);
         }
+
+        // Add "New Dashboard" item at bottom of tree
+        const newDashboardItem = document.createElement('div');
+        newDashboardItem.className = 'dashboard-group new-dashboard-item';
+        newDashboardItem.innerHTML = `
+            <div class="dashboard-header new-dashboard-header">
+                <svg class="dashboard-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span class="dashboard-name">New Dashboard</span>
+            </div>
+        `;
+        newDashboardItem.addEventListener('click', () => {
+            dashboardModal.classList.remove('hidden');
+            dashboardNameInput.value = '';
+            createDashboardBtn.disabled = true;
+            dashboardNameInput.focus();
+        });
+        projectTree.appendChild(newDashboardItem);
     }
 
     // Modal handlers
@@ -491,11 +520,111 @@ document.addEventListener('DOMContentLoaded', async function() {
         window.close();
     });
 
+    // Dashboard modal handlers
+    dashboardModalCancel.addEventListener('click', () => {
+        dashboardModal.classList.add('hidden');
+    });
+
+    dashboardModal.addEventListener('click', (e) => {
+        if (e.target === dashboardModal) {
+            dashboardModal.classList.add('hidden');
+        }
+    });
+
+    dashboardNameInput.addEventListener('input', () => {
+        createDashboardBtn.disabled = dashboardNameInput.value.trim() === '';
+    });
+
+    dashboardNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !createDashboardBtn.disabled) {
+            createDashboardBtn.click();
+        }
+    });
+
+    // Dashboard save mode toggle
+    dashboardSaveCurrent.addEventListener('click', () => {
+        dashboardModalSaveMode = 'current';
+        dashboardSaveCurrent.classList.add('active');
+        dashboardSaveAll.classList.remove('active');
+    });
+
+    dashboardSaveAll.addEventListener('click', () => {
+        dashboardModalSaveMode = 'all';
+        dashboardSaveAll.classList.add('active');
+        dashboardSaveCurrent.classList.remove('active');
+    });
+
+    createDashboardBtn.addEventListener('click', async () => {
+        const dashboardName = dashboardNameInput.value.trim();
+        if (!dashboardName) return;
+
+        // Get next order for dashboard
+        const dashboards = await db.dashboards.toArray();
+        const maxOrder = dashboards.reduce((max, d) => Math.max(max, d.order ?? 0), -1);
+
+        const dashboardData = {
+            id: generateId(),
+            name: dashboardName,
+            order: maxOrder + 1
+        };
+
+        await db.dashboards.add(dashboardData);
+
+        // Create unassigned project for this dashboard
+        const unassignedId = `${dashboardData.id}-unassigned`;
+        await db.projects.add({
+            id: unassignedId,
+            dashboardId: dashboardData.id,
+            name: 'Unassigned',
+            isUnassigned: true,
+            order: -1
+        });
+
+        // Save tiles to the unassigned project
+        if (dashboardModalSaveMode === 'all') {
+            const tabs = await chrome.tabs.query({ currentWindow: true });
+            let order = 0;
+            for (const tab of tabs) {
+                if (!tab.url || isInternalUrl(tab.url)) continue;
+                const tileData = {
+                    id: generateId(),
+                    name: tab.title || 'Untitled',
+                    url: tab.url,
+                    projectId: unassignedId,
+                    dashboardId: dashboardData.id,
+                    order: order++
+                };
+                await db.tiles.add(tileData);
+            }
+        } else {
+            if (currentTab && currentTab.url && !isInternalUrl(currentTab.url)) {
+                const tileData = {
+                    id: generateId(),
+                    name: currentTab.title || 'Untitled',
+                    url: currentTab.url,
+                    projectId: unassignedId,
+                    dashboardId: dashboardData.id,
+                    order: 0
+                };
+                await db.tiles.add(tileData);
+            }
+        }
+
+        // Save as last used
+        localStorage.setItem('lifetiles_lastDashboard', String(dashboardData.id));
+
+        notifyChanges();
+        window.close();
+    });
+
     // Keyboard shortcut - Escape to close
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             if (!projectModal.classList.contains('hidden')) {
                 projectModal.classList.add('hidden');
+            }
+            if (!dashboardModal.classList.contains('hidden')) {
+                dashboardModal.classList.add('hidden');
             }
         }
     });
