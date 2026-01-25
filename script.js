@@ -3859,16 +3859,12 @@ async function importDashboardsJSON() {
 
 function processBookmarksBar(bookmarkBar) {
     const projects = [];
-    const looseBookmarks = {
-        id: crypto.randomUUID(),
-        name: 'Imported Bookmarks',
-        tiles: []
-    };
+    const looseBookmarks = []; // Tiles to go to Unsorted
 
     bookmarkBar.children.forEach(child => {
         if (child.url && !isInternalUrl(child.url)) {
-            // Single bookmark goes into the looseBookmarks project
-            looseBookmarks.tiles.push({
+            // Single bookmark goes into Unsorted
+            looseBookmarks.push({
                 id: crypto.randomUUID(),
                 name: child.title,
                 url: child.url
@@ -3877,7 +3873,7 @@ function processBookmarksBar(bookmarkBar) {
             // Folder becomes a new project
             const tiles = [];
             child.children.forEach(bookmark => {
-                if (bookmark.url && !isInternalUrl(bookmark.url)) {                  
+                if (bookmark.url && !isInternalUrl(bookmark.url)) {
                     tiles.push({
                         id: crypto.randomUUID(),
                         name: bookmark.title,
@@ -3895,12 +3891,7 @@ function processBookmarksBar(bookmarkBar) {
         }
     });
 
-    // Only add the loose bookmarks project if it has any tiles
-    if (looseBookmarks.tiles.length > 0) {
-        projects.push(looseBookmarks);
-    }
-
-    return projects;
+    return { projects, looseBookmarks };
 }
 
 async function importGoogleBookmarks() {
@@ -3909,56 +3900,22 @@ async function importGoogleBookmarks() {
         return;
     }
 
-    // Create and show dashboard selection modal
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'flex';
-
-    const content = document.createElement('div');
-    content.className = 'modal-content';
-    content.innerHTML = `
-        <h2>Select Space</h2>
-        <select id="dashboard-select" style="width: 100%; padding: 8px; margin: 10px 0;">
-        </select>
-        <div class="modal-buttons">
-            <button id="cancel-import" class="cancel-button">Cancel</button>
-            <button id="confirm-import" class="done-button enabled">Import</button>
-        </div>
-    `;
-
-    modal.appendChild(content);
-    document.body.appendChild(modal);
-
-    // Populate dashboard select using Dexie
+    // Get dashboards to check if we need to show selection modal
+    let dashboards;
     try {
-        const dashboards = await db.dashboards.toArray();
-        const select = document.getElementById('dashboard-select');
-        dashboards.forEach(dashboard => {
-            const option = document.createElement('option');
-            option.value = dashboard.id;
-            option.textContent = dashboard.name;
-            select.appendChild(option);
-        });
+        dashboards = await db.dashboards.toArray();
     } catch (error) {
         console.error('Error loading dashboards:', error);
-        modal.remove();
         return;
     }
 
-    // Handle cancel
-    document.getElementById('cancel-import').onclick = () => {
-        modal.remove();
-    };
-
-    // Handle confirm
-    document.getElementById('confirm-import').onclick = () => {
-        const selectedDashboardId = document.getElementById('dashboard-select').value;
-
+    // Function to perform the actual import
+    const performImport = async (selectedDashboardId) => {
         chrome.bookmarks.getTree(async function(bookmarkTree) {
             try {
                 // The bookmarks bar is the first child in the bookmark tree
                 const bookmarkBar = bookmarkTree[0].children[0];
-                const projects = processBookmarksBar(bookmarkBar);
+                const { projects, looseBookmarks } = processBookmarksBar(bookmarkBar);
 
                 // Get existing projects to determine starting order
                 const existingProjects = await db.projects.where('dashboardId').equals(selectedDashboardId).toArray();
@@ -3988,7 +3945,34 @@ async function importGoogleBookmarks() {
                     }
                 }
 
-                modal.remove();
+                // Add loose bookmarks to Unsorted
+                if (looseBookmarks.length > 0) {
+                    const unassignedProjectId = `${selectedDashboardId}-unassigned`;
+
+                    // Ensure unassigned project exists
+                    const existingUnassigned = await db.projects.get(unassignedProjectId);
+                    if (!existingUnassigned) {
+                        await db.projects.add({
+                            id: unassignedProjectId,
+                            dashboardId: selectedDashboardId,
+                            name: 'Unsorted',
+                            isUnassigned: true,
+                            order: -1
+                        });
+                    }
+
+                    // Get existing tiles to determine order
+                    const existingTiles = await db.tiles.where('projectId').equals(unassignedProjectId).toArray();
+                    let tileOrder = existingTiles.length;
+
+                    for (const tile of looseBookmarks) {
+                        tile.projectId = unassignedProjectId;
+                        tile.dashboardId = selectedDashboardId;
+                        tile.order = tileOrder++;
+                        await db.tiles.put(tile);
+                    }
+                }
+
                 showStatus('Bookmarks imported successfully!');
 
                 // Delay reload to allow status message to be seen
@@ -4000,6 +3984,53 @@ async function importGoogleBookmarks() {
                 showStatus('Error importing bookmarks');
             }
         });
+    };
+
+    // If only one dashboard, skip the selection modal
+    if (dashboards.length === 1) {
+        await performImport(dashboards[0].id);
+        return;
+    }
+
+    // Create and show dashboard selection modal
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'flex';
+
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    content.innerHTML = `
+        <h2>Select Space</h2>
+        <select id="dashboard-select" style="width: 100%; padding: 8px; margin: 10px 0;">
+        </select>
+        <div class="modal-buttons">
+            <button id="cancel-import" class="cancel-button">Cancel</button>
+            <button id="confirm-import" class="done-button enabled">Import</button>
+        </div>
+    `;
+
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+
+    // Populate dashboard select
+    const select = document.getElementById('dashboard-select');
+    dashboards.forEach(dashboard => {
+        const option = document.createElement('option');
+        option.value = dashboard.id;
+        option.textContent = dashboard.name;
+        select.appendChild(option);
+    });
+
+    // Handle cancel
+    document.getElementById('cancel-import').onclick = () => {
+        modal.remove();
+    };
+
+    // Handle confirm
+    document.getElementById('confirm-import').onclick = async () => {
+        const selectedDashboardId = document.getElementById('dashboard-select').value;
+        modal.remove();
+        await performImport(selectedDashboardId);
     };
 }
 
