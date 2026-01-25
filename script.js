@@ -779,6 +779,29 @@ document.addEventListener("DOMContentLoaded", async function () {
         console.error('Error loading dashboards:', error);
     });
 
+    // First-run check
+    if (!localStorage.getItem('linktiles_first_run_complete')) {
+        const welcomeModal = document.getElementById('welcome-modal');
+        if (welcomeModal) {
+            welcomeModal.style.display = 'flex';
+
+            document.getElementById('welcome-start-fresh').onclick = () => {
+                localStorage.setItem('linktiles_first_run_complete', 'true');
+                welcomeModal.style.display = 'none';
+            };
+
+            document.getElementById('welcome-import').onclick = async () => {
+                localStorage.setItem('linktiles_first_run_complete', 'true');
+                welcomeModal.style.display = 'none';
+                if (chrome?.bookmarks) {
+                    await importGoogleBookmarks();
+                } else {
+                    await importDashboardsJSON();
+                }
+            };
+        }
+    }
+
 // Track last known mouse position during drag
 let lastDragMouseX = 0;
 let lastDragMouseY = 0;
@@ -2454,8 +2477,32 @@ window.__lifetilesRefresh = async () => {
         removeButton.onclick = async (e) => {
             e.stopPropagation();
             if (confirm('Are you sure you want to remove this project?')) {
+                // Capture data for undo
+                const deletedProjectData = { ...projectData };
+                const deletedTiles = await db.tiles.where('projectId').equals(projectData.id).toArray();
+                const parentContainer = project.parentElement;
+                const nextSibling = project.nextElementSibling;
+
+                // Delete tiles first, then project
+                await db.tiles.where('projectId').equals(projectData.id).delete();
                 await db.projects.delete(projectData.id);
                 project.remove();
+
+                const tileCount = deletedTiles.length;
+                const message = tileCount > 0
+                    ? `Project deleted (${tileCount} tile${tileCount > 1 ? 's' : ''})`
+                    : 'Project deleted';
+
+                showUndoToast(message, async () => {
+                    // Restore project to Dexie
+                    await db.projects.add(deletedProjectData);
+                    // Restore all tiles
+                    for (const tile of deletedTiles) {
+                        await db.tiles.add(tile);
+                    }
+                    // Reload to restore DOM
+                    await loadDashboards();
+                });
             }
         };
 
@@ -2937,9 +2984,28 @@ window.__lifetilesRefresh = async () => {
 
         // Check if current space is being deleted
         const currentDashboardBeingDeleted = selectedIds.includes(currentDashboardId);
+        const originalCurrentDashboardId = currentDashboardId;
 
         if (confirm(`Are you sure you want to delete ${selectedIds.length} space${selectedIds.length > 1 ? 's' : ''}? All projects and tiles in them will be removed.`)) {
             try {
+                // Capture data for undo
+                const deletedDashboards = [];
+                const deletedProjects = [];
+                const deletedTiles = [];
+
+                for (const dashboardId of selectedIds) {
+                    const dashboard = await db.dashboards.get(dashboardId);
+                    if (dashboard) deletedDashboards.push(dashboard);
+
+                    const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+                    deletedProjects.push(...projects);
+
+                    for (const project of projects) {
+                        const tiles = await db.tiles.where('projectId').equals(project.id).toArray();
+                        deletedTiles.push(...tiles);
+                    }
+                }
+
                 // If current dashboard is being deleted, switch to a remaining one first
                 if (currentDashboardBeingDeleted) {
                     const remainingCheckboxes = Array.from(allDashboards).filter(cb => !selectedIds.includes(cb.dataset.dashboardId));
@@ -2991,6 +3057,44 @@ window.__lifetilesRefresh = async () => {
                         openManageDashboardsModal();
                     }, 50);
                 }
+
+                const spaceCount = deletedDashboards.length;
+                const projectCount = deletedProjects.length;
+                const tileCount = deletedTiles.length;
+                let message = `${spaceCount} space${spaceCount > 1 ? 's' : ''} deleted`;
+                if (projectCount > 0 || tileCount > 0) {
+                    const parts = [];
+                    if (projectCount > 0) parts.push(`${projectCount} project${projectCount > 1 ? 's' : ''}`);
+                    if (tileCount > 0) parts.push(`${tileCount} tile${tileCount > 1 ? 's' : ''}`);
+                    message += ` (${parts.join(', ')})`;
+                }
+
+                showUndoToast(message, async () => {
+                    // Restore dashboards
+                    for (const dashboard of deletedDashboards) {
+                        await db.dashboards.add(dashboard);
+                    }
+                    // Restore projects
+                    for (const project of deletedProjects) {
+                        await db.projects.add(project);
+                    }
+                    // Restore tiles
+                    for (const tile of deletedTiles) {
+                        await db.tiles.add(tile);
+                    }
+                    // Restore current dashboard if it was deleted
+                    if (currentDashboardBeingDeleted) {
+                        localStorage.setItem('currentDashboardId', originalCurrentDashboardId);
+                        currentDashboardId = originalCurrentDashboardId;
+                    }
+                    await loadDashboards();
+                    // Refresh manage modal if open
+                    const modal = document.getElementById('manage-dashboards-modal');
+                    if (modal.style.display === 'flex') {
+                        modal.style.display = 'none';
+                        setTimeout(() => openManageDashboardsModal(), 50);
+                    }
+                });
 
             } catch (error) {
                 console.error('Error bulk deleting dashboards:', error);
@@ -3101,6 +3205,16 @@ window.__lifetilesRefresh = async () => {
             }
 
             if (confirm('Are you sure you want to delete this space? All projects and tiles in it will be removed.')) {
+                // Capture data for undo
+                const deletedDashboard = await db.dashboards.get(dashboardId);
+                const deletedProjects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
+                const deletedTiles = [];
+                for (const project of deletedProjects) {
+                    const tiles = await db.tiles.where('projectId').equals(project.id).toArray();
+                    deletedTiles.push(...tiles);
+                }
+                const wasCurrentDashboard = dashboardId === currentDashboardId;
+
                 // Delete all tiles for projects in this dashboard
                 const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
                 for (const project of projects) {
@@ -3153,6 +3267,41 @@ window.__lifetilesRefresh = async () => {
                     // Just update the selector since we're not on the deleted dashboard
                     await updateDashboardSelector();
                 }
+
+                const projectCount = deletedProjects.length;
+                const tileCount = deletedTiles.length;
+                let message = 'Space deleted';
+                if (projectCount > 0 || tileCount > 0) {
+                    const parts = [];
+                    if (projectCount > 0) parts.push(`${projectCount} project${projectCount > 1 ? 's' : ''}`);
+                    if (tileCount > 0) parts.push(`${tileCount} tile${tileCount > 1 ? 's' : ''}`);
+                    message = `Space deleted (${parts.join(', ')})`;
+                }
+
+                showUndoToast(message, async () => {
+                    // Restore dashboard
+                    await db.dashboards.add(deletedDashboard);
+                    // Restore projects
+                    for (const project of deletedProjects) {
+                        await db.projects.add(project);
+                    }
+                    // Restore tiles
+                    for (const tile of deletedTiles) {
+                        await db.tiles.add(tile);
+                    }
+                    // Reload UI
+                    if (wasCurrentDashboard) {
+                        localStorage.setItem('currentDashboardId', dashboardId);
+                        currentDashboardId = dashboardId;
+                    }
+                    await loadDashboards();
+                    // Refresh manage modal if open
+                    const modal = document.getElementById('manage-dashboards-modal');
+                    if (modal.style.display === 'flex') {
+                        modal.style.display = 'none';
+                        setTimeout(() => openManageDashboardsModal(), 50);
+                    }
+                });
             }
         } catch (error) {
             console.error('Error deleting dashboard:', error);
@@ -3308,10 +3457,23 @@ window.__lifetilesRefresh = async () => {
             e.preventDefault();
             e.stopPropagation();
             if (confirm('Are you sure you want to remove this tile?')) {
+                // Capture data for undo
+                const deletedTileData = { ...tileData };
+                const parentContainer = tile.parentElement;
+                const nextSibling = tile.nextElementSibling;
+
                 await db.tiles.delete(tileData.id);
                 tile.remove();
                 // Update Quick Save count in case this was a Quick Save tile
                 await updateQuickSaveCount();
+
+                showUndoToast('Tile deleted', async () => {
+                    // Restore tile to Dexie
+                    await db.tiles.add(deletedTileData);
+                    // Reload to restore DOM
+                    await loadDashboards();
+                    await updateQuickSaveCount();
+                });
             }
         };
 
@@ -3873,6 +4035,44 @@ function showStatus(message) {
     });
 }
 
+function showUndoToast(message, undoCallback, duration = 7000) {
+    const existingToast = document.querySelector('.undo-toast');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.className = 'undo-toast';
+
+    const messageSpan = document.createElement('span');
+    messageSpan.textContent = message;
+
+    const undoBtn = document.createElement('button');
+    undoBtn.textContent = 'Undo';
+    undoBtn.onmouseenter = () => undoBtn.style.textDecoration = 'underline';
+    undoBtn.onmouseleave = () => undoBtn.style.textDecoration = 'none';
+
+    toast.appendChild(messageSpan);
+    toast.appendChild(undoBtn);
+    document.body.appendChild(toast);
+
+    let timeoutId;
+
+    const dismissToast = () => {
+        clearTimeout(timeoutId);
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    };
+
+    undoBtn.onclick = async () => {
+        dismissToast();
+        if (undoCallback) await undoCallback();
+    };
+
+    requestAnimationFrame(() => {
+        toast.style.opacity = '1';
+        timeoutId = setTimeout(dismissToast, duration);
+    });
+}
+
 // ===== Bulk Actions Mode =====
 
 (function initBulkMode() {
@@ -4066,15 +4266,49 @@ function showStatus(message) {
 
         if (!confirm(message)) return;
 
-        // Delete projects and their tiles
+        // Capture data for undo
+        const deletedProjects = [];
+        const deletedProjectTiles = []; // tiles belonging to deleted projects
+        const deletedTiles = []; // individually deleted tiles
+        const deletedElements = []; // for DOM restoration
+
+        // Capture project data and their tiles
         const projectIds = selected.filter(s => s.type === 'project').map(s => s.id);
+        for (const projectId of projectIds) {
+            const project = await db.projects.get(projectId);
+            if (project) {
+                deletedProjects.push(project);
+                const tiles = await db.tiles.where('projectId').equals(projectId).toArray();
+                deletedProjectTiles.push(...tiles);
+            }
+        }
+
+        // Capture individual tile data
+        const tileIds = selected.filter(s => s.type === 'tile').map(s => s.id);
+        for (const tileId of tileIds) {
+            const tile = await db.tiles.get(tileId);
+            if (tile) deletedTiles.push(tile);
+        }
+
+        // Capture DOM positions before deletion
+        for (const item of selected) {
+            if (item.element) {
+                deletedElements.push({
+                    type: item.type,
+                    id: item.id,
+                    parentElement: item.element.parentElement,
+                    nextSibling: item.element.nextElementSibling
+                });
+            }
+        }
+
+        // Delete projects and their tiles
         for (const projectId of projectIds) {
             await db.tiles.where('projectId').equals(projectId).delete();
             await db.projects.delete(projectId);
         }
 
         // Delete individual tiles
-        const tileIds = selected.filter(s => s.type === 'tile').map(s => s.id);
         for (const tileId of tileIds) {
             await db.tiles.delete(tileId);
         }
@@ -4090,7 +4324,29 @@ function showStatus(message) {
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
 
         exitBulkMode();
-        showStatus(`Deleted ${selected.length} item${selected.length > 1 ? 's' : ''}`);
+
+        const totalCount = selected.length;
+        let undoMessage = `Deleted ${totalCount} item${totalCount > 1 ? 's' : ''}`;
+
+        showUndoToast(undoMessage, async () => {
+            // Restore projects
+            for (const project of deletedProjects) {
+                await db.projects.add(project);
+            }
+            // Restore tiles from deleted projects
+            for (const tile of deletedProjectTiles) {
+                await db.tiles.add(tile);
+            }
+            // Restore individually deleted tiles
+            for (const tile of deletedTiles) {
+                await db.tiles.add(tile);
+            }
+
+            // Reload the current dashboard to restore DOM
+            await loadDashboards();
+
+            if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
+        });
     });
 
     // Helper: Deduplicate selection (remove tiles whose parent project is selected)
