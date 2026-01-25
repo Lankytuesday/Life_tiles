@@ -352,7 +352,7 @@ async function ensureUnassignedProjects() {
         await db.projects.add({
             id: GLOBAL_UNASSIGNED_ID,
             dashboardId: null,
-            name: 'Unassigned Tiles',
+            name: 'Unsorted',
             isUnassigned: true,
             order: -1 // Always first
         });
@@ -368,7 +368,7 @@ async function ensureUnassignedProjects() {
             await db.projects.add({
                 id: unassignedId,
                 dashboardId: dashboard.id,
-                name: 'Unassigned Tiles',
+                name: 'Unsorted',
                 isUnassigned: true,
                 order: -1 // Always first within dashboard
             });
@@ -633,8 +633,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         menu.className = 'settings-menu';
         menu.innerHTML = `
             <button type="button" data-action="import-google">Import Google bookmarks</button>
-            <button type="button" data-action="export-dashboards">Export dashboards (JSON)</button>
-            <button type="button" data-action="import-dashboards">Import dashboards (JSON)</button>
+            <button type="button" data-action="export-dashboards">Export spaces (JSON)</button>
+            <button type="button" data-action="import-dashboards">Import spaces (JSON)</button>
         `;
         settingsBtn.parentElement.appendChild(menu);
 
@@ -980,7 +980,7 @@ new Sortable(document.getElementById('projects-list'), {
                 // Create a default dashboard
                 const defaultDashboard = {
                     id: (crypto?.randomUUID?.() || Date.now().toString()),
-                    name: "My Dashboard",
+                    name: "Personal",
                     order: 0
                 };
 
@@ -1090,7 +1090,7 @@ window.__lifetilesRefresh = async () => {
             <span class="dot"></span>
             <span class="label">${dashboard.name}</span>
             <div class="actions">
-                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete dashboard"></button>
+                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete space"></button>
             </div>
         `;
         return li;
@@ -1179,12 +1179,12 @@ window.__lifetilesRefresh = async () => {
         separator.setAttribute('role', 'separator');
         list.appendChild(separator);
 
-        // Add Dashboards heading with + button
+        // Add Spaces heading with + button
         const dashboardsHeader = document.createElement('li');
         dashboardsHeader.className = 'sidebar-section-header';
         dashboardsHeader.innerHTML = `
-            <span class="section-title">Dashboards</span>
-            <button class="section-add-btn" title="New dashboard" aria-label="Add new dashboard">+</button>
+            <span class="section-title">Spaces</span>
+            <button class="section-add-btn" title="New space" aria-label="Add new space">+</button>
         `;
         dashboardsHeader.querySelector('.section-add-btn').addEventListener('click', () => {
             const modal = document.getElementById('dashboard-modal');
@@ -1436,7 +1436,7 @@ window.__lifetilesRefresh = async () => {
             let html = '';
 
             if (dashboards.length) {
-                html += '<div class="search-result-group">Dashboards</div>';
+                html += '<div class="search-result-group">Spaces</div>';
                 dashboards.forEach(d => {
                     html += `<div class="search-result-item" data-type="dashboard" data-id="${d.id}">${escapeHtml(d.name)}</div>`;
                 });
@@ -1778,7 +1778,7 @@ window.__lifetilesRefresh = async () => {
                     <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
                     <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
                 </svg>
-                <span class="unassigned-label">Unassigned${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
+                <span class="unassigned-label">Unsorted${tiles.length > 0 ? ` (${tiles.length})` : ''}</span>
             </div>
             <div class="unassigned-tiles tiles-grid"></div>
             <div class="unassigned-trigger-zone"></div>
@@ -1925,7 +1925,7 @@ window.__lifetilesRefresh = async () => {
         // Update count in label
         const label = section.querySelector('.unassigned-label');
         if (label) {
-            label.textContent = `Unassigned${tileCount > 0 ? ` (${tileCount})` : ''}`;
+            label.textContent = `Unsorted${tileCount > 0 ? ` (${tileCount})` : ''}`;
         }
     }
 
@@ -2234,9 +2234,9 @@ window.__lifetilesRefresh = async () => {
         }
     };
 
-    // Move to Dashboard button
+    // Move to Space button
     const moveButton = document.createElement("button");
-    moveButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Move to Dashboard`;
+    moveButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Move to Space`;
     moveButton.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2257,7 +2257,7 @@ window.__lifetilesRefresh = async () => {
         content.style.width = '280px';
 
         const title = document.createElement('h2');
-        title.textContent = 'Move to Dashboard';
+        title.textContent = 'Move to Space';
 
         const select = document.createElement('select');
         select.style.cssText = `
@@ -2326,7 +2326,7 @@ window.__lifetilesRefresh = async () => {
     };
 
     const copyButton = document.createElement("button");
-    copyButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy to Dashboard`;
+    copyButton.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy to Space`;
     copyButton.onclick = async (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2338,7 +2338,7 @@ window.__lifetilesRefresh = async () => {
             dashboards.sort((a, b) => orderNum(a) - orderNum(b) || String(a.id).localeCompare(String(b.id)));
         }
 
-        // Create dashboard selection modal
+        // Create space selection modal
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.style.display = 'flex';
@@ -2348,7 +2348,7 @@ window.__lifetilesRefresh = async () => {
         content.style.width = '280px';
 
         const title = document.createElement('h2');
-        title.textContent = 'Select Dashboard';
+        title.textContent = 'Select Space';
 
         const select = document.createElement('select');
         select.style.cssText = `
@@ -2861,7 +2861,7 @@ window.__lifetilesRefresh = async () => {
             modal.style.display = 'flex';
         } catch (error) {
             console.error('Error loading dashboards for management:', error);
-            alert('Error loading dashboards. Please try again.');
+            alert('Error loading spaces. Please try again.');
         }
     }
 
@@ -2903,17 +2903,17 @@ window.__lifetilesRefresh = async () => {
 
         if (selectedIds.length === 0) return;
 
-        // Check if trying to delete all dashboards
+        // Check if trying to delete all spaces
         const allDashboards = document.querySelectorAll('.dashboard-checkbox');
         if (selectedIds.length >= allDashboards.length) {
-            alert("Cannot delete all dashboards. At least one dashboard must remain.");
+            alert("Cannot delete all spaces. At least one space must remain.");
             return;
         }
 
-        // Check if current dashboard is being deleted
+        // Check if current space is being deleted
         const currentDashboardBeingDeleted = selectedIds.includes(currentDashboardId);
 
-        if (confirm(`Are you sure you want to delete ${selectedIds.length} dashboard${selectedIds.length > 1 ? 's' : ''}? All projects and tiles in them will be removed.`)) {
+        if (confirm(`Are you sure you want to delete ${selectedIds.length} space${selectedIds.length > 1 ? 's' : ''}? All projects and tiles in them will be removed.`)) {
             try {
                 // If current dashboard is being deleted, switch to a remaining one first
                 if (currentDashboardBeingDeleted) {
@@ -2969,7 +2969,7 @@ window.__lifetilesRefresh = async () => {
 
             } catch (error) {
                 console.error('Error bulk deleting dashboards:', error);
-                alert('Error deleting dashboards. Please try again.');
+                alert('Error deleting spaces. Please try again.');
             }
         }
     }
@@ -3048,7 +3048,7 @@ window.__lifetilesRefresh = async () => {
 
     async function saveDashboardName(dashboardId, newName, item) {
         if (!newName) {
-            alert('Dashboard name cannot be empty');
+            alert('Space name cannot be empty');
             return;
         }
 
@@ -3058,11 +3058,11 @@ window.__lifetilesRefresh = async () => {
             item.querySelector('.manage-dashboard-name').textContent = newName;
             item.classList.remove('editing');
 
-            // Only update the dashboard selector without reloading projects
+            // Only update the space selector without reloading projects
             await updateDashboardSelector();
         } catch (error) {
-            console.error('Error saving dashboard name:', error);
-            alert('Error saving dashboard name. Please try again.');
+            console.error('Error saving space name:', error);
+            alert('Error saving space name. Please try again.');
         }
     }
 
@@ -3071,11 +3071,11 @@ window.__lifetilesRefresh = async () => {
             const dashboards = await db.dashboards.toArray();
 
             if (dashboards.length <= 1) {
-                alert("Cannot delete the last dashboard");
+                alert("Cannot delete the last space");
                 return;
             }
 
-            if (confirm('Are you sure you want to delete this dashboard? All projects and tiles in it will be removed.')) {
+            if (confirm('Are you sure you want to delete this space? All projects and tiles in it will be removed.')) {
                 // Delete all tiles for projects in this dashboard
                 const projects = await db.projects.where('dashboardId').equals(dashboardId).toArray();
                 for (const project of projects) {
@@ -3131,7 +3131,7 @@ window.__lifetilesRefresh = async () => {
             }
         } catch (error) {
             console.error('Error deleting dashboard:', error);
-            alert('Error deleting dashboard. Please try again.');
+            alert('Error deleting space. Please try again.');
         }
     }
 
@@ -3546,10 +3546,10 @@ async function importDashboardsJSON() {
             try {
                 const importData = JSON.parse(e.target.result);
 
-                // Check for and remove empty default "My Dashboard" before importing
+                // Check for and remove empty default space before importing
                 const existingDashboards = await db.dashboards.toArray();
                 for (const dash of existingDashboards) {
-                    if (dash.name === 'My Dashboard') {
+                    if (dash.name === 'Personal' || dash.name === 'My Dashboard') {
                         const projectCount = await db.projects.where('dashboardId').equals(dash.id).count();
                         if (projectCount === 0) {
                             await db.dashboards.delete(dash.id);
@@ -3662,7 +3662,7 @@ async function importGoogleBookmarks() {
     const content = document.createElement('div');
     content.className = 'modal-content';
     content.innerHTML = `
-        <h2>Select Dashboard</h2>
+        <h2>Select Space</h2>
         <select id="dashboard-select" style="width: 100%; padding: 8px; margin: 10px 0;">
         </select>
         <div class="modal-buttons">
@@ -4110,11 +4110,11 @@ function showStatus(message) {
         const otherDashboards = dashboards.filter(d => d.id !== currentDashboardId);
 
         if (otherDashboards.length === 0) {
-            alert('No other dashboards available. Create another dashboard first.');
+            alert('No other spaces available. Create another space first.');
             return;
         }
 
-        showTargetModal('Move to Dashboard', otherDashboards, async (targetDashboard) => {
+        showTargetModal('Move to Space', otherDashboards, async (targetDashboard) => {
             // Get max order in target dashboard
             const existingProjects = await db.projects.where('dashboardId').equals(targetDashboard.id).toArray();
 
@@ -4197,14 +4197,14 @@ function showStatus(message) {
                 projEl.className = 'target-tree-project';
                 projEl.dataset.projectId = project.id;
 
-                // Use different icon for unassigned projects
+                // Use different icon for unsorted projects
                 if (project.isUnassigned) {
                     projEl.innerHTML = `
                         <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
                             <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
                         </svg>
-                        <span>Unassigned</span>
+                        <span>Unsorted</span>
                     `;
                 } else {
                     projEl.innerHTML = `
@@ -4448,7 +4448,7 @@ function showStatus(message) {
         let dashboards = await db.dashboards.toArray();
         dashboards.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
-        showTargetModal('Copy to Dashboard', dashboards, async (targetDashboard) => {
+        showTargetModal('Copy to Space', dashboards, async (targetDashboard) => {
             // Get max order in target dashboard
             const existingProjects = await db.projects.where('dashboardId').equals(targetDashboard.id).toArray();
 

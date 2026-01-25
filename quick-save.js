@@ -1,5 +1,5 @@
 /**
- * Quick Save Popup - Save current tab to a specific project
+ * LinkTiles Quick Save Popup - Save current tab to a specific project
  */
 
 // Initialize Dexie database (same schema as main app)
@@ -125,7 +125,7 @@ async function init() {
 
         await db.tiles.add(newTile);
 
-        // Notify other Lifetiles pages
+        // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
         try {
             const bc = new BroadcastChannel('lifetiles');
@@ -183,7 +183,7 @@ async function init() {
         await db.projects.add({
             id: unassignedId,
             dashboardId: dashboardData.id,
-            name: 'Unassigned',
+            name: 'Unsorted',
             isUnassigned: true,
             order: -1
         });
@@ -201,7 +201,7 @@ async function init() {
 
         await db.tiles.add(newTile);
 
-        // Notify other Lifetiles pages
+        // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
         try {
             const bc = new BroadcastChannel('lifetiles');
@@ -268,9 +268,9 @@ async function renderProjectTree() {
         const group = document.createElement('div');
         group.className = 'dashboard-group';
 
-        // Dashboard header
+        // Dashboard header - all spaces start collapsed
         const header = document.createElement('div');
-        header.className = 'dashboard-header';
+        header.className = 'dashboard-header collapsed';
         header.innerHTML = `
             <svg class="dashboard-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6 9 12 15 18 9"></polyline>
@@ -284,9 +284,9 @@ async function renderProjectTree() {
             <span class="dashboard-name">${dashboard.name}</span>
         `;
 
-        // Projects list
+        // Projects list - starts collapsed
         const projectsList = document.createElement('div');
-        projectsList.className = 'projects-list';
+        projectsList.className = 'projects-list collapsed';
 
         // Load projects for this dashboard
         const projects = await db.projects
@@ -313,7 +313,7 @@ async function renderProjectTree() {
                     <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
                     <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
                 </svg>
-                <span class="project-name">Unassigned</span>
+                <span class="project-name">Unsorted</span>
             `;
             unassignedItem.addEventListener('click', () => selectProject(unassignedProject.id, unassignedItem));
             projectsList.appendChild(unassignedItem);
@@ -369,7 +369,7 @@ async function renderProjectTree() {
         modalDashboardSelect.appendChild(option);
     }
 
-    // Add "New Dashboard" item at bottom of tree
+    // Add "New Space" item at bottom of tree
     const newDashboardItem = document.createElement('div');
     newDashboardItem.className = 'dashboard-group new-dashboard-item';
     newDashboardItem.innerHTML = `
@@ -378,7 +378,7 @@ async function renderProjectTree() {
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>
-            <span class="dashboard-name">New Dashboard</span>
+            <span class="dashboard-name">New Space</span>
         </div>
     `;
     newDashboardItem.addEventListener('click', () => {
@@ -432,7 +432,7 @@ async function handleSave() {
 
         await db.tiles.add(newTile);
 
-        // Notify other Lifetiles pages
+        // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
         try {
             const bc = new BroadcastChannel('lifetiles');

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lifetiles</title>
+    <title>LinkTiles</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,10 +11,10 @@
         <!-- Main toolbar spanning full width -->
         <div class="main-toolbar">
           <div class="toolbar-logo">
-            <img src="headericon.svg" alt="Lifetiles Logo" class="sidebar-logo">
+            <img src="headericon.svg" alt="LinkTiles Logo" class="sidebar-logo">
           </div>
           <div class="toolbar-search-container">
-            <input type="text" id="sidebar-search" class="toolbar-search" placeholder="Search dashboards, projects, tiles..." aria-label="Search dashboards, projects, and tiles">
+            <input type="text" id="sidebar-search" class="toolbar-search" placeholder="Search spaces, projects, tiles..." aria-label="Search spaces, projects, and tiles">
             <div id="search-results" class="search-results hidden"></div>
           </div>
           <div class="settings-wrapper">
@@ -29,8 +29,8 @@
         </div>
 
         <!-- Sidebar -->
-        <aside id="sidebar" class="sidebar" aria-label="Dashboards navigation">
-            <ul id="sidebar-list" class="sidebar-list" role="listbox" aria-label="Project dashboards">
+        <aside id="sidebar" class="sidebar" aria-label="Spaces navigation">
+            <ul id="sidebar-list" class="sidebar-list" role="listbox" aria-label="Spaces">
                 <!-- Dashboard items will be inserted here -->
             </ul>
         </aside>
@@ -96,8 +96,8 @@
             <!-- Dashboard Creation/Edit Modal -->
             <div id="dashboard-modal" class="modal">
                 <div class="modal-content">
-                    <h2>Create New Dashboard</h2>
-                    <input type="text" id="dashboard-name-input" placeholder="Enter dashboard name">
+                    <h2>Create New Space</h2>
+                    <input type="text" id="dashboard-name-input" placeholder="Enter space name">
 
                     <div class="modal-buttons">
                         <button id="close-dashboard-modal" class="cancel-button">Cancel</button>
@@ -109,7 +109,7 @@
             <!-- Popup Save Tile Modal -->
             <div id="popup-save-modal" class="modal">
                 <div class="modal-content">
-                    <h2>Save to Lifetiles</h2>
+                    <h2>Save to LinkTiles</h2>
                     <input type="text" id="popup-tile-name-input" placeholder="Enter tile name">
                     <input type="url" id="popup-tile-url-input" placeholder="URL" readonly>
                     <div class="modal-buttons">
@@ -150,7 +150,7 @@
             <!-- Manage Dashboards Modal -->
             <div id="manage-dashboards-modal" class="modal">
                 <div class="modal-content" style="width: 480px; max-width: 90vw;">
-                    <h2>Manage Dashboards</h2>
+                    <h2>Manage Spaces</h2>
                     <div id="manage-dashboards-list" class="manage-dashboards-list">
                         <!-- Dashboard items will be populated here -->
                     </div>

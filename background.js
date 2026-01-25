@@ -1,9 +1,9 @@
 /**
- * Lifetiles Background Service Worker
+ * LinkTiles Background Service Worker
  * Handles keyboard shortcuts and other background tasks
  */
 
-console.log('Lifetiles background script starting...');
+console.log('LinkTiles background script starting...');
 
 // Import Dexie for IndexedDB access
 try {
@@ -79,7 +79,7 @@ async function saveCurrentTab() {
 
         console.log('Saved tab to Quick Save:', newTile.name);
 
-        // Notify any open Lifetiles pages to refresh (uses existing live update system)
+        // Notify any open LinkTiles pages to refresh (uses existing live update system)
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {
             // Ignore errors if no listeners (popup/page not open)
         });
@@ -108,13 +108,13 @@ async function saveCurrentTab() {
 }
 
 /**
- * Open or focus the Lifetiles dashboard
+ * Open or focus the LinkTiles main page
  */
 async function openDashboard() {
     try {
         const dashboardUrl = chrome.runtime.getURL('index.html');
 
-        // Look for existing Lifetiles tab in any window
+        // Look for existing LinkTiles tab in any window
         const matches = await chrome.tabs.query({
             url: [dashboardUrl, `${dashboardUrl}*`]
         });

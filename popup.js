@@ -1,5 +1,5 @@
 /**
- * Lifetiles Popup - Redesigned to match quick-save modal aesthetic
+ * LinkTiles Popup - Redesigned to match quick-save modal aesthetic
  */
 
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
@@ -48,7 +48,7 @@ async function focusOrCreateDashboardInWindow(windowId) {
     }
 }
 
-// Notify other Lifetiles pages of changes
+// Notify other LinkTiles pages of changes
 function notifyChanges() {
     try {
         const bc = new BroadcastChannel('lifetiles');
@@ -300,26 +300,14 @@ document.addEventListener('DOMContentLoaded', async function() {
             return ao - bo;
         });
 
-        // Get last used dashboard
-        const lastUsedDashboardId = localStorage.getItem('lifetiles_lastDashboard');
-
         // Render each dashboard with its projects
         for (const dashboard of dashboards) {
             const group = document.createElement('div');
             group.className = 'dashboard-group';
 
-            // Dashboard header
+            // Dashboard header - all spaces start collapsed
             const header = document.createElement('div');
-            header.className = 'dashboard-header';
-
-            // Expand last-used dashboard or first one
-            const shouldExpand = lastUsedDashboardId
-                ? lastUsedDashboardId === String(dashboard.id)
-                : dashboards.indexOf(dashboard) === 0;
-
-            if (!shouldExpand) {
-                header.classList.add('collapsed');
-            }
+            header.className = 'dashboard-header collapsed';
 
             header.innerHTML = `
                 <svg class="dashboard-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -334,12 +322,9 @@ document.addEventListener('DOMContentLoaded', async function() {
                 <span class="dashboard-name">${dashboard.name}</span>
             `;
 
-            // Projects list
+            // Projects list - starts collapsed
             const projectsList = document.createElement('div');
-            projectsList.className = 'projects-list';
-            if (!shouldExpand) {
-                projectsList.classList.add('collapsed');
-            }
+            projectsList.className = 'projects-list collapsed';
 
             // Load projects for this dashboard
             const projects = await db.projects
@@ -365,7 +350,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                         <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline>
                         <path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path>
                     </svg>
-                    <span class="project-name">Unassigned</span>
+                    <span class="project-name">Unsorted</span>
                 `;
                 item.addEventListener('click', () => selectProject(unassignedProject.id, dashboard.id, item));
                 projectsList.appendChild(item);
@@ -421,7 +406,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             modalDashboardSelect.appendChild(option);
         }
 
-        // Add "New Dashboard" item at bottom of tree
+        // Add "New Space" item at bottom of tree
         const newDashboardItem = document.createElement('div');
         newDashboardItem.className = 'dashboard-group new-dashboard-item';
         newDashboardItem.innerHTML = `
@@ -430,7 +415,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
-                <span class="dashboard-name">New Dashboard</span>
+                <span class="dashboard-name">New Space</span>
             </div>
         `;
         newDashboardItem.addEventListener('click', () => {
@@ -575,7 +560,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         await db.projects.add({
             id: unassignedId,
             dashboardId: dashboardData.id,
-            name: 'Unassigned',
+            name: 'Unsorted',
             isUnassigned: true,
             order: -1
         });

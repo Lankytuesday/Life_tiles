@@ -1,12 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "Lifetiles",
+  "name": "LinkTiles",
   "version": "1.0.0",
   "description": "Organize your bookmarks in a tile-based dashboard",
   "permissions": ["storage", "tabs", "bookmarks"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Lifetiles"
+    "default_title": "LinkTiles"
   },
   "background": {
     "service_worker": "background.js"
@@ -28,7 +28,7 @@
       "suggested_key": {
         "default": "Ctrl+Shift+O"
       },
-      "description": "Open Lifetiles dashboard"
+      "description": "Open LinkTiles"
     }
   },
   "icons": {

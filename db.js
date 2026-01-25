@@ -1,8 +1,8 @@
 /**
- * Lifetiles Database - Dexie.js wrapper for IndexedDB
+ * LinkTiles Database - Dexie.js wrapper for IndexedDB
  *
  * This file initializes the Dexie database instance used throughout the app.
- * Dexie opens the existing 'LifetilesDB' IndexedDB - no data migration needed.
+ * Dexie opens the existing IndexedDB - no data migration needed.
  */
 
 // Initialize Dexie database (same name as existing IndexedDB)
