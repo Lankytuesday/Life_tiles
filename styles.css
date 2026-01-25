@@ -1534,6 +1534,7 @@ html, body {
 
 .settings-menu button:hover {
   background: var(--color-bg-hover);
+  color: inherit;
 }
 
 /* ===== Bulk Actions Mode ===== */

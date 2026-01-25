@@ -374,6 +374,31 @@ async function ensureUnassignedProjects() {
             });
             console.log(`Created unassigned project for dashboard: ${dashboard.name}`);
         }
+
+        // Clean up duplicate unassigned projects (from import bugs)
+        const allProjectsForDashboard = await db.projects.where('dashboardId').equals(dashboard.id).toArray();
+        const unassignedProjects = allProjectsForDashboard.filter(p => p.isUnassigned && p.id !== unassignedId);
+
+        if (unassignedProjects.length > 0) {
+            console.log(`Found ${unassignedProjects.length} duplicate unassigned project(s) for dashboard: ${dashboard.name}`);
+
+            // Get existing tiles in the correct unassigned project for ordering
+            const existingTiles = await db.tiles.where('projectId').equals(unassignedId).toArray();
+            let nextOrder = existingTiles.length;
+
+            // Move tiles from duplicate projects and delete them
+            for (const dupeProject of unassignedProjects) {
+                const dupeTiles = await db.tiles.where('projectId').equals(dupeProject.id).toArray();
+                for (const tile of dupeTiles) {
+                    await db.tiles.update(tile.id, {
+                        projectId: unassignedId,
+                        order: nextOrder++
+                    });
+                }
+                await db.projects.delete(dupeProject.id);
+                console.log(`Cleaned up duplicate unassigned project: ${dupeProject.id}`);
+            }
+        }
     }
 }
 
@@ -633,8 +658,8 @@ document.addEventListener("DOMContentLoaded", async function () {
         menu.className = 'settings-menu';
         menu.innerHTML = `
             <button type="button" data-action="import-google">Import Google bookmarks</button>
-            <button type="button" data-action="export-dashboards">Export spaces (JSON)</button>
-            <button type="button" data-action="import-dashboards">Import spaces (JSON)</button>
+            <button type="button" data-action="export-dashboards"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Backup</button>
+            <button type="button" data-action="import-dashboards"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Restore</button>
         `;
         settingsBtn.parentElement.appendChild(menu);
 
@@ -3525,7 +3550,7 @@ async function exportDashboardsJSON() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lifetiles-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `linktiles-backup-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -3567,8 +3592,40 @@ async function importDashboardsJSON() {
 
                     // Update project references to new dashboard ID
                     const dashboardProjects = importData.projects.filter(p => p.dashboardId === dashboard.id);
+
+                    // Ensure the unassigned project for this dashboard exists first
+                    const unassignedProjectId = `${newDashboard.id}-unassigned`;
+                    const existingUnassigned = await db.projects.get(unassignedProjectId);
+                    if (!existingUnassigned) {
+                        await db.projects.add({
+                            id: unassignedProjectId,
+                            dashboardId: newDashboard.id,
+                            name: 'Unsorted',
+                            isUnassigned: true,
+                            order: -1
+                        });
+                    }
+
                     let projectOrder = 0;
                     for (const project of dashboardProjects) {
+                        // Skip unassigned projects - we already created one above with the correct ID
+                        if (project.isUnassigned) {
+                            // But still import the tiles from the unassigned project
+                            const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
+                            const existingUnassignedTiles = await db.tiles.where('projectId').equals(unassignedProjectId).toArray();
+                            let unassignedOrder = existingUnassignedTiles.length;
+                            for (const tile of projectTiles) {
+                                await db.tiles.add({
+                                    ...tile,
+                                    id: Date.now().toString() + Math.random(),
+                                    projectId: unassignedProjectId,
+                                    dashboardId: newDashboard.id,
+                                    order: unassignedOrder++
+                                });
+                            }
+                            continue;
+                        }
+
                         const newProject = {
                             ...project,
                             id: Date.now().toString() + Math.random(),
@@ -3587,6 +3644,42 @@ async function importDashboardsJSON() {
                                 dashboardId: newDashboard.id
                             });
                         }
+                    }
+                }
+
+                // Import Quick Save tiles (global-unassigned project)
+                const quickSaveProject = importData.projects?.find(p =>
+                    p.id === 'global-unassigned' || p.dashboardId === null
+                );
+                if (quickSaveProject) {
+                    // Ensure global-unassigned project exists
+                    const existingGlobal = await db.projects.get('global-unassigned');
+                    if (!existingGlobal) {
+                        await db.projects.add({
+                            id: 'global-unassigned',
+                            dashboardId: null,
+                            name: 'Unsorted',
+                            isUnassigned: true,
+                            order: -1
+                        });
+                    }
+
+                    // Get existing Quick Save tile count for ordering
+                    const existingTiles = await db.tiles.where('projectId').equals('global-unassigned').toArray();
+                    let nextOrder = existingTiles.length;
+
+                    // Import Quick Save tiles
+                    const quickSaveTiles = importData.tiles?.filter(t =>
+                        t.projectId === quickSaveProject.id || t.projectId === 'global-unassigned'
+                    ) || [];
+                    for (const tile of quickSaveTiles) {
+                        await db.tiles.add({
+                            ...tile,
+                            id: Date.now().toString() + Math.random(),
+                            projectId: 'global-unassigned',
+                            dashboardId: null,
+                            order: nextOrder++
+                        });
                     }
                 }
 
