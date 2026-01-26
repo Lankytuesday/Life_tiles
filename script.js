@@ -812,6 +812,17 @@ function handleDragMouseMove(e) {
 
     // Highlight sidebar item if mouse is over it
     document.querySelectorAll('.sidebar-item').forEach(item => {
+        // Skip highlighting current space and Quick Save when dragging projects
+        if (draggedProjectId) {
+            if (item.dataset.dashboardId === currentDashboardId) {
+                item.classList.remove('drag-hover');
+                return;
+            }
+            if (item.classList.contains('sidebar-item-unassigned')) {
+                item.classList.remove('drag-hover');
+                return;
+            }
+        }
         const rect = item.getBoundingClientRect();
         const isOver = lastDragMouseX >= rect.left && lastDragMouseX <= rect.right &&
                        lastDragMouseY >= rect.top && lastDragMouseY <= rect.bottom;
@@ -860,8 +871,8 @@ new Sortable(document.getElementById('projects-list'), {
         }
       });
 
-      if (droppedOnDashboard && draggedProjectId) {
-        // Move project to new dashboard
+      if (droppedOnDashboard && draggedProjectId && droppedOnDashboard !== currentDashboardId) {
+        // Move project to new dashboard (skip if same as current)
         // Remove the project element from DOM immediately
         const projectEl = document.querySelector(`.project[data-project-id="${draggedProjectId}"]`);
         if (projectEl) {
