@@ -1,44 +1,11 @@
-<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512">
   <defs>
-    <!-- subtle tile depth via gradient -->
-    <linearGradient id="tileGrad" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#eaeaea"/>
-    </linearGradient>
-
-    <!-- very soft shadow -->
-    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="1" dy="1.5" stdDeviation="1.5" flood-opacity="0.25"/>
-    </filter>
+    <clipPath id="clip-headericon_1">
+      <rect width="512" height="512"/>
+    </clipPath>
   </defs>
-
-  <!-- background -->
-  <rect
-    width="128"
-    height="128"
-    rx="24"
-    fill="#1a73e8"
-  />
-
-  <!--
-    Tile size: 28
-    Gap: 10
-    Grid: 2x2
-
-    Grid size = (2 * 28) + 10 = 66
-    Center offset = (128 - 66) / 2 = 31
-  -->
-  <g transform="translate(31 31)">
-    <!-- row 1 -->
-    <rect x="0"  y="0"  width="28" height="28" rx="6"
-          fill="url(#tileGrad)" filter="url(#tileShadow)"/>
-    <rect x="38" y="0"  width="28" height="28" rx="6"
-          fill="url(#tileGrad)" filter="url(#tileShadow)"/>
-
-    <!-- row 2 -->
-    <rect x="0"  y="38" width="28" height="28" rx="6"
-          fill="url(#tileGrad)" filter="url(#tileShadow)"/>
-    <rect x="38" y="38" width="28" height="28" rx="6"
-          fill="url(#tileGrad)" filter="url(#tileShadow)"/>
+  <g id="headericon_1" data-name="headericon – 1" clip-path="url(#clip-headericon_1)">
+    <path id="Path_5" data-name="Path 5" d="M96,0H416a96,96,0,0,1,96,96V416a96,96,0,0,1-96,96H96A96,96,0,0,1,0,416V96A96,96,0,0,1,96,0Z" fill="#55bad3"/>
+    <path id="link-hyperlink-icon" d="M365.827,27.39h0c36.522,36.52,36.52,96.281,0,132.8L287.7,238.321c-46.1,46.1-124.473,32.573-149.578-24.922,27.562-23.955,41-16.206,67.262-5.1,15.458,6.537,33.592,3.037,46.142-9.513l76.32-76.317a42.442,42.442,0,0,0-60.02-60.023l-54.742,54.743a94.7,94.7,0,0,0-57.948-7.734,93.293,93.293,0,0,1,14.413-18.591l63.476-63.475c36.522-36.519,96.281-36.522,132.8,0ZM27.39,365.826h0c36.522,36.52,96.281,36.52,132.8,0l65.8-65.8A93.31,93.31,0,0,0,240.837,280.7a94.749,94.749,0,0,1-64.46-6.762L122.47,327.846a42.44,42.44,0,0,1-60.019-60.019l76.32-76.321c15.639-15.639,46.85-20.3,70.439,1.3,22.832-2.406,31.7-6.768,45.882-20.347C224.834,119.1,149.41,111.006,105.518,154.9L27.39,233.025c-36.52,36.521-36.52,96.28,0,132.8Z" transform="translate(59.391 59.391)" fill="#fff" fill-rule="evenodd"/>
   </g>
 </svg>
