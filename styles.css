@@ -1844,6 +1844,7 @@ body.bulk-mode .tile:hover {
     cursor: pointer;
     padding: 4px 8px;
     font-size: 14px;
+    margin: 0;
 }
 
 .undo-toast button:hover {
