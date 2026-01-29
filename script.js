@@ -2298,7 +2298,7 @@ window.__lifetilesRefresh = async () => {
                 if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
                     await chrome.tabs.create({ url: tile.url, active: false });
                 } else {
-                    window.open(tile.url, '_blank');
+                    window.open(tile.url, '_blank', 'noopener,noreferrer');
                 }
             }
         }
@@ -3800,6 +3800,8 @@ async function importDashboardsJSON() {
                             const existingUnassignedTiles = await db.tiles.where('projectId').equals(unassignedProjectId).toArray();
                             let unassignedOrder = existingUnassignedTiles.length;
                             for (const tile of projectTiles) {
+                                // Skip tiles with non-http(s) URLs
+                                if (tile.url && isInternalUrl(tile.url)) continue;
                                 await db.tiles.add({
                                     ...tile,
                                     id: Date.now().toString() + Math.random(),
@@ -3822,6 +3824,8 @@ async function importDashboardsJSON() {
                         // Update tile references to new project ID
                         const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
                         for (const tile of projectTiles) {
+                            // Skip tiles with non-http(s) URLs
+                            if (tile.url && isInternalUrl(tile.url)) continue;
                             await db.tiles.add({
                                 ...tile,
                                 id: Date.now().toString() + Math.random(),
@@ -3858,6 +3862,8 @@ async function importDashboardsJSON() {
                         t.projectId === quickSaveProject.id || t.projectId === 'global-unassigned'
                     ) || [];
                     for (const tile of quickSaveTiles) {
+                        // Skip tiles with non-http(s) URLs
+                        if (tile.url && isInternalUrl(tile.url)) continue;
                         await db.tiles.add({
                             ...tile,
                             id: Date.now().toString() + Math.random(),
