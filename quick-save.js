@@ -24,6 +24,16 @@ function generateId() {
 }
 
 /**
+ * HTML escape utility to prevent XSS
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/**
  * Get tab info from URL parameters (passed by background script)
  */
 function getTabInfoFromUrl() {
@@ -281,7 +291,7 @@ async function renderProjectTree() {
                 <rect x="14" y="14" width="7" height="7"></rect>
                 <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
-            <span class="dashboard-name">${dashboard.name}</span>
+            <span class="dashboard-name">${escapeHtml(dashboard.name)}</span>
         `;
 
         // Projects list - starts collapsed
@@ -327,7 +337,7 @@ async function renderProjectTree() {
                 <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <span class="project-name">${project.name}</span>
+                <span class="project-name">${escapeHtml(project.name)}</span>
             `;
             item.addEventListener('click', () => selectProject(project.id, item));
             projectsList.appendChild(item);

@@ -21,6 +21,14 @@ function __ltScheduleRefresh() {
   }, 50);
 }
 
+// HTML escape utility to prevent XSS
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 // Favicons cache TTL (24h). Set to 6h if you prefer faster refreshes.
 const FAVICON_TTL_MS = 86400000;
 // Probe an image URL to verify it actually loads (no fetch → no ORB)
@@ -1147,7 +1155,7 @@ window.__lifetilesRefresh = async () => {
         li.dataset.dashboardId = dashboard.id;
         li.innerHTML = `
             <span class="dot"></span>
-            <span class="label">${dashboard.name}</span>
+            <span class="label">${escapeHtml(dashboard.name)}</span>
             <div class="actions">
                 <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete space"></button>
             </div>
@@ -3123,8 +3131,8 @@ window.__lifetilesRefresh = async () => {
             <input type="checkbox" class="dashboard-checkbox" data-dashboard-id="${dashboard.id}">
             <div class="dashboard-drag-handle">⋮⋮</div>
             <div class="manage-dashboard-info">
-                <div class="manage-dashboard-name">${dashboard.name}</div>
-                <input type="text" class="manage-dashboard-name-input" value="${dashboard.name}">
+                <div class="manage-dashboard-name">${escapeHtml(dashboard.name)}</div>
+                <input type="text" class="manage-dashboard-name-input" value="">
                 <div class="manage-dashboard-projects">${dashboard.projectCount} project${dashboard.projectCount !== 1 ? 's' : ''}</div>
             </div>
             <div class="manage-dashboard-actions">
@@ -3146,6 +3154,7 @@ window.__lifetilesRefresh = async () => {
         const saveBtn = item.querySelector('.save-btn');
         const cancelBtn = item.querySelector('.cancel-btn');
         const nameInput = item.querySelector('.manage-dashboard-name-input');
+        nameInput.value = dashboard.name; // Set via DOM to prevent attribute injection
 
         // Handle checkbox selection
         checkbox.addEventListener('change', () => {
@@ -3544,7 +3553,7 @@ window.__lifetilesRefresh = async () => {
             const bgColor = generateColorFromString(safeHost || 'lifetiles');
             thumbnailElement.style.backgroundImage = 'none';
             thumbnailElement.style.backgroundColor = bgColor;
-            thumbnailElement.innerHTML = `<span class="tile-initials">${initials}</span>`;
+            thumbnailElement.innerHTML = `<span class="tile-initials">${escapeHtml(initials)}</span>`;
         };
 
         // Show initials immediately as placeholder
@@ -4574,7 +4583,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     <rect x="14" y="14" width="7" height="7"></rect>
                     <rect x="3" y="14" width="7" height="7"></rect>
                 </svg>
-                <span class="target-tree-dashboard-name">${dashboard.name}</span>
+                <span class="target-tree-dashboard-name">${escapeHtml(dashboard.name)}</span>
             `;
             headerEl.addEventListener('click', () => {
                 dashEl.classList.toggle('collapsed');
@@ -4602,7 +4611,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                         <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                         </svg>
-                        <span>${project.name}</span>
+                        <span>${escapeHtml(project.name)}</span>
                     `;
                 }
                 projEl.addEventListener('click', () => {
@@ -4703,7 +4712,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                         <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                         </svg>
-                        <span>${newProject.name}</span>
+                        <span>${escapeHtml(newProject.name)}</span>
                     `;
                     projEl.addEventListener('click', () => {
                         treeEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
