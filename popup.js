@@ -10,11 +10,12 @@ let selectedDashboardId = null;
 let saveMode = 'current'; // 'current' or 'all'
 let currentTab = null;
 
-// Helpers
-const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+// Helpers - only allow http/https to prevent javascript:/data: execution
 function isInternalUrl(u) {
-    try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
-    catch { return true; }
+    try {
+        const url = new URL(u);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+    } catch { return true; }
 }
 
 function generateId() {

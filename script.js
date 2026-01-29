@@ -282,10 +282,12 @@ async function loadFaviconForHost(hostname, pageUrl) {
   
 
 // --- internal URL helpers ---
-const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+// Only allow http/https URLs to prevent javascript:/data: execution
 function isInternalUrl(u) {
-  try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
-  catch { return true; } // invalid/blank -> treat as internal
+  try {
+    const url = new URL(u);
+    return url.protocol !== 'http:' && url.protocol !== 'https:';
+  } catch { return true; } // invalid/blank -> treat as internal
 }
 
 
@@ -996,8 +998,9 @@ new Sortable(document.getElementById('projects-list'), {
 
     function isValidUrl(string) {
         try {
-            new URL(string);
-            return true;
+            const url = new URL(string);
+            // Only allow http and https schemes to prevent javascript:/data: execution
+            return url.protocol === 'http:' || url.protocol === 'https:';
         } catch (_) {
             return false;
         }
