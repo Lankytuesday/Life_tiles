@@ -258,6 +258,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 await db.tiles.add(tileData);
             }
         } else {
+            // Re-check URL scheme before saving
+            if (!currentTab.url || isInternalUrl(currentTab.url)) return;
             const tileName = tileNameInput.value.trim() || 'Untitled';
             const tileData = {
                 id: generateId(),
