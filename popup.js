@@ -10,15 +10,24 @@ let selectedDashboardId = null;
 let saveMode = 'current'; // 'current' or 'all'
 let currentTab = null;
 
-// Helpers
-const INTERNAL_SCHEME_RE = /^(?:chrome:|chrome-extension:|devtools:|edge:|brave:|opera:|vivaldi:|about:|chrome-search:|moz-extension:|file:)$/i;
+// Helpers - only allow http/https to prevent javascript:/data: execution
 function isInternalUrl(u) {
-    try { return INTERNAL_SCHEME_RE.test(new URL(u).protocol); }
-    catch { return true; }
+    try {
+        const url = new URL(u);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+    } catch { return true; }
 }
 
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// HTML escape utility to prevent XSS
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
 }
 
 // Get the last-focused normal Chrome window id (not the popup)
@@ -249,6 +258,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 await db.tiles.add(tileData);
             }
         } else {
+            // Re-check URL scheme before saving
+            if (!currentTab.url || isInternalUrl(currentTab.url)) return;
             const tileName = tileNameInput.value.trim() || 'Untitled';
             const tileData = {
                 id: generateId(),
@@ -319,7 +330,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <rect x="14" y="14" width="7" height="7"></rect>
                     <rect x="3" y="14" width="7" height="7"></rect>
                 </svg>
-                <span class="dashboard-name">${dashboard.name}</span>
+                <span class="dashboard-name">${escapeHtml(dashboard.name)}</span>
             `;
 
             // Projects list - starts collapsed
@@ -364,7 +375,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                     </svg>
-                    <span class="project-name">${project.name}</span>
+                    <span class="project-name">${escapeHtml(project.name)}</span>
                 `;
                 item.addEventListener('click', () => selectProject(project.id, dashboard.id, item));
                 projectsList.appendChild(item);

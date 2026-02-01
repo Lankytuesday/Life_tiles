@@ -24,6 +24,26 @@ function generateId() {
 }
 
 /**
+ * HTML escape utility to prevent XSS
+ */
+function escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/**
+ * Check if URL is non-http(s) - returns true if URL should be blocked
+ */
+function isInternalUrl(u) {
+    try {
+        const url = new URL(u);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+    } catch { return true; }
+}
+
+/**
  * Get tab info from URL parameters (passed by background script)
  */
 function getTabInfoFromUrl() {
@@ -112,18 +132,20 @@ async function init() {
 
         await db.projects.add(projectData);
 
-        // Save the tile to the new project
-        const title = document.getElementById('page-title').value.trim() || 'Untitled';
-        const newTile = {
-            id: generateId(),
-            projectId: projectData.id,
-            dashboardId: dashboardId,
-            name: title,
-            url: tabInfo.url,
-            order: 0
-        };
+        // Save the tile to the new project (validate URL first)
+        if (tabInfo.url && !isInternalUrl(tabInfo.url)) {
+            const title = document.getElementById('page-title').value.trim() || 'Untitled';
+            const newTile = {
+                id: generateId(),
+                projectId: projectData.id,
+                dashboardId: dashboardId,
+                name: title,
+                url: tabInfo.url,
+                order: 0
+            };
 
-        await db.tiles.add(newTile);
+            await db.tiles.add(newTile);
+        }
 
         // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
@@ -188,18 +210,20 @@ async function init() {
             order: -1
         });
 
-        // Save the tile to the unassigned project
-        const title = document.getElementById('page-title').value.trim() || 'Untitled';
-        const newTile = {
-            id: generateId(),
-            projectId: unassignedId,
-            dashboardId: dashboardData.id,
-            name: title,
-            url: tabInfo.url,
-            order: 0
-        };
+        // Save the tile to the unassigned project (validate URL first)
+        if (tabInfo.url && !isInternalUrl(tabInfo.url)) {
+            const title = document.getElementById('page-title').value.trim() || 'Untitled';
+            const newTile = {
+                id: generateId(),
+                projectId: unassignedId,
+                dashboardId: dashboardData.id,
+                name: title,
+                url: tabInfo.url,
+                order: 0
+            };
 
-        await db.tiles.add(newTile);
+            await db.tiles.add(newTile);
+        }
 
         // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
@@ -281,7 +305,7 @@ async function renderProjectTree() {
                 <rect x="14" y="14" width="7" height="7"></rect>
                 <rect x="3" y="14" width="7" height="7"></rect>
             </svg>
-            <span class="dashboard-name">${dashboard.name}</span>
+            <span class="dashboard-name">${escapeHtml(dashboard.name)}</span>
         `;
 
         // Projects list - starts collapsed
@@ -327,7 +351,7 @@ async function renderProjectTree() {
                 <svg class="project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                 </svg>
-                <span class="project-name">${project.name}</span>
+                <span class="project-name">${escapeHtml(project.name)}</span>
             `;
             item.addEventListener('click', () => selectProject(project.id, item));
             projectsList.appendChild(item);
@@ -414,6 +438,13 @@ async function handleSave() {
     saveBtn.textContent = 'Saving...';
 
     try {
+        // Validate URL before saving
+        if (!tabInfo.url || isInternalUrl(tabInfo.url)) {
+            console.log('Invalid URL scheme');
+            window.close();
+            return;
+        }
+
         const title = document.getElementById('page-title').value.trim() || 'Untitled';
 
         // Get current tile count for ordering

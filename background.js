@@ -44,9 +44,15 @@ async function saveCurrentTab() {
             return;
         }
 
-        // Skip chrome:// and other restricted URLs
-        if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-            console.log('Cannot save browser internal pages');
+        // Only allow http/https URLs to prevent javascript:/data: execution
+        try {
+            const url = new URL(tab.url);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                console.log('Only http/https URLs can be saved');
+                return;
+            }
+        } catch {
+            console.log('Invalid URL');
             return;
         }
 
@@ -147,9 +153,15 @@ async function openQuickSavePopup() {
             return;
         }
 
-        // Skip chrome:// and other restricted URLs
-        if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
-            console.log('Cannot save browser internal pages');
+        // Only allow http/https URLs to prevent javascript:/data: execution
+        try {
+            const url = new URL(tab.url);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                console.log('Only http/https URLs can be saved');
+                return;
+            }
+        } catch {
+            console.log('Invalid URL');
             return;
         }
 
