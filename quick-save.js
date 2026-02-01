@@ -34,6 +34,16 @@ function escapeHtml(str) {
 }
 
 /**
+ * Check if URL is non-http(s) - returns true if URL should be blocked
+ */
+function isInternalUrl(u) {
+    try {
+        const url = new URL(u);
+        return url.protocol !== 'http:' && url.protocol !== 'https:';
+    } catch { return true; }
+}
+
+/**
  * Get tab info from URL parameters (passed by background script)
  */
 function getTabInfoFromUrl() {
@@ -122,18 +132,20 @@ async function init() {
 
         await db.projects.add(projectData);
 
-        // Save the tile to the new project
-        const title = document.getElementById('page-title').value.trim() || 'Untitled';
-        const newTile = {
-            id: generateId(),
-            projectId: projectData.id,
-            dashboardId: dashboardId,
-            name: title,
-            url: tabInfo.url,
-            order: 0
-        };
+        // Save the tile to the new project (validate URL first)
+        if (tabInfo.url && !isInternalUrl(tabInfo.url)) {
+            const title = document.getElementById('page-title').value.trim() || 'Untitled';
+            const newTile = {
+                id: generateId(),
+                projectId: projectData.id,
+                dashboardId: dashboardId,
+                name: title,
+                url: tabInfo.url,
+                order: 0
+            };
 
-        await db.tiles.add(newTile);
+            await db.tiles.add(newTile);
+        }
 
         // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
@@ -198,18 +210,20 @@ async function init() {
             order: -1
         });
 
-        // Save the tile to the unassigned project
-        const title = document.getElementById('page-title').value.trim() || 'Untitled';
-        const newTile = {
-            id: generateId(),
-            projectId: unassignedId,
-            dashboardId: dashboardData.id,
-            name: title,
-            url: tabInfo.url,
-            order: 0
-        };
+        // Save the tile to the unassigned project (validate URL first)
+        if (tabInfo.url && !isInternalUrl(tabInfo.url)) {
+            const title = document.getElementById('page-title').value.trim() || 'Untitled';
+            const newTile = {
+                id: generateId(),
+                projectId: unassignedId,
+                dashboardId: dashboardData.id,
+                name: title,
+                url: tabInfo.url,
+                order: 0
+            };
 
-        await db.tiles.add(newTile);
+            await db.tiles.add(newTile);
+        }
 
         // Notify other LinkTiles pages
         chrome.runtime.sendMessage({ type: 'tiles:changed' }).catch(() => {});
@@ -424,6 +438,13 @@ async function handleSave() {
     saveBtn.textContent = 'Saving...';
 
     try {
+        // Validate URL before saving
+        if (!tabInfo.url || isInternalUrl(tabInfo.url)) {
+            console.log('Invalid URL scheme');
+            window.close();
+            return;
+        }
+
         const title = document.getElementById('page-title').value.trim() || 'Untitled';
 
         // Get current tile count for ordering
