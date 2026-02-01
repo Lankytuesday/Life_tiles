@@ -24,6 +24,21 @@ db.version(6).stores({
 
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
 
+// Create context menu items on install
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: 'save-page-to-linktiles',
+        title: 'Save page to LinkTiles',
+        contexts: ['page']
+    });
+
+    chrome.contextMenus.create({
+        id: 'save-link-to-linktiles',
+        title: 'Save link to LinkTiles',
+        contexts: ['link']
+    });
+});
+
 /**
  * Generate a unique ID for new tiles
  */
@@ -197,6 +212,76 @@ async function openQuickSavePopup() {
         console.error('Error opening quick save popup:', error);
     }
 }
+
+/**
+ * Open the Quick Save popup window for a link URL
+ */
+async function openQuickSaveLinkPopup(linkUrl, linkText) {
+    try {
+        // Only allow http/https URLs to prevent javascript:/data: execution
+        try {
+            const url = new URL(linkUrl);
+            if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+                console.log('Only http/https URLs can be saved');
+                return;
+            }
+        } catch {
+            console.log('Invalid URL');
+            return;
+        }
+
+        // Build URL with link info as parameters
+        const popupUrl = new URL(chrome.runtime.getURL('quick-save.html'));
+
+        // Use link text as title, or extract from URL
+        let title = linkText;
+        if (!title) {
+            try {
+                const urlObj = new URL(linkUrl);
+                title = urlObj.hostname + urlObj.pathname;
+            } catch {
+                title = linkUrl;
+            }
+        }
+
+        popupUrl.searchParams.set('title', title);
+        popupUrl.searchParams.set('url', linkUrl);
+
+        // Calculate center position
+        const width = 400;
+        const height = 500;
+
+        // Get the current window to center the popup
+        const currentWindow = await chrome.windows.getCurrent();
+        const left = Math.round(currentWindow.left + (currentWindow.width - width) / 2);
+        const top = Math.round(currentWindow.top + (currentWindow.height - height) / 2);
+
+        // Open popup window
+        await chrome.windows.create({
+            url: popupUrl.toString(),
+            type: 'popup',
+            width: width,
+            height: height,
+            left: left,
+            top: top,
+            focused: true
+        });
+
+    } catch (error) {
+        console.error('Error opening quick save link popup:', error);
+    }
+}
+
+// Listen for context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId === 'save-page-to-linktiles') {
+        // Open quick save popup for current page
+        await openQuickSavePopup();
+    } else if (info.menuItemId === 'save-link-to-linktiles') {
+        // Open quick save popup for the link
+        await openQuickSaveLinkPopup(info.linkUrl, info.linkText || null);
+    }
+});
 
 // Listen for keyboard shortcut commands
 chrome.commands.onCommand.addListener((command) => {

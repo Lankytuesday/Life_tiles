@@ -447,15 +447,24 @@ async function handleSave() {
 
         const title = document.getElementById('page-title').value.trim() || 'Untitled';
 
-        // Get current tile count for ordering
+        // Get project to find its dashboardId
+        const project = await db.projects.get(selectedProjectId);
+        const dashboardId = project?.dashboardId || null;
+
+        // Get max order of existing tiles and add 1
         const existingTiles = await db.tiles.where('projectId').equals(selectedProjectId).toArray();
-        const nextOrder = existingTiles.length;
+        let maxOrder = -1;
+        existingTiles.forEach(t => {
+            const order = Number.isFinite(+t.order) ? +t.order : -1;
+            if (order > maxOrder) maxOrder = order;
+        });
+        const nextOrder = maxOrder + 1;
 
         // Create the tile
         const newTile = {
             id: generateId(),
             projectId: selectedProjectId,
-            dashboardId: null,
+            dashboardId: dashboardId,
             name: title,
             url: tabInfo.url,
             order: nextOrder
