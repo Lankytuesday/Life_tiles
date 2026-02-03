@@ -37,6 +37,218 @@ function isInternalUrl(u) {
   } catch { return true; } // invalid/blank -> treat as internal
 }
 
+// =============================================================================
+// FAVICON MODULE - Consolidated favicon discovery and caching
+// =============================================================================
+
+const FAVICON_TTL_MS = 86400000; // 24 hours
+const sessionFaviconCache = new Map();
+const __ltOnsiteBlocked = new Set(); // Tracks hosts that block direct favicon access
+
+// Check if a favicon URL is from a deprecated/problematic service
+function isDeprecatedFavicon(url) {
+    if (!url || typeof url !== 'string') return true;
+    return (
+        url.includes('chrome-extension://') ||
+        /(?:^|\/\/)t\d*\.gstatic\.com\/favicon/i.test(url) ||
+        /(?:^|\/\/)www\.google\.com\/s2\/favicons.*sz=16/i.test(url) ||
+        /favicon.*googleapis/i.test(url)
+    );
+}
+
+// One-time cleanup: remove legacy cached favicons that point to deprecated services
+async function purgeLegacyFavicons() {
+    try {
+        const rows = await db.favicons.toArray();
+        for (const row of rows) {
+            if (isDeprecatedFavicon(row?.favicon)) {
+                await db.favicons.delete(row.hostname);
+                sessionFaviconCache.delete(row.hostname);
+            }
+        }
+    } catch {}
+}
+
+// Probe an image URL by loading it (avoids CORS/ORB issues with fetch)
+function probeImage(src, minSize = 16, timeout = 900) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        let done = false;
+        const finish = (result) => { if (!done) { done = true; resolve(result); } };
+        const timer = setTimeout(() => finish(null), timeout);
+        img.onload = () => {
+            clearTimeout(timer);
+            const w = img.naturalWidth || 0, h = img.naturalHeight || 0;
+            finish((w >= minSize && h >= minSize) ? src : null);
+        };
+        img.onerror = () => { clearTimeout(timer); finish(null); };
+        img.referrerPolicy = 'no-referrer';
+        img.src = src;
+    });
+}
+
+// Try to get favicon from an open tab with matching URL/host
+async function tryTabFavicon(pageUrl, minSize = 16) {
+    try {
+        if (!chrome?.tabs?.query || !pageUrl) return null;
+        const wanted = new URL(pageUrl);
+        const tabs = await chrome.tabs.query({});
+
+        // Prefer exact URL match, then same-host match
+        const exact = tabs.find(t => { try { return new URL(t.url).href === wanted.href; } catch { return false; } });
+        const sameHost = tabs.find(t => { try { return new URL(t.url).hostname === wanted.hostname; } catch { return false; } });
+        const favUrl = exact?.favIconUrl || sameHost?.favIconUrl;
+
+        if (!favUrl || favUrl.includes('chrome-extension://')) return null;
+        return await probeImage(favUrl, minSize);
+    } catch { return null; }
+}
+
+// Get eTLD+1 (e.g., news.example.com → example.com)
+function getApexDomain(host) {
+    const parts = (host || '').split('.').filter(Boolean);
+    return parts.length >= 2 ? parts.slice(-2).join('.') : host;
+}
+
+// Check if host is apex domain (e.g., example.com vs sub.example.com)
+function isApexHost(host) {
+    return (host || '').split('.').filter(Boolean).length === 2;
+}
+
+// Build host variants (with/without www)
+function buildHostVariants(host) {
+    if (!host) return [];
+    const parts = host.split('.').filter(Boolean);
+    const variants = new Set([host]);
+    if (parts[0] === 'www') variants.add(parts.slice(1).join('.'));
+    else if (parts.length === 2) variants.add(`www.${host}`);
+    return Array.from(variants);
+}
+
+// Main favicon discovery function
+async function loadFaviconForHost(hostname, pageUrl) {
+    if (!hostname) return null;
+    if (sessionFaviconCache.has(hostname)) return sessionFaviconCache.get(hostname) || null;
+
+    const MIN_PX = 16, PREF_PX = 24, S2_MIN_PX = 24;
+    let found = null;
+
+    // Normalize page URL
+    let normalizedUrl = null;
+    try { normalizedUrl = pageUrl ? new URL(pageUrl).href : `https://${hostname}`; }
+    catch { normalizedUrl = `https://${hostname}`; }
+
+    // Helper to probe with S2 globe detection (S2 returns 16px globe for unknown sites)
+    const probeS2 = async (url) => {
+        const result = await probeImage(url, S2_MIN_PX, 900);
+        return result; // Size check handles 16px globe rejection
+    };
+
+    // Helper to probe with fast-fail detection for onsite URLs
+    const probeOnsite = async (url, min) => {
+        const t0 = performance.now();
+        const result = await probeImage(url, min, 900);
+        if (!result && performance.now() - t0 < 150 && url.startsWith(`https://${hostname}/`)) {
+            __ltOnsiteBlocked.add(hostname);
+        }
+        return result;
+    };
+
+    const hostVariants = buildHostVariants(hostname);
+    const apexDomain = getApexDomain(hostname);
+
+    // 1) Tab favicon first (prefer ≥24px, then allow 16px)
+    found = await tryTabFavicon(normalizedUrl, PREF_PX);
+    if (!found) found = await tryTabFavicon(normalizedUrl, MIN_PX);
+
+    // 2) For SUBDOMAINS: services first, then onsite
+    if (!found && !isApexHost(hostname)) {
+        // S2 for both subdomain and apex
+        for (const h of [hostname, apexDomain]) {
+            if (found) break;
+            found = await probeS2(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`);
+        }
+        // icon.horse
+        if (!found) {
+            for (const h of hostVariants) {
+                found = await probeImage(`https://icon.horse/icon/${h}`, PREF_PX)
+                     || await probeImage(`https://icon.horse/icon/${h}`, MIN_PX);
+                if (found) break;
+            }
+        }
+        // Onsite (if not blocked)
+        if (!found && !__ltOnsiteBlocked.has(hostname)) {
+            for (const h of hostVariants) {
+                for (const path of ['/favicon.ico', '/favicon.svg']) {
+                    found = await probeOnsite(`https://${h}${path}`, PREF_PX);
+                    if (!found) found = await probeOnsite(`https://${h}${path}`, MIN_PX);
+                    if (found) break;
+                }
+                if (found) break;
+            }
+        }
+    }
+
+    // 3) For APEX domains: onsite first (richer paths), then services
+    if (!found && isApexHost(hostname)) {
+        // Onsite first (if not blocked)
+        if (!__ltOnsiteBlocked.has(hostname)) {
+            const paths = ['/favicon.svg', '/apple-touch-icon.png', '/favicon.ico', '/favicon-32x32.png'];
+            for (const h of hostVariants) {
+                for (const path of paths) {
+                    found = await probeOnsite(`https://${h}${path}`, PREF_PX);
+                    if (!found) found = await probeOnsite(`https://${h}${path}`, MIN_PX);
+                    if (found) break;
+                }
+                if (found) break;
+            }
+        }
+        // S2
+        if (!found) {
+            for (const h of [hostname, apexDomain]) {
+                if (found) break;
+                found = await probeS2(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`);
+            }
+        }
+        // icon.horse
+        if (!found) {
+            for (const h of hostVariants) {
+                found = await probeImage(`https://icon.horse/icon/${h}`, PREF_PX)
+                     || await probeImage(`https://icon.horse/icon/${h}`, MIN_PX);
+                if (found) break;
+            }
+        }
+    }
+
+    // Cache result (empty string for not found)
+    sessionFaviconCache.set(hostname, found || '');
+
+    // Persist to DB if found
+    if (found) {
+        try { await db.favicons.put({ hostname, favicon: found, timestamp: Date.now() }); } catch {}
+    }
+
+    return found;
+}
+
+// Check DB cache for favicon
+async function checkFaviconCache(hostname) {
+    try {
+        const result = await db.favicons.get(hostname);
+        if (result?.favicon && result.timestamp > Date.now() - FAVICON_TTL_MS) {
+            return result.favicon;
+        }
+    } catch {}
+    return null;
+}
+
+// Run legacy cleanup on load (fire-and-forget)
+purgeLegacyFavicons();
+
+// =============================================================================
+// END FAVICON MODULE
+// =============================================================================
+
 // Mock chrome.storage for development
 if (typeof chrome === 'undefined' || !chrome.storage) {
     console.log('Chrome API not available, using mock storage for development');
@@ -3280,11 +3492,9 @@ window.__lifetilesRefresh = async () => {
         };
 
         // If tile has a good stored favicon, apply immediately (no flash)
-        // Skip chrome-extension:// and S2 URLs - those need re-fetching
+        // Skip deprecated/problematic URLs - those need re-fetching
         const storedFavicon = tileData.favicon;
-        const hasGoodFavicon = storedFavicon &&
-            !storedFavicon.includes('chrome-extension://') &&
-            !storedFavicon.includes('google.com/s2/favicons');
+        const hasGoodFavicon = storedFavicon && !isDeprecatedFavicon(storedFavicon);
 
         if (hasGoodFavicon) {
             thumbnailElement.style.backgroundImage = `url('${storedFavicon}')`;
@@ -3314,89 +3524,25 @@ window.__lifetilesRefresh = async () => {
         const addTileButton = container.querySelector('.add-tile-button');
         container.insertBefore(tile, addTileButton);
 
-        // Load favicon - only needed if we don't have a good stored one
-        (async () => {
-            try {
-                if (!safeHost) return;
-
-                // Skip if we already have a good stored favicon (applied synchronously above)
-                if (hasGoodFavicon) return;
-
-                // Helper to apply favicon
-                const applyFavicon = (url) => {
-                    thumbnailElement.style.backgroundImage = `url('${url}')`;
-                    thumbnailElement.style.backgroundColor = 'transparent';
-                    thumbnailElement.innerHTML = '';
-                };
-
-                // Known placeholder sizes to reject (width x height)
-                // Note: 48x48 removed - it's a common legitimate favicon size
-                const placeholderSizes = new Set([
-                    '16x16',   // Chrome/S2 default globe
-                    '60x60',   // icon.horse default
-                    '80x80',   // icon.horse default variant
-                ]);
-
-                // Probe an image URL - resolves to URL if valid, null if failed
-                const probeImage = (url, minSize = 1, rejectPlaceholders = false) => new Promise((resolve) => {
-                    const img = new Image();
-                    const timeout = setTimeout(() => resolve(null), 3000);
-                    img.onload = () => {
-                        clearTimeout(timeout);
-                        const w = img.naturalWidth || 0;
-                        const h = img.naturalHeight || 0;
-                        // Reject if too small
-                        if (w < minSize || h < minSize) {
-                            resolve(null);
-                            return;
-                        }
-                        // Reject known placeholder sizes
-                        if (rejectPlaceholders && placeholderSizes.has(`${w}x${h}`)) {
-                            resolve(null);
-                            return;
-                        }
-                        resolve(url);
-                    };
-                    img.onerror = () => { clearTimeout(timeout); resolve(null); };
-                    img.referrerPolicy = 'no-referrer';
-                    img.src = url;
-                });
-
-                // External favicon services - more reliable than Chrome's API for legacy tiles
-                // (Chrome's API returns globes at various sizes that are hard to filter)
-                const domain = encodeURIComponent(safeHost);
-                const services = [
-                    // Google S2 - require 32px min to reject globe placeholder
-                    { url: `https://www.google.com/s2/favicons?sz=64&domain=${domain}`, minSize: 32, rejectPlaceholders: true },
-                    // Direct site favicons - often highest quality
-                    { url: `https://${safeHost}/apple-touch-icon.png`, minSize: 32, rejectPlaceholders: false },
-                    { url: `https://${safeHost}/favicon-32x32.png`, minSize: 32, rejectPlaceholders: false },
-                    { url: `https://${safeHost}/favicon.ico`, minSize: 24, rejectPlaceholders: false },
-                    // DuckDuckGo - check for placeholder
-                    { url: `https://icons.duckduckgo.com/ip3/${safeHost}.ico`, minSize: 24, rejectPlaceholders: true },
-                    // icon.horse - check for placeholder
-                    { url: `https://icon.horse/icon/${safeHost}`, minSize: 24, rejectPlaceholders: true },
-                ];
-
-                for (const { url, minSize, rejectPlaceholders } of services) {
-                    const result = await probeImage(url, minSize, rejectPlaceholders);
-                    if (result) {
-                        applyFavicon(result);
-                        // Save discovered favicon to tile for future loads
-                        try {
-                            await db.tiles.update(tileData.id, { favicon: result });
-                        } catch (e) {
-                            // Non-critical, just log
-                            console.warn('Failed to save favicon to tile:', e);
-                        }
-                        return;
+        // Load favicon asynchronously (uses consolidated favicon module)
+        if (safeHost && !hasGoodFavicon) {
+            (async () => {
+                try {
+                    // Check DB cache first
+                    let favicon = await checkFaviconCache(safeHost);
+                    // If not cached, run discovery
+                    if (!favicon) {
+                        favicon = await loadFaviconForHost(safeHost, tileData.url);
                     }
-                }
-                // All services failed - keep initials
-            } catch {
-                // Keep initials fallback
-            }
-        })();
+                    // Apply if found
+                    if (favicon) {
+                        thumbnailElement.style.backgroundImage = `url('${favicon}')`;
+                        thumbnailElement.style.backgroundColor = 'transparent';
+                        thumbnailElement.innerHTML = '';
+                    }
+                } catch {}
+            })();
+        }
     }
 // --- helper: get current tile order from DOM (ignores add-tile button) ---
 function getOrderedTileIds(containerEl) {
