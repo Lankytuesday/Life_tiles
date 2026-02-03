@@ -4021,6 +4021,13 @@ async function importGoogleBookmarks() {
         return;
     }
 
+    // Sort dashboards by order to match sidebar
+    dashboards.sort((a, b) => {
+        const ao = Number.isFinite(+a.order) ? +a.order : Number.MAX_SAFE_INTEGER;
+        const bo = Number.isFinite(+b.order) ? +b.order : Number.MAX_SAFE_INTEGER;
+        return ao - bo;
+    });
+
     // Create and show dashboard selection modal
     const modal = document.createElement('div');
     modal.className = 'modal';
@@ -4028,39 +4035,140 @@ async function importGoogleBookmarks() {
 
     const content = document.createElement('div');
     content.className = 'modal-content';
-    content.innerHTML = `
-        <h2>Select Space</h2>
-        <select id="dashboard-select" style="width: 100%; padding: 8px; margin: 10px 0;">
-        </select>
-        <div class="modal-buttons">
-            <button id="cancel-import" class="cancel-button">Cancel</button>
-            <button id="confirm-import" class="done-button enabled">Import</button>
-        </div>
+    content.style.width = '320px';
+
+    const title = document.createElement('h2');
+    title.textContent = 'Select Space';
+    content.appendChild(title);
+
+    // Create list container using target-tree styles
+    const listEl = document.createElement('div');
+    listEl.className = 'target-tree';
+
+    let selectedDashboard = dashboards[0];
+
+    // Add each dashboard as a selectable row
+    dashboards.forEach((dashboard, index) => {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'target-tree-project' + (index === 0 ? ' selected' : '');
+        rowEl.dataset.dashboardId = dashboard.id;
+        rowEl.innerHTML = `
+            <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+            <span>${escapeHtml(dashboard.name)}</span>
+        `;
+        rowEl.addEventListener('click', () => {
+            listEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
+                el.classList.remove('selected');
+            });
+            rowEl.classList.add('selected');
+            selectedDashboard = dashboard;
+            confirmBtn.disabled = false;
+            confirmBtn.classList.add('enabled');
+            // Hide new space input if visible
+            if (newSpaceInput.style.display !== 'none') {
+                newSpaceInput.style.display = 'none';
+                newSpaceInput.value = '';
+            }
+        });
+        listEl.appendChild(rowEl);
+    });
+
+    // Add "+ New Space" option
+    const newSpaceEl = document.createElement('div');
+    newSpaceEl.className = 'target-tree-new-project';
+    newSpaceEl.innerHTML = `
+        <svg class="target-tree-project-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>New Space</span>
     `;
+
+    // Input for new space name (hidden initially)
+    const newSpaceInput = document.createElement('input');
+    newSpaceInput.type = 'text';
+    newSpaceInput.className = 'target-tree-new-project-input';
+    newSpaceInput.placeholder = 'Enter space name';
+    newSpaceInput.style.display = 'none';
+    newSpaceInput.style.margin = '8px 12px 8px 36px';
+    newSpaceInput.style.width = 'calc(100% - 48px)';
+
+    newSpaceEl.addEventListener('click', () => {
+        // Deselect all
+        listEl.querySelectorAll('.target-tree-project.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        selectedDashboard = null;
+        newSpaceInput.style.display = 'block';
+        newSpaceInput.focus();
+        confirmBtn.disabled = false;
+        confirmBtn.classList.add('enabled');
+    });
+
+    listEl.appendChild(newSpaceEl);
+    listEl.appendChild(newSpaceInput);
+    content.appendChild(listEl);
+
+    // Modal buttons
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'modal-buttons';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'cancel-button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => modal.remove();
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.className = 'done-button enabled';
+    confirmBtn.textContent = 'Import';
+    confirmBtn.onclick = async () => {
+        let targetDashboardId;
+
+        if (selectedDashboard) {
+            targetDashboardId = selectedDashboard.id;
+        } else {
+            // Creating new space
+            const newName = newSpaceInput.value.trim();
+            if (!newName) {
+                newSpaceInput.focus();
+                return;
+            }
+
+            const maxOrder = dashboards.reduce((max, d) => Math.max(max, d.order ?? 0), -1);
+            const newDashboardId = Date.now().toString();
+            await db.dashboards.add({
+                id: newDashboardId,
+                name: newName,
+                order: maxOrder + 1
+            });
+
+            // Create unassigned project for this dashboard
+            await db.projects.add({
+                id: `${newDashboardId}-unassigned`,
+                dashboardId: newDashboardId,
+                name: 'Unsorted',
+                isUnassigned: true,
+                order: -1
+            });
+
+            targetDashboardId = newDashboardId;
+        }
+
+        modal.remove();
+        await performImport(targetDashboardId);
+    };
+
+    buttonsDiv.appendChild(cancelBtn);
+    buttonsDiv.appendChild(confirmBtn);
+    content.appendChild(buttonsDiv);
 
     modal.appendChild(content);
     document.body.appendChild(modal);
-
-    // Populate dashboard select
-    const select = document.getElementById('dashboard-select');
-    dashboards.forEach(dashboard => {
-        const option = document.createElement('option');
-        option.value = dashboard.id;
-        option.textContent = dashboard.name;
-        select.appendChild(option);
-    });
-
-    // Handle cancel
-    document.getElementById('cancel-import').onclick = () => {
-        modal.remove();
-    };
-
-    // Handle confirm
-    document.getElementById('confirm-import').onclick = async () => {
-        const selectedDashboardId = document.getElementById('dashboard-select').value;
-        modal.remove();
-        await performImport(selectedDashboardId);
-    };
 }
 
 function showStatus(message) {
