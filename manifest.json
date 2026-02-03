@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkTiles",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Organize your bookmarks in a tile-based dashboard",
   "permissions": ["storage", "tabs", "bookmarks", "contextMenus"],
   "action": {
