@@ -110,11 +110,6 @@ function getApexDomain(host) {
     return parts.length >= 2 ? parts.slice(-2).join('.') : host;
 }
 
-// Check if host is apex domain (e.g., example.com vs sub.example.com)
-function isApexHost(host) {
-    return (host || '').split('.').filter(Boolean).length === 2;
-}
-
 // Build host variants (with/without www)
 function buildHostVariants(host) {
     if (!host) return [];
@@ -157,66 +152,41 @@ async function loadFaviconForHost(hostname, pageUrl) {
     const hostVariants = buildHostVariants(hostname);
     const apexDomain = getApexDomain(hostname);
 
-    // 1) Tab favicon first (prefer ≥24px, then allow 16px)
+    // Stage order: tab → onsite → services
+    // Onsite first for privacy (no third-party learns your bookmarks)
+    // and accuracy (most sites serve favicons at standard paths).
+    // Third-party services (S2, icon.horse) are last resort.
+
+    // 1) Tab favicon (Chrome already resolved the URL)
     found = await tryTabFavicon(normalizedUrl, PREF_PX);
     if (!found) found = await tryTabFavicon(normalizedUrl, MIN_PX);
 
-    // 2) For SUBDOMAINS: services first, then onsite
-    if (!found && !isApexHost(hostname)) {
-        // S2 for both subdomain and apex
+    // 2) Onsite (direct from the site - no third-party involved)
+    if (!found && !__ltOnsiteBlocked.has(hostname)) {
+        const paths = ['/favicon.svg', '/apple-touch-icon.png', '/favicon.ico', '/favicon-32x32.png'];
+        for (const h of hostVariants) {
+            for (const path of paths) {
+                found = await probeOnsite(`https://${h}${path}`, PREF_PX);
+                if (!found) found = await probeOnsite(`https://${h}${path}`, MIN_PX);
+                if (found) break;
+            }
+            if (found) break;
+        }
+    }
+
+    // 3) Third-party services (last resort)
+    if (!found) {
+        // S2 for hostname and apex domain
         for (const h of [hostname, apexDomain]) {
             if (found) break;
             found = await probeS2(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`);
         }
-        // icon.horse
-        if (!found) {
-            for (const h of hostVariants) {
-                found = await probeImage(`https://icon.horse/icon/${h}`, PREF_PX)
-                     || await probeImage(`https://icon.horse/icon/${h}`, MIN_PX);
-                if (found) break;
-            }
-        }
-        // Onsite (if not blocked)
-        if (!found && !__ltOnsiteBlocked.has(hostname)) {
-            for (const h of hostVariants) {
-                for (const path of ['/favicon.ico', '/favicon.svg']) {
-                    found = await probeOnsite(`https://${h}${path}`, PREF_PX);
-                    if (!found) found = await probeOnsite(`https://${h}${path}`, MIN_PX);
-                    if (found) break;
-                }
-                if (found) break;
-            }
-        }
     }
-
-    // 3) For APEX domains: onsite first (richer paths), then services
-    if (!found && isApexHost(hostname)) {
-        // Onsite first (if not blocked)
-        if (!__ltOnsiteBlocked.has(hostname)) {
-            const paths = ['/favicon.svg', '/apple-touch-icon.png', '/favicon.ico', '/favicon-32x32.png'];
-            for (const h of hostVariants) {
-                for (const path of paths) {
-                    found = await probeOnsite(`https://${h}${path}`, PREF_PX);
-                    if (!found) found = await probeOnsite(`https://${h}${path}`, MIN_PX);
-                    if (found) break;
-                }
-                if (found) break;
-            }
-        }
-        // S2
-        if (!found) {
-            for (const h of [hostname, apexDomain]) {
-                if (found) break;
-                found = await probeS2(`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(h)}`);
-            }
-        }
-        // icon.horse
-        if (!found) {
-            for (const h of hostVariants) {
-                found = await probeImage(`https://icon.horse/icon/${h}`, PREF_PX)
-                     || await probeImage(`https://icon.horse/icon/${h}`, MIN_PX);
-                if (found) break;
-            }
+    if (!found) {
+        for (const h of hostVariants) {
+            found = await probeImage(`https://icon.horse/icon/${h}`, PREF_PX)
+                 || await probeImage(`https://icon.horse/icon/${h}`, MIN_PX);
+            if (found) break;
         }
     }
 
