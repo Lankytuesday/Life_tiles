@@ -93,6 +93,7 @@ async function saveCurrentTab() {
             dashboardId: null,
             name: tab.title || 'Untitled',
             url: tab.url,
+            favicon: tab.favIconUrl || null,
             order: nextOrder
         };
 

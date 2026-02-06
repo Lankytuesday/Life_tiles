@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             id: generateId(),
             name: currentTab.title || 'Untitled',
             url: currentTab.url,
+            favicon: currentTab.favIconUrl || null,
             projectId: GLOBAL_UNASSIGNED_ID,
             dashboardId: null,
             order: await getNextTileOrder(GLOBAL_UNASSIGNED_ID)
@@ -184,6 +185,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 id: generateId(),
                 name: tab.title || 'Untitled',
                 url: tab.url,
+                favicon: tab.favIconUrl || null,
                 projectId: GLOBAL_UNASSIGNED_ID,
                 dashboardId: null,
                 order: order++
@@ -251,6 +253,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     id: generateId(),
                     name: tab.title || 'Untitled',
                     url: tab.url,
+                    favicon: tab.favIconUrl || null,
                     projectId: selectedProjectId,
                     dashboardId: selectedDashboardId,
                     order: order++
@@ -265,6 +268,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 id: generateId(),
                 name: tileName,
                 url: currentTab.url,
+                favicon: currentTab.favIconUrl || null,
                 projectId: selectedProjectId,
                 dashboardId: selectedDashboardId,
                 order: await getNextTileOrder(selectedProjectId)
@@ -485,6 +489,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     id: generateId(),
                     name: tab.title || 'Untitled',
                     url: tab.url,
+                    favicon: tab.favIconUrl || null,
                     projectId: projectData.id,
                     dashboardId: dashboardId,
                     order: order++
@@ -497,6 +502,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     id: generateId(),
                     name: currentTab.title || 'Untitled',
                     url: currentTab.url,
+                    favicon: currentTab.favIconUrl || null,
                     projectId: projectData.id,
                     dashboardId: dashboardId,
                     order: 0
@@ -586,6 +592,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     id: generateId(),
                     name: tab.title || 'Untitled',
                     url: tab.url,
+                    favicon: tab.favIconUrl || null,
                     projectId: unassignedId,
                     dashboardId: dashboardData.id,
                     order: order++
@@ -598,6 +605,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                     id: generateId(),
                     name: currentTab.title || 'Untitled',
                     url: currentTab.url,
+                    favicon: currentTab.favIconUrl || null,
                     projectId: unassignedId,
                     dashboardId: dashboardData.id,
                     order: 0

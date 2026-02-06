@@ -141,6 +141,7 @@ async function init() {
                 dashboardId: dashboardId,
                 name: title,
                 url: tabInfo.url,
+                favicon: tabInfo.favIconUrl || null,
                 order: 0
             };
 
@@ -219,6 +220,7 @@ async function init() {
                 dashboardId: dashboardData.id,
                 name: title,
                 url: tabInfo.url,
+                favicon: tabInfo.favIconUrl || null,
                 order: 0
             };
 
@@ -467,6 +469,7 @@ async function handleSave() {
             dashboardId: dashboardId,
             name: title,
             url: tabInfo.url,
+            favicon: tabInfo.favIconUrl || null,
             order: nextOrder
         };
 
