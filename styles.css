@@ -2094,6 +2094,23 @@ body.tabs-panel-open .app-shell {
     color: #fff;
 }
 
+/* Drag from panel */
+.tabs-panel-item[draggable] {
+    cursor: grab;
+}
+
+.tabs-panel-item.dragging {
+    opacity: 0.4;
+}
+
+/* Project drop target highlight when dragging a tab from the panel */
+.project.tab-drop-target,
+.unassigned-section.tab-drop-target {
+    outline: 2px dashed var(--color-brand);
+    outline-offset: -2px;
+    background: rgba(26, 115, 232, 0.06);
+}
+
 /* Empty state */
 .tabs-panel-empty {
     padding: 32px 16px;

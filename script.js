@@ -4938,6 +4938,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         let selectedTabs = new Map(); // tabId -> { id, title, url, favIconUrl }
         let autoRefreshTimer = null;
         let currentTabs = []; // Latest fetched tabs
+        let draggedTab = null; // Tab object being dragged from panel
 
         // Toggle panel open/close
         toggleBtn.addEventListener('click', () => {
@@ -5134,6 +5135,23 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     cb.dispatchEvent(new Event('change'));
                 });
 
+                // Drag support
+                item.draggable = true;
+                item.addEventListener('dragstart', (e) => {
+                    draggedTab = tab;
+                    item.classList.add('dragging');
+                    document.body.classList.add('dragging', 'dragging-panel-tab');
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', tab.url);
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    document.body.classList.remove('dragging', 'dragging-panel-tab');
+                    draggedTab = null;
+                    // Clean up any lingering drop highlights
+                    document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+                });
+
                 listEl.appendChild(item);
             }
 
@@ -5168,6 +5186,83 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             } else {
                 saveBar.classList.add('hidden');
             }
+        }
+
+        // --- Drag-to-project drop targets (event delegation on #main) ---
+        const mainEl = document.getElementById('main');
+        if (mainEl) {
+            mainEl.addEventListener('dragover', (e) => {
+                if (!draggedTab) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+                const target = e.target.closest('.project, .unassigned-section');
+                // Remove highlight from all, then add to current target
+                document.querySelectorAll('.tab-drop-target').forEach(el => {
+                    if (el !== target) el.classList.remove('tab-drop-target');
+                });
+                if (target) target.classList.add('tab-drop-target');
+            });
+
+            mainEl.addEventListener('dragleave', (e) => {
+                if (!draggedTab) return;
+                const target = e.target.closest('.project, .unassigned-section');
+                if (target && !target.contains(e.relatedTarget)) {
+                    target.classList.remove('tab-drop-target');
+                }
+            });
+
+            mainEl.addEventListener('drop', async (e) => {
+                if (!draggedTab) return;
+                e.preventDefault();
+                const target = e.target.closest('.project, .unassigned-section');
+                document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+                if (!target) return;
+
+                const projectId = target.dataset.projectId;
+                if (!projectId) return;
+
+                const tab = draggedTab;
+                draggedTab = null;
+
+                // Look up project to get dashboardId
+                let dashboardId = null;
+                try {
+                    const proj = await db.projects.get(projectId);
+                    if (proj) dashboardId = proj.dashboardId || null;
+                } catch { /* ignore */ }
+
+                const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+                await db.tiles.add({
+                    id: tileId,
+                    projectId: projectId,
+                    dashboardId: dashboardId,
+                    name: tab.title || tab.url,
+                    url: tab.url,
+                    order: Date.now(),
+                    favicon: tab.favIconUrl || ''
+                });
+
+                // Notify other components
+                try {
+                    const bc = new BroadcastChannel('lifetiles');
+                    bc.postMessage({ type: 'tiles-changed' });
+                    bc.close();
+                } catch (err) { /* ignore */ }
+
+                // Refresh dashboard and panel
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
+                }
+                refreshTabList();
+
+                // Get project name for status message
+                let projectName = 'project';
+                try {
+                    const proj = await db.projects.get(projectId);
+                    if (proj) projectName = proj.name || (proj.isUnassigned ? 'Unsorted' : 'project');
+                } catch { /* ignore */ }
+                showStatus(`Saved tab to ${escapeHtml(projectName)}`);
+            });
         }
     })();
 
