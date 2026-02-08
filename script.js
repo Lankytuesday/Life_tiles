@@ -4918,6 +4918,259 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         });
     }
 
+    // =========================================================================
+    // OPEN TABS PANEL
+    // =========================================================================
+    (function initTabsPanel() {
+        const toggleBtn = document.getElementById('tabs-panel-toggle');
+        const panel = document.getElementById('tabs-panel');
+        const listEl = document.getElementById('tabs-panel-list');
+        const countEl = document.getElementById('tabs-panel-count');
+        const selectAllCb = document.getElementById('tabs-panel-select-all');
+        const refreshBtn = document.getElementById('tabs-panel-refresh');
+        const saveBar = document.getElementById('tabs-panel-save-bar');
+        const selCountEl = document.getElementById('tabs-panel-sel-count');
+        const saveBtn = document.getElementById('tabs-panel-save-btn');
+
+        if (!toggleBtn || !panel) return;
+
+        let panelOpen = false;
+        let selectedTabs = new Map(); // tabId -> { id, title, url, favIconUrl }
+        let autoRefreshTimer = null;
+        let currentTabs = []; // Latest fetched tabs
+
+        // Toggle panel open/close
+        toggleBtn.addEventListener('click', () => {
+            panelOpen = !panelOpen;
+            if (panelOpen) openPanel(); else closePanel();
+        });
+
+        function openPanel() {
+            panelOpen = true;
+            document.body.classList.add('tabs-panel-open');
+            panel.classList.remove('hidden');
+            toggleBtn.classList.add('active');
+            selectedTabs.clear();
+            refreshTabList();
+            autoRefreshTimer = setInterval(refreshTabList, 3000);
+        }
+
+        function closePanel() {
+            panelOpen = false;
+            document.body.classList.remove('tabs-panel-open');
+            panel.classList.add('hidden');
+            toggleBtn.classList.remove('active');
+            if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+            selectedTabs.clear();
+            updateSaveBar();
+        }
+
+        // Escape key closes panel when no modal is open
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && panelOpen) {
+                // Don't close if a modal is visible
+                const openModal = document.querySelector('.modal[style*="display: flex"]');
+                if (openModal) return;
+                closePanel();
+            }
+        });
+
+        // Refresh button
+        refreshBtn.addEventListener('click', () => refreshTabList());
+
+        // Select All
+        selectAllCb.addEventListener('change', () => {
+            if (selectAllCb.checked) {
+                for (const tab of currentTabs) {
+                    selectedTabs.set(tab.id, tab);
+                }
+            } else {
+                selectedTabs.clear();
+            }
+            syncCheckboxes();
+            updateSaveBar();
+        });
+
+        // Save button
+        saveBtn.addEventListener('click', () => {
+            if (selectedTabs.size === 0) return;
+            const tabsToSave = Array.from(selectedTabs.values());
+
+            showTreeTargetModal('Save Tabs to', async (targetProject) => {
+                let count = 0;
+                for (const tab of tabsToSave) {
+                    const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+                    await db.tiles.add({
+                        id: tileId,
+                        projectId: targetProject.id,
+                        dashboardId: targetProject.dashboardId || null,
+                        name: tab.title || tab.url,
+                        url: tab.url,
+                        order: Date.now(),
+                        favicon: tab.favIconUrl || ''
+                    });
+                    count++;
+                }
+
+                // Notify other components
+                try {
+                    const bc = new BroadcastChannel('lifetiles');
+                    bc.postMessage({ type: 'tiles-changed' });
+                    bc.close();
+                } catch (err) { /* ignore */ }
+
+                // Refresh dashboard
+                if (window.__lifetilesRefresh) {
+                    await window.__lifetilesRefresh();
+                }
+
+                selectedTabs.clear();
+                updateSaveBar();
+                refreshTabList();
+                showStatus(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(targetProject.name)}`);
+            });
+        });
+
+        async function refreshTabList() {
+            if (!panelOpen) return;
+
+            let tabs = [];
+            try {
+                tabs = await chrome.tabs.query({ currentWindow: true });
+            } catch (err) {
+                listEl.innerHTML = '<div class="tabs-panel-empty">Cannot access tabs</div>';
+                return;
+            }
+
+            // Get current dashboard tab URL to filter it out
+            const selfUrl = location.href;
+
+            // Filter out internal URLs and the dashboard tab itself
+            tabs = tabs.filter(t => {
+                if (!t.url) return false;
+                try {
+                    const u = new URL(t.url);
+                    if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+                } catch { return false; }
+                if (t.url === selfUrl) return false;
+                return true;
+            });
+
+            currentTabs = tabs;
+            countEl.textContent = tabs.length;
+
+            // Get all saved tile URLs for "already saved" detection
+            let savedUrls = new Set();
+            try {
+                const allTiles = await db.tiles.toArray();
+                for (const tile of allTiles) {
+                    if (tile.url) savedUrls.add(tile.url);
+                }
+            } catch { /* ignore */ }
+
+            // Preserve selection — remove tabs that no longer exist
+            const tabIds = new Set(tabs.map(t => t.id));
+            for (const id of selectedTabs.keys()) {
+                if (!tabIds.has(id)) selectedTabs.delete(id);
+            }
+
+            // Render
+            listEl.innerHTML = '';
+            if (tabs.length === 0) {
+                listEl.innerHTML = '<div class="tabs-panel-empty">No open web tabs</div>';
+                updateSelectAll();
+                updateSaveBar();
+                return;
+            }
+
+            for (const tab of tabs) {
+                const isSaved = savedUrls.has(tab.url);
+                const item = document.createElement('div');
+                item.className = 'tabs-panel-item' + (isSaved ? ' saved' : '');
+                item.dataset.tabId = tab.id;
+
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.checked = selectedTabs.has(tab.id);
+                cb.addEventListener('change', () => {
+                    if (cb.checked) {
+                        selectedTabs.set(tab.id, tab);
+                    } else {
+                        selectedTabs.delete(tab.id);
+                    }
+                    updateSelectAll();
+                    updateSaveBar();
+                });
+
+                const favicon = document.createElement('img');
+                favicon.className = 'tabs-panel-item-favicon';
+                favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
+                favicon.alt = '';
+                favicon.loading = 'lazy';
+                favicon.onerror = function() {
+                    this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
+                };
+
+                const title = document.createElement('span');
+                title.className = 'tabs-panel-item-title';
+                title.textContent = tab.title || tab.url;
+                title.title = tab.url;
+
+                item.appendChild(cb);
+                item.appendChild(favicon);
+                item.appendChild(title);
+
+                if (isSaved) {
+                    const badge = document.createElement('span');
+                    badge.className = 'tabs-panel-saved-badge';
+                    badge.textContent = 'saved';
+                    item.appendChild(badge);
+                }
+
+                // Click on item row toggles checkbox
+                item.addEventListener('click', (e) => {
+                    if (e.target === cb) return; // checkbox handles itself
+                    cb.checked = !cb.checked;
+                    cb.dispatchEvent(new Event('change'));
+                });
+
+                listEl.appendChild(item);
+            }
+
+            updateSelectAll();
+            updateSaveBar();
+        }
+
+        function syncCheckboxes() {
+            const items = listEl.querySelectorAll('.tabs-panel-item input[type="checkbox"]');
+            items.forEach(cb => {
+                const tabId = parseInt(cb.closest('.tabs-panel-item').dataset.tabId, 10);
+                cb.checked = selectedTabs.has(tabId);
+            });
+        }
+
+        function updateSelectAll() {
+            if (currentTabs.length === 0) {
+                selectAllCb.checked = false;
+                selectAllCb.indeterminate = false;
+                return;
+            }
+            const allSelected = currentTabs.length > 0 && selectedTabs.size === currentTabs.length;
+            const someSelected = selectedTabs.size > 0 && !allSelected;
+            selectAllCb.checked = allSelected;
+            selectAllCb.indeterminate = someSelected;
+        }
+
+        function updateSaveBar() {
+            if (selectedTabs.size > 0) {
+                saveBar.classList.remove('hidden');
+                selCountEl.textContent = `${selectedTabs.size} selected`;
+            } else {
+                saveBar.classList.add('hidden');
+            }
+        }
+    })();
+
     // Helper: Show copy tiles dialog
     async function showCopyTilesDialog(tiles) {
         showTreeTargetModal('Copy to', async (targetProject) => {

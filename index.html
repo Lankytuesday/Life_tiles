@@ -19,6 +19,14 @@
             <input type="text" id="sidebar-search" class="toolbar-search" placeholder="Search spaces, projects, tiles..." aria-label="Search spaces, projects, and tiles">
             <div id="search-results" class="search-results hidden"></div>
           </div>
+          <button id="tabs-panel-toggle" class="tabs-panel-toggle-btn" title="Open Tabs" aria-label="Open Tabs">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="15" y1="3" x2="15" y2="21"/>
+            </svg>
+          </button>
           <div class="settings-wrapper">
             <button id="open-settings" class="settings-btn" title="Settings" aria-label="Settings">
               <!-- filled gear (legible at small sizes) -->
@@ -69,6 +77,33 @@
                     <div id="projects-list"></div>
                 </div>
               </main>
+
+        <!-- Open Tabs Panel -->
+        <aside id="tabs-panel" class="tabs-panel hidden">
+          <div class="tabs-panel-header">
+            <span class="tabs-panel-title">Open Tabs</span>
+            <span id="tabs-panel-count" class="tabs-panel-count">0</span>
+          </div>
+          <div class="tabs-panel-actions">
+            <label class="tabs-panel-select-all-label">
+              <input type="checkbox" id="tabs-panel-select-all">
+              <span>Select All</span>
+            </label>
+            <button id="tabs-panel-refresh" class="tabs-panel-refresh-btn" title="Refresh">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+            </button>
+          </div>
+          <div id="tabs-panel-list" class="tabs-panel-list">
+            <!-- Tab items rendered by JS -->
+          </div>
+          <div id="tabs-panel-save-bar" class="tabs-panel-save-bar hidden">
+            <span id="tabs-panel-sel-count">0 selected</span>
+            <button id="tabs-panel-save-btn" class="tabs-panel-save-btn">Save to Project...</button>
+          </div>
+        </aside>
 
             <!-- Project Creation Modal -->
             <div id="project-modal" class="modal">

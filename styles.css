@@ -2,6 +2,7 @@
   /* Layout */
   --toolbar-h: 56px;
   --sidebar-w: 260px;
+  --tabs-panel-w: 300px;
 
   /* Colors */
   --color-brand: #1a73e8;
@@ -1861,4 +1862,255 @@ body.bulk-mode .tile:hover {
 
 .undo-toast button:hover {
     text-decoration: underline;
+}
+
+/* ===== Open Tabs Panel ===== */
+
+/* Toggle button in toolbar */
+.tabs-panel-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    margin: 0 4px 0 0;
+    border: none;
+    border-radius: var(--radius-md);
+    background: none;
+    cursor: pointer;
+    color: #555;
+}
+
+.tabs-panel-toggle-btn svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.tabs-panel-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #111;
+}
+
+.tabs-panel-toggle-btn.active {
+    background: rgba(26, 115, 232, 0.12);
+    color: var(--color-brand);
+}
+
+/* 3-column grid when panel is open */
+body.tabs-panel-open .app-shell {
+    grid-template-columns: var(--sidebar-w) 1fr var(--tabs-panel-w);
+}
+
+/* Panel itself */
+.tabs-panel {
+    grid-row: 2;
+    grid-column: 3;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--color-border);
+    background: #fff;
+    overflow: hidden;
+}
+
+.tabs-panel.hidden {
+    display: none !important;
+}
+
+/* Panel header */
+.tabs-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tabs-panel-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.tabs-panel-count {
+    font-size: 12px;
+    background: var(--color-bg-light);
+    color: var(--color-text-muted);
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+/* Actions bar */
+.tabs-panel-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+
+.tabs-panel-select-all-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+
+.tabs-panel-select-all-label input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--color-brand);
+    cursor: pointer;
+}
+
+.tabs-panel-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+}
+
+.tabs-panel-refresh-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--color-text);
+}
+
+/* Tab list */
+.tabs-panel-list {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* Individual tab item */
+.tabs-panel-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: background-color var(--transition);
+    user-select: none;
+}
+
+.tabs-panel-item:hover {
+    background: var(--color-bg-hover);
+}
+
+.tabs-panel-item input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--color-brand);
+    cursor: pointer;
+}
+
+.tabs-panel-item-favicon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    object-fit: contain;
+}
+
+.tabs-panel-item-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Already-saved state */
+.tabs-panel-item.saved {
+    opacity: 0.5;
+}
+
+.tabs-panel-item.saved .tabs-panel-item-title {
+    text-decoration: line-through;
+    text-decoration-color: var(--color-text-muted);
+}
+
+.tabs-panel-saved-badge {
+    font-size: 11px;
+    color: var(--color-success);
+    flex-shrink: 0;
+    font-weight: 500;
+}
+
+/* Save bar */
+.tabs-panel-save-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-light);
+    flex-shrink: 0;
+}
+
+.tabs-panel-save-bar.hidden {
+    display: none !important;
+}
+
+#tabs-panel-sel-count {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.tabs-panel-save-btn {
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--color-brand);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: background-color var(--transition);
+}
+
+.tabs-panel-save-btn:hover {
+    background: var(--color-brand-dark);
+    color: #fff;
+}
+
+/* Empty state */
+.tabs-panel-empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+/* Hide panel on mobile */
+@media (max-width: 900px) {
+    .tabs-panel {
+        display: none !important;
+    }
+    .tabs-panel-toggle-btn {
+        display: none;
+    }
+    body.tabs-panel-open .app-shell {
+        grid-template-columns: 1fr;
+    }
 }
