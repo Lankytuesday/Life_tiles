@@ -3330,8 +3330,8 @@ window.__lifetilesRefresh = async () => {
 
             // Always get the CURRENT container and project ID at the time of clicking edit
             // This ensures we're editing the tile in its current location, not its original one
-            const currentContainer = tile.closest('.tiles-container');
-            const currentProject = tile.closest('.project');
+            const currentContainer = tile.closest('.tiles-container') || tile.closest('.global-unassigned-tiles');
+            const currentProject = tile.closest('.project') || tile.closest('.global-unassigned-view');
             if (!currentContainer || !currentProject) return;
 
             currentProjectContainer = currentContainer;
@@ -4399,6 +4399,11 @@ function showUndoToast(message, undoCallback, duration = 7000) {
 
         // Update Quick Save count in case any were Quick Save tiles
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
+
+        // Re-render Quick Save view so empty state / drop target stays valid
+        if (isViewingGlobalUnassigned && window.__lifetilesRefresh) {
+            await window.__lifetilesRefresh();
+        }
 
         exitBulkMode();
 
