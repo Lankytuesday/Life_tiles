@@ -689,7 +689,6 @@ body.dragging {
 
 .settings-wrapper {
     position: relative;
-    margin-left: auto;
 }
 
 .settings-btn {
@@ -1875,6 +1874,7 @@ body.bulk-mode .tile:hover {
     height: 32px;
     padding: 0;
     margin: 0 4px 0 0;
+    margin-left: auto;
     border: none;
     border-radius: var(--radius-md);
     background: none;
