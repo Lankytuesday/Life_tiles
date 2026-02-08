@@ -1997,6 +1997,51 @@ body.tabs-panel-open .app-shell {
     overscroll-behavior: contain;
 }
 
+/* Window group headers */
+.tabs-panel-window-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    cursor: pointer;
+    user-select: none;
+    background: var(--color-bg-light);
+    border-bottom: 1px solid var(--color-border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.tabs-panel-window-header:hover {
+    background: var(--color-bg-hover);
+}
+
+.tabs-panel-window-header .caret {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tabs-panel-window-group.collapsed .caret {
+    transform: rotate(-90deg);
+}
+
+.tabs-panel-window-header .window-tab-count {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    opacity: 0.7;
+}
+
+.tabs-panel-window-group.collapsed .tabs-panel-item {
+    display: none;
+}
+
 /* Individual tab item */
 .tabs-panel-item {
     display: flex;

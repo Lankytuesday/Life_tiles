@@ -4939,6 +4939,9 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         let autoRefreshTimer = null;
         let currentTabs = []; // Latest fetched tabs
         let draggedTabs = []; // Tab objects being dragged from panel
+        const collapsedWindows = new Set(); // windowIds the user has collapsed
+        const expandedWindows = new Set(); // windowIds the user has expanded
+        const knownWindows = new Set(); // windowIds we've seen before
 
         // Toggle panel open/close
         toggleBtn.addEventListener('click', () => {
@@ -4979,18 +4982,32 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         // Refresh button
         refreshBtn.addEventListener('click', () => refreshTabList());
 
-        // Select All
+        // Select All — only affects visible (non-collapsed) tabs
         selectAllCb.addEventListener('change', () => {
+            const visibleTabs = getVisibleTabs();
             if (selectAllCb.checked) {
-                for (const tab of currentTabs) {
+                for (const tab of visibleTabs) {
                     selectedTabs.set(tab.id, tab);
                 }
             } else {
-                selectedTabs.clear();
+                for (const tab of visibleTabs) {
+                    selectedTabs.delete(tab.id);
+                }
             }
             syncCheckboxes();
             updateSaveBar();
         });
+
+        function getVisibleTabs() {
+            const visible = [];
+            const items = listEl.querySelectorAll('.tabs-panel-window-group:not(.collapsed) .tabs-panel-item');
+            items.forEach(item => {
+                const tabId = parseInt(item.dataset.tabId, 10);
+                const tab = currentTabs.find(t => t.id === tabId);
+                if (tab) visible.push(tab);
+            });
+            return visible;
+        }
 
         // Save button
         saveBtn.addEventListener('click', () => {
@@ -5035,9 +5052,12 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         async function refreshTabList() {
             if (!panelOpen) return;
 
-            let tabs = [];
+            let allTabs = [];
+            let currentWindowId = null;
             try {
-                tabs = await chrome.tabs.query({ currentWindow: true });
+                allTabs = await chrome.tabs.query({});
+                const currentWindow = await chrome.windows.getCurrent();
+                currentWindowId = currentWindow.id;
             } catch (err) {
                 listEl.innerHTML = '<div class="tabs-panel-empty">Cannot access tabs</div>';
                 return;
@@ -5047,7 +5067,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             const selfUrl = location.href;
 
             // Filter out internal URLs and the dashboard tab itself
-            tabs = tabs.filter(t => {
+            allTabs = allTabs.filter(t => {
                 if (!t.url) return false;
                 try {
                     const u = new URL(t.url);
@@ -5057,8 +5077,24 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 return true;
             });
 
-            currentTabs = tabs;
-            countEl.textContent = tabs.length;
+            currentTabs = allTabs;
+            countEl.textContent = allTabs.length;
+
+            // Group tabs by windowId
+            const windowGroups = new Map();
+            for (const tab of allTabs) {
+                if (!windowGroups.has(tab.windowId)) {
+                    windowGroups.set(tab.windowId, []);
+                }
+                windowGroups.get(tab.windowId).push(tab);
+            }
+
+            // Sort: current window first, then by windowId
+            const sortedWindowIds = Array.from(windowGroups.keys()).sort((a, b) => {
+                if (a === currentWindowId) return -1;
+                if (b === currentWindowId) return 1;
+                return a - b;
+            });
 
             // Get all saved tile URLs for "already saved" detection
             let savedUrls = new Set();
@@ -5070,104 +5106,157 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             } catch { /* ignore */ }
 
             // Preserve selection — remove tabs that no longer exist
-            const tabIds = new Set(tabs.map(t => t.id));
+            const tabIds = new Set(allTabs.map(t => t.id));
             for (const id of selectedTabs.keys()) {
                 if (!tabIds.has(id)) selectedTabs.delete(id);
             }
 
             // Render
             listEl.innerHTML = '';
-            if (tabs.length === 0) {
+            if (allTabs.length === 0) {
                 listEl.innerHTML = '<div class="tabs-panel-empty">No open web tabs</div>';
                 updateSelectAll();
                 updateSaveBar();
                 return;
             }
 
-            for (const tab of tabs) {
-                const isSaved = savedUrls.has(tab.url);
-                const item = document.createElement('div');
-                item.className = 'tabs-panel-item' + (isSaved ? ' saved' : '');
-                item.dataset.tabId = tab.id;
+            let windowIndex = 0;
+            for (const windowId of sortedWindowIds) {
+                const tabs = windowGroups.get(windowId);
+                windowIndex++;
 
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.checked = selectedTabs.has(tab.id);
-                cb.addEventListener('change', () => {
-                    if (cb.checked) {
-                        selectedTabs.set(tab.id, tab);
+                const isCurrentWindow = windowId === currentWindowId;
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'tabs-panel-window-group';
+
+                // Determine collapsed state: respect user toggle, else default non-current to collapsed on first sight
+                let isCollapsed;
+                if (collapsedWindows.has(windowId)) {
+                    isCollapsed = true;
+                } else if (expandedWindows.has(windowId)) {
+                    isCollapsed = false;
+                } else {
+                    // First time seeing this window — default non-current to collapsed
+                    isCollapsed = !isCurrentWindow;
+                }
+                knownWindows.add(windowId);
+                if (isCollapsed) groupDiv.classList.add('collapsed');
+
+                // Window header
+                const header = document.createElement('div');
+                header.className = 'tabs-panel-window-header';
+                header.innerHTML = '<svg class="caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 2 8 6 4 10"/></svg>';
+
+                const label = document.createElement('span');
+                label.textContent = isCurrentWindow ? 'Current Window' : `Window ${windowIndex}`;
+                header.appendChild(label);
+
+                const countBadge = document.createElement('span');
+                countBadge.className = 'window-tab-count';
+                countBadge.textContent = tabs.length;
+                header.appendChild(countBadge);
+
+                header.addEventListener('click', () => {
+                    groupDiv.classList.toggle('collapsed');
+                    if (groupDiv.classList.contains('collapsed')) {
+                        collapsedWindows.add(windowId);
+                        expandedWindows.delete(windowId);
                     } else {
-                        selectedTabs.delete(tab.id);
+                        expandedWindows.add(windowId);
+                        collapsedWindows.delete(windowId);
                     }
-                    updateSelectAll();
-                    updateSaveBar();
                 });
 
-                const favicon = document.createElement('img');
-                favicon.className = 'tabs-panel-item-favicon';
-                favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
-                favicon.alt = '';
-                favicon.loading = 'lazy';
-                favicon.onerror = function() {
-                    this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
-                };
+                groupDiv.appendChild(header);
 
-                const title = document.createElement('span');
-                title.className = 'tabs-panel-item-title';
-                title.textContent = tab.title || tab.url;
-                title.title = tab.url;
+                // Render tabs within group
+                for (const tab of tabs) {
+                    const isSaved = savedUrls.has(tab.url);
+                    const item = document.createElement('div');
+                    item.className = 'tabs-panel-item' + (isSaved ? ' saved' : '');
+                    item.dataset.tabId = tab.id;
 
-                item.appendChild(cb);
-                item.appendChild(favicon);
-                item.appendChild(title);
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.checked = selectedTabs.has(tab.id);
+                    cb.addEventListener('change', () => {
+                        if (cb.checked) {
+                            selectedTabs.set(tab.id, tab);
+                        } else {
+                            selectedTabs.delete(tab.id);
+                        }
+                        updateSelectAll();
+                        updateSaveBar();
+                    });
 
-                if (isSaved) {
-                    const badge = document.createElement('span');
-                    badge.className = 'tabs-panel-saved-badge';
-                    badge.textContent = 'saved';
-                    item.appendChild(badge);
+                    const favicon = document.createElement('img');
+                    favicon.className = 'tabs-panel-item-favicon';
+                    favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
+                    favicon.alt = '';
+                    favicon.loading = 'lazy';
+                    favicon.onerror = function() {
+                        this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
+                    };
+
+                    const title = document.createElement('span');
+                    title.className = 'tabs-panel-item-title';
+                    title.textContent = tab.title || tab.url;
+                    title.title = tab.url;
+
+                    item.appendChild(cb);
+                    item.appendChild(favicon);
+                    item.appendChild(title);
+
+                    if (isSaved) {
+                        const badge = document.createElement('span');
+                        badge.className = 'tabs-panel-saved-badge';
+                        badge.textContent = 'saved';
+                        item.appendChild(badge);
+                    }
+
+                    // Click on item row toggles checkbox
+                    item.addEventListener('click', (e) => {
+                        if (e.target === cb) return; // checkbox handles itself
+                        cb.checked = !cb.checked;
+                        cb.dispatchEvent(new Event('change'));
+                    });
+
+                    // Drag support
+                    item.draggable = true;
+                    item.addEventListener('dragstart', (e) => {
+                        // If this tab is selected, drag all selected tabs; otherwise just this one
+                        if (selectedTabs.has(tab.id) && selectedTabs.size > 1) {
+                            draggedTabs = Array.from(selectedTabs.values());
+                        } else {
+                            draggedTabs = [tab];
+                        }
+                        item.classList.add('dragging');
+                        document.body.classList.add('dragging', 'dragging-panel-tab');
+                        e.dataTransfer.effectAllowed = 'copy';
+                        e.dataTransfer.setData('text/plain', draggedTabs.map(t => t.url).join('\n'));
+
+                        // Custom drag image showing count when multi-dragging
+                        if (draggedTabs.length > 1) {
+                            const ghost = document.createElement('div');
+                            ghost.className = 'tabs-drag-ghost';
+                            ghost.textContent = `${draggedTabs.length} tabs`;
+                            document.body.appendChild(ghost);
+                            e.dataTransfer.setDragImage(ghost, 40, 16);
+                            requestAnimationFrame(() => ghost.remove());
+                        }
+                    });
+                    item.addEventListener('dragend', () => {
+                        item.classList.remove('dragging');
+                        document.body.classList.remove('dragging', 'dragging-panel-tab');
+                        draggedTabs = [];
+                        // Clean up any lingering drop highlights
+                        document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+                    });
+
+                    groupDiv.appendChild(item);
                 }
 
-                // Click on item row toggles checkbox
-                item.addEventListener('click', (e) => {
-                    if (e.target === cb) return; // checkbox handles itself
-                    cb.checked = !cb.checked;
-                    cb.dispatchEvent(new Event('change'));
-                });
-
-                // Drag support
-                item.draggable = true;
-                item.addEventListener('dragstart', (e) => {
-                    // If this tab is selected, drag all selected tabs; otherwise just this one
-                    if (selectedTabs.has(tab.id) && selectedTabs.size > 1) {
-                        draggedTabs = Array.from(selectedTabs.values());
-                    } else {
-                        draggedTabs = [tab];
-                    }
-                    item.classList.add('dragging');
-                    document.body.classList.add('dragging', 'dragging-panel-tab');
-                    e.dataTransfer.effectAllowed = 'copy';
-                    e.dataTransfer.setData('text/plain', draggedTabs.map(t => t.url).join('\n'));
-
-                    // Custom drag image showing count when multi-dragging
-                    if (draggedTabs.length > 1) {
-                        const ghost = document.createElement('div');
-                        ghost.className = 'tabs-drag-ghost';
-                        ghost.textContent = `${draggedTabs.length} tabs`;
-                        document.body.appendChild(ghost);
-                        e.dataTransfer.setDragImage(ghost, 40, 16);
-                        requestAnimationFrame(() => ghost.remove());
-                    }
-                });
-                item.addEventListener('dragend', () => {
-                    item.classList.remove('dragging');
-                    document.body.classList.remove('dragging', 'dragging-panel-tab');
-                    draggedTabs = [];
-                    // Clean up any lingering drop highlights
-                    document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
-                });
-
-                listEl.appendChild(item);
+                listEl.appendChild(groupDiv);
             }
 
             updateSelectAll();
@@ -5183,13 +5272,15 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         }
 
         function updateSelectAll() {
-            if (currentTabs.length === 0) {
+            const visibleTabs = getVisibleTabs();
+            if (visibleTabs.length === 0) {
                 selectAllCb.checked = false;
                 selectAllCb.indeterminate = false;
                 return;
             }
-            const allSelected = currentTabs.length > 0 && selectedTabs.size === currentTabs.length;
-            const someSelected = selectedTabs.size > 0 && !allSelected;
+            const visibleSelectedCount = visibleTabs.filter(t => selectedTabs.has(t.id)).length;
+            const allSelected = visibleSelectedCount === visibleTabs.length;
+            const someSelected = visibleSelectedCount > 0 && !allSelected;
             selectAllCb.checked = allSelected;
             selectAllCb.indeterminate = someSelected;
         }
