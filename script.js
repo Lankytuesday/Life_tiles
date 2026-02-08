@@ -4172,6 +4172,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
     if (!bulkSelectBtn) return; // Not on main page
 
     function enterBulkMode() {
+        // Close the browser tabs panel — both open at once is confusing
+        if (window.__closeTabsPanel) window.__closeTabsPanel();
         document.body.classList.add('bulk-mode');
         bulkSelectBtn.classList.add('hidden');
         bulkActionBar.classList.remove('hidden');
@@ -4401,7 +4403,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
 
         // Re-render Quick Save view so empty state / drop target stays valid
-        if (isViewingGlobalUnassigned && window.__lifetilesRefresh) {
+        if (localStorage.getItem('isViewingGlobalUnassigned') === 'true' && window.__lifetilesRefresh) {
             await window.__lifetilesRefresh();
         }
 
@@ -4956,6 +4958,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         });
 
         function openPanel() {
+            // Exit bulk mode — both open at once is confusing
+            if (window.__exitBulkMode) window.__exitBulkMode();
             panelOpen = true;
             document.body.classList.add('tabs-panel-open');
             panel.classList.remove('hidden');
@@ -4974,6 +4978,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             selectedTabs.clear();
             updateSaveBar();
         }
+        window.__closeTabsPanel = closePanel;
 
         // Escape key closes panel when no modal is open
         document.addEventListener('keydown', (e) => {
@@ -5302,11 +5307,26 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         if (mainEl) {
             const dropSelector = '.project, .unassigned-section, .global-unassigned-view';
 
+            // When viewing Quick Save, the entire main area is a valid drop zone
+            function isQuickSaveView() {
+                return localStorage.getItem('isViewingGlobalUnassigned') === 'true';
+            }
+
+            function findDropTarget(e) {
+                const target = e.target.closest(dropSelector);
+                if (target) return target;
+                // Fallback: if viewing Quick Save, treat anywhere in main as the Quick Save drop
+                if (isQuickSaveView()) {
+                    return document.querySelector('.global-unassigned-view') || mainEl;
+                }
+                return null;
+            }
+
             mainEl.addEventListener('dragover', (e) => {
                 if (draggedTabs.length === 0) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
-                const target = e.target.closest(dropSelector);
+                const target = findDropTarget(e);
                 // Remove highlight from all, then add to current target
                 document.querySelectorAll('.tab-drop-target').forEach(el => {
                     if (el !== target) el.classList.remove('tab-drop-target');
@@ -5316,7 +5336,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
 
             mainEl.addEventListener('dragleave', (e) => {
                 if (draggedTabs.length === 0) return;
-                const target = e.target.closest(dropSelector);
+                const target = findDropTarget(e);
                 if (target && !target.contains(e.relatedTarget)) {
                     target.classList.remove('tab-drop-target');
                 }
@@ -5325,11 +5345,11 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             mainEl.addEventListener('drop', async (e) => {
                 if (draggedTabs.length === 0) return;
                 e.preventDefault();
-                const target = e.target.closest(dropSelector);
+                const target = findDropTarget(e);
                 document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
                 if (!target) return;
 
-                const projectId = target.dataset.projectId;
+                const projectId = target.dataset.projectId || (isQuickSaveView() ? GLOBAL_UNASSIGNED_ID : null);
                 if (!projectId) return;
 
                 const tabs = draggedTabs;
