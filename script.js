@@ -5016,20 +5016,17 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             const tabsToSave = Array.from(selectedTabs.values());
 
             showTreeTargetModal('Save Tabs to', async (targetProject) => {
-                let count = 0;
-                for (const tab of tabsToSave) {
-                    const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-                    await db.tiles.add({
-                        id: tileId,
-                        projectId: targetProject.id,
-                        dashboardId: targetProject.dashboardId || null,
-                        name: tab.title || tab.url,
-                        url: tab.url,
-                        order: Date.now(),
-                        favicon: tab.favIconUrl || ''
-                    });
-                    count++;
-                }
+                const newTiles = tabsToSave.map((tab, i) => ({
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
+                    projectId: targetProject.id,
+                    dashboardId: targetProject.dashboardId || null,
+                    name: tab.title || tab.url,
+                    url: tab.url,
+                    order: Date.now() + i,
+                    favicon: tab.favIconUrl || ''
+                }));
+                await db.tiles.bulkAdd(newTiles);
+                const count = newTiles.length;
 
                 // Notify other components
                 try {
@@ -5340,18 +5337,16 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     if (proj) dashboardId = proj.dashboardId || null;
                 } catch { /* ignore */ }
 
-                for (const tab of tabs) {
-                    const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-                    await db.tiles.add({
-                        id: tileId,
-                        projectId: projectId,
-                        dashboardId: dashboardId,
-                        name: tab.title || tab.url,
-                        url: tab.url,
-                        order: Date.now(),
-                        favicon: tab.favIconUrl || ''
-                    });
-                }
+                const newTiles = tabs.map((tab, i) => ({
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
+                    projectId: projectId,
+                    dashboardId: dashboardId,
+                    name: tab.title || tab.url,
+                    url: tab.url,
+                    order: Date.now() + i,
+                    favicon: tab.favIconUrl || ''
+                }));
+                await db.tiles.bulkAdd(newTiles);
 
                 // Notify other components
                 try {
