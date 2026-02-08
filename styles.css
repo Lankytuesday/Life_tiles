@@ -2103,6 +2103,21 @@ body.tabs-panel-open .app-shell {
     opacity: 0.4;
 }
 
+/* Multi-drag ghost badge */
+.tabs-drag-ghost {
+    position: absolute;
+    top: -1000px;
+    left: -1000px;
+    padding: 6px 14px;
+    background: var(--color-brand);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
 /* Project drop target highlight when dragging a tab from the panel */
 .project.tab-drop-target,
 .unassigned-section.tab-drop-target {

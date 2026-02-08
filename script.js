@@ -4938,7 +4938,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         let selectedTabs = new Map(); // tabId -> { id, title, url, favIconUrl }
         let autoRefreshTimer = null;
         let currentTabs = []; // Latest fetched tabs
-        let draggedTab = null; // Tab object being dragged from panel
+        let draggedTabs = []; // Tab objects being dragged from panel
 
         // Toggle panel open/close
         toggleBtn.addEventListener('click', () => {
@@ -5138,16 +5138,31 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 // Drag support
                 item.draggable = true;
                 item.addEventListener('dragstart', (e) => {
-                    draggedTab = tab;
+                    // If this tab is selected, drag all selected tabs; otherwise just this one
+                    if (selectedTabs.has(tab.id) && selectedTabs.size > 1) {
+                        draggedTabs = Array.from(selectedTabs.values());
+                    } else {
+                        draggedTabs = [tab];
+                    }
                     item.classList.add('dragging');
                     document.body.classList.add('dragging', 'dragging-panel-tab');
                     e.dataTransfer.effectAllowed = 'copy';
-                    e.dataTransfer.setData('text/plain', tab.url);
+                    e.dataTransfer.setData('text/plain', draggedTabs.map(t => t.url).join('\n'));
+
+                    // Custom drag image showing count when multi-dragging
+                    if (draggedTabs.length > 1) {
+                        const ghost = document.createElement('div');
+                        ghost.className = 'tabs-drag-ghost';
+                        ghost.textContent = `${draggedTabs.length} tabs`;
+                        document.body.appendChild(ghost);
+                        e.dataTransfer.setDragImage(ghost, 40, 16);
+                        requestAnimationFrame(() => ghost.remove());
+                    }
                 });
                 item.addEventListener('dragend', () => {
                     item.classList.remove('dragging');
                     document.body.classList.remove('dragging', 'dragging-panel-tab');
-                    draggedTab = null;
+                    draggedTabs = [];
                     // Clean up any lingering drop highlights
                     document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
                 });
@@ -5192,7 +5207,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         const mainEl = document.getElementById('main');
         if (mainEl) {
             mainEl.addEventListener('dragover', (e) => {
-                if (!draggedTab) return;
+                if (draggedTabs.length === 0) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
                 const target = e.target.closest('.project, .unassigned-section');
@@ -5204,7 +5219,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             });
 
             mainEl.addEventListener('dragleave', (e) => {
-                if (!draggedTab) return;
+                if (draggedTabs.length === 0) return;
                 const target = e.target.closest('.project, .unassigned-section');
                 if (target && !target.contains(e.relatedTarget)) {
                     target.classList.remove('tab-drop-target');
@@ -5212,7 +5227,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             });
 
             mainEl.addEventListener('drop', async (e) => {
-                if (!draggedTab) return;
+                if (draggedTabs.length === 0) return;
                 e.preventDefault();
                 const target = e.target.closest('.project, .unassigned-section');
                 document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
@@ -5221,8 +5236,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 const projectId = target.dataset.projectId;
                 if (!projectId) return;
 
-                const tab = draggedTab;
-                draggedTab = null;
+                const tabs = draggedTabs;
+                draggedTabs = [];
 
                 // Look up project to get dashboardId
                 let dashboardId = null;
@@ -5231,16 +5246,18 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     if (proj) dashboardId = proj.dashboardId || null;
                 } catch { /* ignore */ }
 
-                const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-                await db.tiles.add({
-                    id: tileId,
-                    projectId: projectId,
-                    dashboardId: dashboardId,
-                    name: tab.title || tab.url,
-                    url: tab.url,
-                    order: Date.now(),
-                    favicon: tab.favIconUrl || ''
-                });
+                for (const tab of tabs) {
+                    const tileId = Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+                    await db.tiles.add({
+                        id: tileId,
+                        projectId: projectId,
+                        dashboardId: dashboardId,
+                        name: tab.title || tab.url,
+                        url: tab.url,
+                        order: Date.now(),
+                        favicon: tab.favIconUrl || ''
+                    });
+                }
 
                 // Notify other components
                 try {
@@ -5253,6 +5270,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 if (window.__lifetilesRefresh) {
                     await window.__lifetilesRefresh();
                 }
+                selectedTabs.clear();
+                updateSaveBar();
                 refreshTabList();
 
                 // Get project name for status message
@@ -5261,7 +5280,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     const proj = await db.projects.get(projectId);
                     if (proj) projectName = proj.name || (proj.isUnassigned ? 'Unsorted' : 'project');
                 } catch { /* ignore */ }
-                showStatus(`Saved tab to ${escapeHtml(projectName)}`);
+                const count = tabs.length;
+                showStatus(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(projectName)}`);
             });
         }
     })();
