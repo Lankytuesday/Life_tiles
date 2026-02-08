@@ -2165,7 +2165,8 @@ body.tabs-panel-open .app-shell {
 
 /* Project drop target highlight when dragging a tab from the panel */
 .project.tab-drop-target,
-.unassigned-section.tab-drop-target {
+.unassigned-section.tab-drop-target,
+.global-unassigned-view.tab-drop-target {
     outline: 2px dashed var(--color-brand);
     outline-offset: -2px;
     background: rgba(26, 115, 232, 0.06);

@@ -1641,6 +1641,7 @@ window.__lifetilesRefresh = async () => {
         // Create container for global unassigned view
         const container = document.createElement('div');
         container.className = 'global-unassigned-view';
+        container.dataset.projectId = GLOBAL_UNASSIGNED_ID;
 
         if (tiles.length === 0) {
             // Empty state
@@ -5297,11 +5298,13 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         // --- Drag-to-project drop targets (event delegation on #main) ---
         const mainEl = document.getElementById('main');
         if (mainEl) {
+            const dropSelector = '.project, .unassigned-section, .global-unassigned-view';
+
             mainEl.addEventListener('dragover', (e) => {
                 if (draggedTabs.length === 0) return;
                 e.preventDefault();
                 e.dataTransfer.dropEffect = 'copy';
-                const target = e.target.closest('.project, .unassigned-section');
+                const target = e.target.closest(dropSelector);
                 // Remove highlight from all, then add to current target
                 document.querySelectorAll('.tab-drop-target').forEach(el => {
                     if (el !== target) el.classList.remove('tab-drop-target');
@@ -5311,7 +5314,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
 
             mainEl.addEventListener('dragleave', (e) => {
                 if (draggedTabs.length === 0) return;
-                const target = e.target.closest('.project, .unassigned-section');
+                const target = e.target.closest(dropSelector);
                 if (target && !target.contains(e.relatedTarget)) {
                     target.classList.remove('tab-drop-target');
                 }
@@ -5320,7 +5323,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             mainEl.addEventListener('drop', async (e) => {
                 if (draggedTabs.length === 0) return;
                 e.preventDefault();
-                const target = e.target.closest('.project, .unassigned-section');
+                const target = e.target.closest(dropSelector);
                 document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
                 if (!target) return;
 
