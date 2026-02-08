@@ -1917,6 +1917,7 @@ window.__lifetilesRefresh = async () => {
     }
     // Expose for use in bulk mode IIFE
     window.__updateQuickSaveCount = updateQuickSaveCount;
+    window.__updateUnassignedEmptyState = updateUnassignedEmptyState;
 
     async function loadProjects(projects = []) {
         if (projects && projects.length > 0) {
@@ -3392,6 +3393,7 @@ window.__lifetilesRefresh = async () => {
                 tile.remove();
                 // Update Quick Save count in case this was a Quick Save tile
                 await updateQuickSaveCount();
+                updateUnassignedEmptyState();
 
                 showUndoToast('Tile deleted', async () => {
                     // Restore tile to Dexie
@@ -3399,6 +3401,7 @@ window.__lifetilesRefresh = async () => {
                     // Reload to restore DOM
                     await loadDashboards();
                     await updateQuickSaveCount();
+                    updateUnassignedEmptyState();
                 });
             }
         };
@@ -4401,6 +4404,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
 
         // Update Quick Save count in case any were Quick Save tiles
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
+        if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
 
         // Re-render Quick Save view so empty state / drop target stays valid
         if (localStorage.getItem('isViewingGlobalUnassigned') === 'true' && window.__lifetilesRefresh) {
