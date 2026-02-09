@@ -1099,10 +1099,11 @@ window.__lifetilesRefresh = async () => {
             switchToGlobalUnassigned();
         });
 
-        // Make it a drop target for tiles only (not projects)
+        // Make it a drop target for tiles and browser tabs (not projects)
         globalUnassignedLi.addEventListener('dragover', (e) => {
-            // Only allow tile drops, not project drops
-            if (!draggedTileId || draggedProjectId) return;
+            // Allow tile drops and browser tab drops, not project drops
+            const hasTabs = window.__getDraggedTabs && window.__getDraggedTabs().length > 0;
+            if ((!draggedTileId && !hasTabs) || draggedProjectId) return;
             e.preventDefault();
             globalUnassignedLi.classList.add('drag-hover');
         });
@@ -1117,6 +1118,30 @@ window.__lifetilesRefresh = async () => {
             e.preventDefault();
             e.stopPropagation();
             globalUnassignedLi.classList.remove('drag-hover');
+
+            // Handle browser tab drops
+            const tabs = window.__getDraggedTabs && window.__getDraggedTabs();
+            if (tabs && tabs.length > 0) {
+                const tabsCopy = [...tabs];
+                window.__clearDraggedTabs();
+
+                (async () => {
+                    const newTiles = tabsCopy.map((tab, i) => ({
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
+                        projectId: GLOBAL_UNASSIGNED_ID,
+                        dashboardId: null,
+                        name: tab.title || tab.url,
+                        url: tab.url,
+                        order: Date.now() + i,
+                        favicon: tab.favIconUrl || ''
+                    }));
+                    await db.tiles.bulkAdd(newTiles);
+                    await updateQuickSaveCount();
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    showStatus(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to Quick Save`);
+                })();
+                return;
+            }
 
             if (draggedTileId) {
                 // Set flag SYNCHRONOUSLY so Sortable's onEnd knows to skip processing
@@ -1205,8 +1230,10 @@ window.__lifetilesRefresh = async () => {
                 deleteDashboardFromSidebar(dashboard.id);
             });
 
-            // Make dashboard a drop target for tiles (goes to dashboard's unassigned)
+            // Make dashboard a drop target for tiles and browser tabs (goes to dashboard's unassigned)
             li.addEventListener('dragover', (e) => {
+                const hasTabs = window.__getDraggedTabs && window.__getDraggedTabs().length > 0;
+                if (!draggedTileId && !hasTabs) return;
                 e.preventDefault();
                 li.classList.add('drag-hover');
             });
@@ -1221,6 +1248,47 @@ window.__lifetilesRefresh = async () => {
                 e.preventDefault();
                 e.stopPropagation();
                 li.classList.remove('drag-hover');
+
+                // Handle browser tab drops
+                const tabs = window.__getDraggedTabs && window.__getDraggedTabs();
+                if (tabs && tabs.length > 0) {
+                    const tabsCopy = [...tabs];
+                    window.__clearDraggedTabs();
+                    const unassignedProjectId = `${dashboard.id}-unassigned`;
+
+                    (async () => {
+                        // Ensure the unassigned project exists
+                        const existing = await db.projects.get(unassignedProjectId);
+                        if (!existing) {
+                            await db.projects.add({
+                                id: unassignedProjectId,
+                                dashboardId: dashboard.id,
+                                name: 'Unsorted',
+                                order: -1,
+                                isUnassigned: true
+                            });
+                        }
+
+                        const newTiles = tabsCopy.map((tab, i) => ({
+                            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
+                            projectId: unassignedProjectId,
+                            dashboardId: dashboard.id,
+                            name: tab.title || tab.url,
+                            url: tab.url,
+                            order: Date.now() + i,
+                            favicon: tab.favIconUrl || ''
+                        }));
+                        await db.tiles.bulkAdd(newTiles);
+
+                        if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
+                            await loadProjectsForDashboard(dashboard.id);
+                        }
+                        updateUnassignedEmptyState();
+                        await updateQuickSaveCount();
+                        showStatus(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to ${escapeHtml(dashboard.name)} (Unsorted)`);
+                    })();
+                    return;
+                }
 
                 if (draggedTileId) {
                     // Get the dashboard's unassigned project ID
@@ -4953,6 +5021,9 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         let autoRefreshTimer = null;
         let currentTabs = []; // Latest fetched tabs
         let draggedTabs = []; // Tab objects being dragged from panel
+        // Expose for sidebar drop handlers (outside this IIFE)
+        window.__getDraggedTabs = () => draggedTabs;
+        window.__clearDraggedTabs = () => { draggedTabs = []; };
         const collapsedWindows = new Set(); // windowIds the user has collapsed
         const expandedWindows = new Set(); // windowIds the user has expanded
         const knownWindows = new Set(); // windowIds we've seen before
