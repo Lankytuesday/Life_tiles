@@ -1739,6 +1739,7 @@ window.__lifetilesRefresh = async () => {
         section.id = 'unassigned-section';
         section.className = 'unassigned-section';
         section.dataset.projectId = unassignedProject?.id || '';
+        section.dataset.dashboardId = unassignedProject?.dashboardId || '';
 
         if (tiles.length === 0) {
             section.classList.add('empty');
@@ -2021,6 +2022,7 @@ window.__lifetilesRefresh = async () => {
             project.classList.add("collapsed");
         }
         project.dataset.projectId = projectData.id;
+        project.dataset.dashboardId = projectData.dashboardId || '';
 
         const projectHeader = document.createElement("div");
         projectHeader.className = "project-header";
@@ -5359,12 +5361,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 const tabs = draggedTabs;
                 draggedTabs = [];
 
-                // Look up project to get dashboardId
-                let dashboardId = null;
-                try {
-                    const proj = await db.projects.get(projectId);
-                    if (proj) dashboardId = proj.dashboardId || null;
-                } catch { /* ignore */ }
+                // Read dashboardId directly from DOM to avoid race with space switches
+                const dashboardId = target.dataset.dashboardId || null;
 
                 const newTiles = tabs.map((tab, i) => ({
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
