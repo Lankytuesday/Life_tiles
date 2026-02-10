@@ -1069,9 +1069,10 @@ window.__lifetilesRefresh = async () => {
         li.innerHTML = `
             <span class="dot"></span>
             <span class="label">${escapeHtml(dashboard.name)}</span>
-            <div class="actions">
-                <button class="sidebar-item-btn edit-btn" title="Edit" aria-label="Edit space"></button>
-                <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete space"></button>
+            <button class="sidebar-menu-trigger" title="Menu" aria-label="Space menu"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></button>
+            <div class="sidebar-menu">
+                <button class="sidebar-menu-edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Edit</button>
+                <button class="sidebar-menu-delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete</button>
             </div>
         `;
         return li;
@@ -1318,7 +1319,7 @@ window.__lifetilesRefresh = async () => {
 
             // Click to select dashboard
             li.addEventListener('click', (e) => {
-                if (e.target.closest('.actions')) return; // Don't select if clicking action buttons
+                if (e.target.closest('.sidebar-menu-trigger, .sidebar-menu')) return; // Don't select if clicking menu
                 switchDashboard(dashboard.id);
             });
 
@@ -1331,17 +1332,41 @@ window.__lifetilesRefresh = async () => {
                 }
             });
 
-            // Edit button — opens space edit modal
-            const editBtn = li.querySelector('.edit-btn');
-            editBtn.addEventListener('click', (e) => {
+            // Menu trigger — toggle dropdown
+            const menuTrigger = li.querySelector('.sidebar-menu-trigger');
+            menuTrigger.addEventListener('click', (e) => {
                 e.stopPropagation();
+                const wasActive = menuTrigger.classList.contains('active');
+                closeAllMenus();
+                if (!wasActive) {
+                    menuTrigger.classList.add('active');
+                    // Check if menu would go off-screen and flip if needed
+                    requestAnimationFrame(() => {
+                        const menu = menuTrigger.nextElementSibling;
+                        if (menu) {
+                            const rect = menu.getBoundingClientRect();
+                            const viewportHeight = window.innerHeight;
+                            if (rect.bottom > viewportHeight) {
+                                menu.classList.add('flip-up');
+                            } else {
+                                menu.classList.remove('flip-up');
+                            }
+                        }
+                    });
+                }
+            });
+
+            // Edit menu item — opens space edit modal
+            li.querySelector('.sidebar-menu-edit').addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeAllMenus();
                 openSpaceEditModal(dashboard);
             });
 
-            // Delete button
-            const deleteBtn = li.querySelector('.delete-btn');
-            deleteBtn.addEventListener('click', (e) => {
+            // Delete menu item
+            li.querySelector('.sidebar-menu-delete').addEventListener('click', (e) => {
                 e.stopPropagation();
+                closeAllMenus();
                 deleteDashboardFromSidebar(dashboard.id);
             });
 
@@ -1459,7 +1484,8 @@ window.__lifetilesRefresh = async () => {
     // Edit dashboard name inline
     async function editDashboardInline(dashboard, listItem) {
         const labelEl = listItem.querySelector('.label');
-        const actionsEl = listItem.querySelector('.actions');
+        const menuTrigger = listItem.querySelector('.sidebar-menu-trigger');
+        const menuDropdown = listItem.querySelector('.sidebar-menu');
 
         // Create input
         const input = document.createElement('input');
@@ -1469,8 +1495,9 @@ window.__lifetilesRefresh = async () => {
 
         // Replace label with input
         labelEl.style.display = 'none';
-        actionsEl.style.display = 'none';
-        listItem.insertBefore(input, actionsEl);
+        menuTrigger.style.display = 'none';
+        menuDropdown.style.display = 'none';
+        listItem.insertBefore(input, menuTrigger);
         input.focus();
         input.select();
 
@@ -1505,7 +1532,8 @@ window.__lifetilesRefresh = async () => {
 
             input.remove();
             labelEl.style.display = '';
-            actionsEl.style.display = '';
+            menuTrigger.style.display = '';
+            menuDropdown.style.display = '';
         };
 
         input.addEventListener('keydown', (e) => {
@@ -2924,9 +2952,9 @@ window.__lifetilesRefresh = async () => {
     }
       
     function closeAllMenus() {
-        const allMenuTriggers = document.querySelectorAll('.project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
+        const allMenuTriggers = document.querySelectorAll('.project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger, .sidebar-menu-trigger');
         allMenuTriggers.forEach(trigger => trigger.classList.remove('active'));
-        const allMenus = document.querySelectorAll('.project-menu, .tile-menu, .dashboard-actions-menu');
+        const allMenus = document.querySelectorAll('.project-menu, .tile-menu, .dashboard-actions-menu, .sidebar-menu');
         allMenus.forEach(menu => menu.classList.remove('active'));
     }
 
@@ -2935,7 +2963,7 @@ window.__lifetilesRefresh = async () => {
         if (document.__ltGlobalMenuCloser) return; // idempotent
 
         const isMenuOrTrigger = (el) =>
-            el.closest('.project-menu, .tile-menu, .dashboard-actions-menu, .project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger');
+            el.closest('.project-menu, .tile-menu, .dashboard-actions-menu, .sidebar-menu, .project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger, .sidebar-menu-trigger');
 
         const isNotesArea = (el) =>
             el.closest('.project-notes-section, .project-notes-toggle');
