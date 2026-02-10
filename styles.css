@@ -358,7 +358,7 @@
 
 .sidebar-item[data-space-color][aria-selected="true"] {
     background: var(--space-color-selected);
-    border-color: var(--space-color);
+    border-color: rgba(26, 115, 232, 0.4);
     color: var(--color-brand);
     font-weight: 500;
 }
