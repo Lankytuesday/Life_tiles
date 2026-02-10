@@ -1534,6 +1534,45 @@ html, body {
   overflow: hidden;
 }
 
+/* Thin overlay scrollbars for sidebar and main content */
+.sidebar-list,
+#main {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.sidebar-list:hover,
+#main:hover {
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Webkit (Chrome/Edge) thin overlay scrollbars */
+.sidebar-list::-webkit-scrollbar,
+#main::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar-list::-webkit-scrollbar-track,
+#main::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-list::-webkit-scrollbar-thumb,
+#main::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+}
+
+.sidebar-list:hover::-webkit-scrollbar-thumb,
+#main:hover::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-list::-webkit-scrollbar-thumb:hover,
+#main::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.35);
+}
+
 /* Safety on modals/menus in case they sit at edges */
 .modal, .project-menu, .tile-menu, .dashboard-actions-menu {
   overscroll-behavior: contain;
