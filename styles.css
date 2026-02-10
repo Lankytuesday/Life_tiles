@@ -331,14 +331,39 @@
     justify-content: center;
 }
 
-.sidebar-item-btn::before {
+.sidebar-item-btn.delete-btn::before {
     content: '×';
+}
+
+.sidebar-item-btn.edit-btn {
+    font-size: 14px;
+}
+
+.sidebar-item-btn.edit-btn::before {
+    content: '✎';
 }
 
 .sidebar-item-btn:hover {
     background: rgba(0, 0, 0, 0.1);
     color: var(--color-text);
 }
+
+/* Custom space color — tints the whole sidebar item */
+.sidebar-item[data-space-color] {
+    background: var(--space-color-bg);
+}
+
+.sidebar-item[data-space-color]:hover {
+    background: var(--space-color-hover);
+}
+
+.sidebar-item[data-space-color][aria-selected="true"] {
+    background: var(--space-color-selected);
+    border-color: var(--space-color);
+    color: var(--color-brand);
+    font-weight: 500;
+}
+
 
 /* Drag-to-dashboard visual feedback */
 .sidebar-item.drag-hover {
@@ -2191,4 +2216,75 @@ body.tabs-panel-open .app-shell {
     body.tabs-panel-open .app-shell {
         grid-template-columns: 1fr;
     }
+}
+
+/* ===== Space Edit Modal ===== */
+
+.space-edit-modal-content {
+    width: 280px;
+}
+
+.color-picker-section {
+    margin-bottom: 12px;
+    text-align: left;
+}
+
+.color-picker-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    margin-bottom: 8px;
+}
+
+.color-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+}
+
+.color-swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+    transition: border-color var(--transition), transform var(--transition);
+    box-sizing: border-box;
+}
+
+.color-swatch:hover {
+    transform: scale(1.15);
+    background-color: inherit;
+    color: inherit;
+}
+
+.color-swatch.selected {
+    border-color: var(--color-text);
+    box-shadow: 0 0 0 2px white, 0 0 0 4px var(--color-text);
+}
+
+.color-swatch-none {
+    background: white !important;
+    border: 2px dashed #ccc;
+    position: relative;
+}
+
+.color-swatch-none::after {
+    content: '∅';
+    font-size: 14px;
+    color: #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+}
+
+.color-swatch-none.selected {
+    border-style: solid;
+    border-color: var(--color-text);
 }

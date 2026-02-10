@@ -197,6 +197,32 @@
                 </div>
             </div>
 
+            <!-- Space Edit Modal (name + color picker) -->
+            <div id="space-edit-modal" class="modal">
+                <div class="modal-content space-edit-modal-content">
+                    <h2>Edit Space</h2>
+                    <input type="text" id="space-edit-name-input" placeholder="Space name">
+                    <div class="color-picker-section">
+                        <label class="color-picker-label">Color</label>
+                        <div class="color-swatches" id="space-edit-swatches">
+                            <button type="button" class="color-swatch" data-color="#f4a5a5" style="background:#f4a5a5" title="Rose"></button>
+                            <button type="button" class="color-swatch" data-color="#f4c78e" style="background:#f4c78e" title="Peach"></button>
+                            <button type="button" class="color-swatch" data-color="#f9e98e" style="background:#f9e98e" title="Yellow"></button>
+                            <button type="button" class="color-swatch" data-color="#a5d6a7" style="background:#a5d6a7" title="Mint"></button>
+                            <button type="button" class="color-swatch" data-color="#a5d0f4" style="background:#a5d0f4" title="Sky"></button>
+                            <button type="button" class="color-swatch" data-color="#b3a5f4" style="background:#b3a5f4" title="Lavender"></button>
+                            <button type="button" class="color-swatch" data-color="#f4a5d8" style="background:#f4a5d8" title="Pink"></button>
+                            <button type="button" class="color-swatch" data-color="#c4c4c4" style="background:#c4c4c4" title="Gray"></button>
+                            <button type="button" class="color-swatch color-swatch-none" data-color="" title="None"></button>
+                        </div>
+                    </div>
+                    <div class="modal-buttons">
+                        <button id="space-edit-cancel" class="cancel-button">Cancel</button>
+                        <button id="space-edit-save" class="done-button" disabled>Save</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Welcome Modal (First Run) -->
             <div id="welcome-modal" class="modal">
                 <div class="modal-content" style="max-width: 320px;">

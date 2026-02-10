@@ -1058,15 +1058,123 @@ window.__lifetilesRefresh = async () => {
         li.className = 'sidebar-item';
         li.setAttribute('role', 'option');
         li.dataset.dashboardId = dashboard.id;
+        if (dashboard.color) {
+            li.dataset.spaceColor = dashboard.color;
+            // Derive tinted backgrounds from the base color at different opacities
+            li.style.setProperty('--space-color', dashboard.color);
+            li.style.setProperty('--space-color-bg', dashboard.color + '20');       // ~12% opacity
+            li.style.setProperty('--space-color-hover', dashboard.color + '38');    // ~22% opacity
+            li.style.setProperty('--space-color-selected', dashboard.color + '50'); // ~31% opacity
+        }
         li.innerHTML = `
             <span class="dot"></span>
             <span class="label">${escapeHtml(dashboard.name)}</span>
             <div class="actions">
+                <button class="sidebar-item-btn edit-btn" title="Edit" aria-label="Edit space"></button>
                 <button class="sidebar-item-btn delete-btn" title="Delete" aria-label="Delete space"></button>
             </div>
         `;
         return li;
     }
+
+    // Space edit modal logic
+    function openSpaceEditModal(dashboard) {
+        const modal = document.getElementById('space-edit-modal');
+        const nameInput = document.getElementById('space-edit-name-input');
+        const saveBtn = document.getElementById('space-edit-save');
+        const swatches = document.querySelectorAll('#space-edit-swatches .color-swatch');
+
+        nameInput.value = dashboard.name;
+        modal._dashboardId = dashboard.id;
+
+        // Highlight the current color swatch
+        swatches.forEach(sw => {
+            const swColor = sw.dataset.color || null;
+            const dashColor = dashboard.color || null;
+            sw.classList.toggle('selected', swColor === dashColor);
+        });
+
+        // Enable save button based on name
+        saveBtn.disabled = !nameInput.value.trim();
+        saveBtn.classList.toggle('enabled', !!nameInput.value.trim());
+
+        modal.style.display = 'flex';
+        nameInput.focus();
+        nameInput.select();
+    }
+
+    // Wire up space edit modal events (runs once at init)
+    (function initSpaceEditModal() {
+        const modal = document.getElementById('space-edit-modal');
+        const nameInput = document.getElementById('space-edit-name-input');
+        const saveBtn = document.getElementById('space-edit-save');
+        const cancelBtn = document.getElementById('space-edit-cancel');
+        const swatches = document.querySelectorAll('#space-edit-swatches .color-swatch');
+
+        if (!modal) return;
+
+        let selectedColor = null; // tracks swatch selection within the modal
+
+        // Name input enables/disables save
+        nameInput.addEventListener('input', () => {
+            const hasText = nameInput.value.trim().length > 0;
+            saveBtn.disabled = !hasText;
+            saveBtn.classList.toggle('enabled', hasText);
+        });
+
+        // Swatch clicks
+        swatches.forEach(sw => {
+            sw.addEventListener('click', (e) => {
+                e.preventDefault();
+                swatches.forEach(s => s.classList.remove('selected'));
+                sw.classList.add('selected');
+                selectedColor = sw.dataset.color || null;
+            });
+        });
+
+        // Cancel
+        cancelBtn.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        // Click backdrop to close
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.style.display = 'none';
+        });
+
+        // Save
+        saveBtn.addEventListener('click', async () => {
+            const id = modal._dashboardId;
+            const newName = nameInput.value.trim();
+            if (!id || !newName) return;
+
+            // Read selected color from the currently-selected swatch
+            const activeSwatch = modal.querySelector('.color-swatch.selected');
+            const newColor = activeSwatch ? (activeSwatch.dataset.color || null) : null;
+
+            await db.dashboards.update(id, { name: newName, color: newColor });
+
+            modal.style.display = 'none';
+
+            // Re-render sidebar
+            const allDashboards = await db.dashboards.toArray();
+            await renderSidebar(allDashboards, currentDashboardId);
+
+            // Update the dashboard title in the main area if this is the current dashboard
+            if (id === currentDashboardId) {
+                const titleEl = document.getElementById('current-dashboard-title');
+                if (titleEl) titleEl.textContent = newName;
+            }
+        });
+
+        // Enter key submits
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !saveBtn.disabled) {
+                e.preventDefault();
+                saveBtn.click();
+            }
+        });
+    })();
 
     // Render sidebar with all dashboards
     async function renderSidebar(dashboards, currentId) {
@@ -1221,6 +1329,13 @@ window.__lifetilesRefresh = async () => {
                 if (dashboard.id === currentDashboardId) {
                     editDashboardInline(dashboard, li);
                 }
+            });
+
+            // Edit button — opens space edit modal
+            const editBtn = li.querySelector('.edit-btn');
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openSpaceEditModal(dashboard);
             });
 
             // Delete button

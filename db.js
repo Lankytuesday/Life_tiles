@@ -17,8 +17,16 @@ db.version(6).stores({
     favicons: 'hostname'
 });
 
+// Version 7: adds color property to dashboards (no index needed)
+db.version(7).stores({
+    dashboards: 'id, order',
+    projects: 'id, dashboardId, order',
+    tiles: 'id, projectId, dashboardId, order',
+    favicons: 'hostname'
+});
+
 // Data models (for reference):
-// Dashboard: { id, name, order }
+// Dashboard: { id, name, order, color }
 // Project: { id, dashboardId, name, order, collapsed, notes }
 // Tile: { id, projectId, dashboardId, name, url, order }
 // Favicon: { hostname, dataUrl, timestamp }
