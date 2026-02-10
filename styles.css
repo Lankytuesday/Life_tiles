@@ -190,7 +190,7 @@
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
 }
 
 .sidebar-item {
@@ -201,9 +201,11 @@
     border: 1px solid transparent;
     border-radius: var(--radius-lg);
     cursor: pointer;
-    transition: background-color var(--transition);
+    transition: background-color var(--transition), box-shadow var(--transition);
     position: relative;
     color: #555;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     font-size: 14px;
     min-height: 52px;
     box-sizing: border-box;
@@ -217,7 +219,8 @@
     background: #e8f0fe;
     border-color: rgba(26, 115, 232, 0.4);
     color: var(--color-brand);
-    font-weight: 500;
+    text-shadow: 0 0 0.01px currentColor;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .sidebar-item .dot {
@@ -360,7 +363,6 @@
     background: var(--space-color-selected);
     border-color: rgba(26, 115, 232, 0.4);
     color: var(--color-brand);
-    font-weight: 500;
 }
 
 

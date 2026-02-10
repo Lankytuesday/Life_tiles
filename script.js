@@ -1062,7 +1062,7 @@ window.__lifetilesRefresh = async () => {
             li.dataset.spaceColor = dashboard.color;
             // Derive tinted backgrounds from the base color at different opacities
             li.style.setProperty('--space-color', dashboard.color);
-            li.style.setProperty('--space-color-bg', dashboard.color + '30');       // ~19% opacity
+            li.style.setProperty('--space-color-bg', dashboard.color + '40');       // ~25% opacity
             li.style.setProperty('--space-color-hover', dashboard.color + '38');    // ~22% opacity
             li.style.setProperty('--space-color-selected', dashboard.color + '66'); // ~40% opacity
         }
