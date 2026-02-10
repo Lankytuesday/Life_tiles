@@ -210,7 +210,6 @@
 }
 
 .sidebar-item:hover {
-    background: #e8eef6;
     color: var(--color-text);
 }
 
