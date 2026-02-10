@@ -184,7 +184,6 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
-    scrollbar-gutter: stable;
     margin: 0;
     padding: 16px;
     list-style: none;
