@@ -216,7 +216,8 @@
 
 .sidebar-item[aria-selected="true"] {
     background: #e8f0fe;
-    border-color: rgba(26, 115, 232, 0.4);
+    border: 1px solid transparent;
+    border-left: 3px solid var(--color-brand);
     color: var(--color-brand);
     text-shadow: 0 0 0.01px currentColor;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -360,7 +361,8 @@
 
 .sidebar-item[data-space-color][aria-selected="true"] {
     background: var(--space-color-selected);
-    border-color: rgba(26, 115, 232, 0.4);
+    border: 1px solid transparent;
+    border-left: 3px solid var(--color-brand);
     color: var(--color-brand);
 }
 
