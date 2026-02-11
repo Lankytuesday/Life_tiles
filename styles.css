@@ -1114,7 +1114,6 @@ body.quick-save-view .project-controls-right {
     box-sizing: border-box;
 }
 
-.bulk-mode .tile,
 .bulk-mode .project-drag-handle {
     -webkit-user-drag: none;
     user-drag: none;
@@ -2264,7 +2263,8 @@ body.tabs-panel-open .tabs-panel {
 }
 
 /* Multi-drag ghost badge */
-.tabs-drag-ghost {
+.tabs-drag-ghost,
+.tiles-drag-ghost {
     position: absolute;
     top: -1000px;
     left: -1000px;

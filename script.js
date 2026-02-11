@@ -1239,9 +1239,10 @@ window.__lifetilesRefresh = async () => {
 
         // Make it a drop target for tiles and browser tabs (not projects)
         globalUnassignedLi.addEventListener('dragover', (e) => {
-            // Allow tile drops and browser tab drops, not project drops
+            // Allow tile drops, browser tab drops, and bulk tile drops — not project drops
             const hasTabs = window.__getDraggedTabs && window.__getDraggedTabs().length > 0;
-            if ((!draggedTileId && !hasTabs) || draggedProjectId) return;
+            const hasBulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles().length > 0;
+            if ((!draggedTileId && !hasTabs && !hasBulkTiles) || draggedProjectId) return;
             e.preventDefault();
             globalUnassignedLi.classList.add('drag-hover');
         });
@@ -1280,6 +1281,41 @@ window.__lifetilesRefresh = async () => {
                     showUndoToast(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to Quick Save`, async () => {
                         await db.tiles.bulkDelete(tileIds);
                         await updateQuickSaveCount();
+                        if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    });
+                })();
+                return;
+            }
+
+            // Handle bulk tile drops
+            const bulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles();
+            if (bulkTiles && bulkTiles.length > 0) {
+                const tilesCopy = [...bulkTiles];
+                if (window.__clearDraggedBulkTiles) window.__clearDraggedBulkTiles();
+
+                (async () => {
+                    // Fetch original tile records for undo
+                    const originals = await Promise.all(tilesCopy.map(t => db.tiles.get(t.id)));
+                    const validOriginals = originals.filter(Boolean);
+
+                    // Move all tiles to Quick Save
+                    await Promise.all(tilesCopy.map(t =>
+                        db.tiles.update(t.id, { projectId: GLOBAL_UNASSIGNED_ID, dashboardId: null })
+                    ));
+
+                    await updateQuickSaveCount();
+                    updateUnassignedEmptyState();
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    if (window.__exitBulkMode) window.__exitBulkMode();
+
+                    const count = tilesCopy.length;
+                    showUndoToast(`Moved ${count} tile${count > 1 ? 's' : ''} to Quick Save`, async () => {
+                        // Restore each tile to its original project
+                        await Promise.all(validOriginals.map(orig =>
+                            db.tiles.update(orig.id, { projectId: orig.projectId, dashboardId: orig.dashboardId })
+                        ));
+                        await updateQuickSaveCount();
+                        updateUnassignedEmptyState();
                         if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
                     });
                 })();
@@ -1404,10 +1440,11 @@ window.__lifetilesRefresh = async () => {
                 deleteDashboardFromSidebar(dashboard.id);
             });
 
-            // Make dashboard a drop target for tiles and browser tabs (goes to dashboard's unassigned)
+            // Make dashboard a drop target for tiles, browser tabs, and bulk tiles (goes to dashboard's unassigned)
             li.addEventListener('dragover', (e) => {
                 const hasTabs = window.__getDraggedTabs && window.__getDraggedTabs().length > 0;
-                if (!draggedTileId && !hasTabs) return;
+                const hasBulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles().length > 0;
+                if (!draggedTileId && !hasTabs && !hasBulkTiles) return;
                 e.preventDefault();
                 li.classList.add('drag-hover');
             });
@@ -1467,6 +1504,59 @@ window.__lifetilesRefresh = async () => {
                             }
                             updateUnassignedEmptyState();
                             await updateQuickSaveCount();
+                        });
+                    })();
+                    return;
+                }
+
+                // Handle bulk tile drops
+                const bulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles();
+                if (bulkTiles && bulkTiles.length > 0) {
+                    const tilesCopy = [...bulkTiles];
+                    if (window.__clearDraggedBulkTiles) window.__clearDraggedBulkTiles();
+                    const unassignedProjectId = `${dashboard.id}-unassigned`;
+
+                    (async () => {
+                        // Ensure the unassigned project exists
+                        const existing = await db.projects.get(unassignedProjectId);
+                        if (!existing) {
+                            await db.projects.add({
+                                id: unassignedProjectId,
+                                dashboardId: dashboard.id,
+                                name: 'Unsorted',
+                                order: -1,
+                                isUnassigned: true
+                            });
+                        }
+
+                        // Fetch original tile records for undo
+                        const originals = await Promise.all(tilesCopy.map(t => db.tiles.get(t.id)));
+                        const validOriginals = originals.filter(Boolean);
+
+                        // Move all tiles to this dashboard's unsorted
+                        await Promise.all(tilesCopy.map(t =>
+                            db.tiles.update(t.id, { projectId: unassignedProjectId, dashboardId: dashboard.id })
+                        ));
+
+                        if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
+                            await loadProjectsForDashboard(dashboard.id);
+                        }
+                        updateUnassignedEmptyState();
+                        await updateQuickSaveCount();
+                        if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                        if (window.__exitBulkMode) window.__exitBulkMode();
+
+                        const count = tilesCopy.length;
+                        showUndoToast(`Moved ${count} tile${count > 1 ? 's' : ''} to ${escapeHtml(dashboard.name)} (Unsorted)`, async () => {
+                            await Promise.all(validOriginals.map(orig =>
+                                db.tiles.update(orig.id, { projectId: orig.projectId, dashboardId: orig.dashboardId })
+                            ));
+                            if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
+                                await loadProjectsForDashboard(dashboard.id);
+                            }
+                            updateUnassignedEmptyState();
+                            await updateQuickSaveCount();
+                            if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
                         });
                     })();
                     return;
@@ -3812,6 +3902,56 @@ window.__lifetilesRefresh = async () => {
         nameElement.textContent = truncateText(tileData.name, 60);
         tile.setAttribute("title", tileData.name);
 
+        // Bulk drag-and-drop support
+        tile.addEventListener('dragstart', (e) => {
+            if (!document.body.classList.contains('bulk-mode')) return;
+
+            let tilesToDrag;
+            if (tile.classList.contains('bulk-selected')) {
+                // Drag all selected tiles
+                tilesToDrag = [];
+                document.querySelectorAll('.bulk-checkbox[data-type="tile"]:checked').forEach(cb => {
+                    const tileEl = cb.closest('.tile');
+                    if (!tileEl) return;
+                    const parentProject = tileEl.closest('.project') || tileEl.closest('.global-unassigned-view');
+                    tilesToDrag.push({
+                        id: cb.dataset.id,
+                        origProjectId: parentProject ? parentProject.dataset.projectId : null,
+                        origDashboardId: parentProject ? parentProject.dataset.dashboardId : null
+                    });
+                });
+            } else {
+                // Drag just this unselected tile
+                const parentProject = tile.closest('.project') || tile.closest('.global-unassigned-view');
+                tilesToDrag = [{
+                    id: tileData.id,
+                    origProjectId: parentProject ? parentProject.dataset.projectId : null,
+                    origDashboardId: parentProject ? parentProject.dataset.dashboardId : null
+                }];
+            }
+
+            if (window.__setDraggedBulkTiles) window.__setDraggedBulkTiles(tilesToDrag);
+            document.body.classList.add('dragging', 'dragging-bulk-tiles');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', '');
+
+            // Ghost pill for multi-drag
+            if (tilesToDrag.length > 1) {
+                const ghost = document.createElement('div');
+                ghost.className = 'tiles-drag-ghost';
+                ghost.textContent = `${tilesToDrag.length} tiles`;
+                document.body.appendChild(ghost);
+                e.dataTransfer.setDragImage(ghost, 40, 16);
+                requestAnimationFrame(() => ghost.remove());
+            }
+        });
+
+        tile.addEventListener('dragend', () => {
+            document.body.classList.remove('dragging', 'dragging-bulk-tiles');
+            if (window.__clearDraggedBulkTiles) window.__clearDraggedBulkTiles();
+            document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+        });
+
         tile.appendChild(thumbnailElement);
         tile.appendChild(nameElement);
 
@@ -4510,6 +4650,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         document.querySelectorAll('.tiles-grid, .tiles-container, #projects-list').forEach(el => {
             if (el.sortable) el.sortable.option('disabled', true);
         });
+        // Make tiles natively draggable for bulk drag-and-drop
+        document.querySelectorAll('.tile').forEach(el => el.setAttribute('draggable', 'true'));
     }
 
     function exitBulkMode() {
@@ -4525,6 +4667,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             el.classList.remove('bulk-selected');
         });
         updateSelectionCount();
+        // Remove native draggable from tiles
+        document.querySelectorAll('.tile').forEach(el => el.removeAttribute('draggable'));
         // Re-enable all Sortable instances
         document.querySelectorAll('[data-sortable]').forEach(el => {
             if (el.sortable) el.sortable.option('disabled', false);
@@ -4535,6 +4679,12 @@ function showUndoToast(message, undoCallback, duration = 7000) {
     }
     // Expose for use outside bulk mode IIFE
     window.__exitBulkMode = exitBulkMode;
+
+    // Bulk drag state — array of { id, origProjectId, origDashboardId, origOrder }
+    let draggedBulkTiles = [];
+    window.__getDraggedBulkTiles = () => draggedBulkTiles;
+    window.__clearDraggedBulkTiles = () => { draggedBulkTiles = []; };
+    window.__setDraggedBulkTiles = (tiles) => { draggedBulkTiles = tiles; };
 
     function getSelectedItems() {
         const selected = [];
@@ -5664,9 +5814,10 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             }
 
             mainEl.addEventListener('dragover', (e) => {
-                if (draggedTabs.length === 0) return;
+                const hasBulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles().length > 0;
+                if (draggedTabs.length === 0 && !hasBulkTiles) return;
                 e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
+                e.dataTransfer.dropEffect = hasBulkTiles ? 'move' : 'copy';
                 const target = findDropTarget(e);
                 // Remove highlight from all, then add to current target
                 document.querySelectorAll('.tab-drop-target').forEach(el => {
@@ -5676,7 +5827,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             });
 
             mainEl.addEventListener('dragleave', (e) => {
-                if (draggedTabs.length === 0) return;
+                const hasBulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles().length > 0;
+                if (draggedTabs.length === 0 && !hasBulkTiles) return;
                 const target = findDropTarget(e);
                 if (target && !target.contains(e.relatedTarget)) {
                     target.classList.remove('tab-drop-target');
@@ -5684,6 +5836,53 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             });
 
             mainEl.addEventListener('drop', async (e) => {
+                // Handle bulk tile drops
+                const bulkTiles = window.__getDraggedBulkTiles && window.__getDraggedBulkTiles();
+                if (bulkTiles && bulkTiles.length > 0) {
+                    e.preventDefault();
+                    const tilesCopy = [...bulkTiles];
+                    if (window.__clearDraggedBulkTiles) window.__clearDraggedBulkTiles();
+
+                    const target = findDropTarget(e);
+                    document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+                    if (!target) return;
+
+                    const projectId = target.dataset.projectId || (isQuickSaveView() ? GLOBAL_UNASSIGNED_ID : null);
+                    if (!projectId) return;
+                    const dashboardId = target.dataset.dashboardId || null;
+
+                    // Fetch original tile records for undo
+                    const originals = await Promise.all(tilesCopy.map(t => db.tiles.get(t.id)));
+                    const validOriginals = originals.filter(Boolean);
+
+                    // Move all tiles to the target project
+                    await Promise.all(tilesCopy.map(t =>
+                        db.tiles.update(t.id, { projectId: projectId, dashboardId: dashboardId })
+                    ));
+
+                    updateUnassignedEmptyState();
+                    await updateQuickSaveCount();
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    if (window.__exitBulkMode) window.__exitBulkMode();
+
+                    // Get project name for toast
+                    let projectName = 'project';
+                    try {
+                        const proj = await db.projects.get(projectId);
+                        if (proj) projectName = proj.name || (proj.isUnassigned ? 'Unsorted' : 'project');
+                    } catch { /* ignore */ }
+                    const count = tilesCopy.length;
+                    showUndoToast(`Moved ${count} tile${count > 1 ? 's' : ''} to ${escapeHtml(projectName)}`, async () => {
+                        await Promise.all(validOriginals.map(orig =>
+                            db.tiles.update(orig.id, { projectId: orig.projectId, dashboardId: orig.dashboardId })
+                        ));
+                        updateUnassignedEmptyState();
+                        await updateQuickSaveCount();
+                        if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    });
+                    return;
+                }
+
                 if (draggedTabs.length === 0) return;
                 e.preventDefault();
                 const target = findDropTarget(e);
