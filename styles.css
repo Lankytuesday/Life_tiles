@@ -433,8 +433,8 @@ body.dragging {
 }
 
 .dashboard-title {
-    flex: 1;
-    text-align: center;
+    flex: 0 1 auto;
+    margin: 0 auto;
     font-size: 24px;
     font-weight: 500;
     color: #666;
@@ -1096,6 +1096,14 @@ body.quick-save-view .project-controls-right {
 
 .tile-name:hover {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.bulk-mode .tile-name {
+    cursor: default;
+}
+
+.bulk-mode .tile-name:hover {
+    box-shadow: none;
 }
 
 .add-tile-button {

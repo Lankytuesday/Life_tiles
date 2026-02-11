@@ -1247,7 +1247,12 @@ window.__lifetilesRefresh = async () => {
                     await db.tiles.bulkAdd(newTiles);
                     await updateQuickSaveCount();
                     if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
-                    showStatus(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to Quick Save`);
+                    const tileIds = newTiles.map(t => t.id);
+                    showUndoToast(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to Quick Save`, async () => {
+                        await db.tiles.bulkDelete(tileIds);
+                        await updateQuickSaveCount();
+                        if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    });
                 })();
                 return;
             }
@@ -1425,7 +1430,15 @@ window.__lifetilesRefresh = async () => {
                         }
                         updateUnassignedEmptyState();
                         await updateQuickSaveCount();
-                        showStatus(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to ${escapeHtml(dashboard.name)} (Unsorted)`);
+                        const tileIds = newTiles.map(t => t.id);
+                        showUndoToast(`Saved ${tabsCopy.length} tab${tabsCopy.length > 1 ? 's' : ''} to ${escapeHtml(dashboard.name)} (Unsorted)`, async () => {
+                            await db.tiles.bulkDelete(tileIds);
+                            if (dashboard.id === currentDashboardId && !isViewingGlobalUnassigned) {
+                                await loadProjectsForDashboard(dashboard.id);
+                            }
+                            updateUnassignedEmptyState();
+                            await updateQuickSaveCount();
+                        });
                     })();
                     return;
                 }
@@ -3697,10 +3710,11 @@ window.__lifetilesRefresh = async () => {
         nameElement.setAttribute("title", "Double-click to edit");
         tile.setAttribute("title", tileData.name);
 
-        // Double-click to edit tile name
+        // Double-click to edit tile name (disabled in bulk mode)
         nameElement.addEventListener("dblclick", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            if (document.body.classList.contains('bulk-mode')) return;
             editTileNameInline(nameElement, tileData, tile);
         });
 
@@ -5273,7 +5287,12 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 selectedTabs.clear();
                 updateSaveBar();
                 refreshTabList();
-                showStatus(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(targetProject.name)}`);
+                const tileIds = newTiles.map(t => t.id);
+                showUndoToast(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(targetProject.name)}`, async () => {
+                    await db.tiles.bulkDelete(tileIds);
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    refreshTabList();
+                });
             });
         });
 
@@ -5611,7 +5630,12 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     if (proj) projectName = proj.name || (proj.isUnassigned ? 'Unsorted' : 'project');
                 } catch { /* ignore */ }
                 const count = tabs.length;
-                showStatus(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(projectName)}`);
+                const tileIds = newTiles.map(t => t.id);
+                showUndoToast(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(projectName)}`, async () => {
+                    await db.tiles.bulkDelete(tileIds);
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    refreshTabList();
+                });
             });
         }
     })();
