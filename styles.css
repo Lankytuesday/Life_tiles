@@ -830,7 +830,8 @@ body.dragging {
 }
 
 /* Maintain height during drag to prevent layout shift */
-body.dragging-tile .unassigned-section .unassigned-tiles {
+body.dragging-tile .unassigned-section .unassigned-tiles,
+body.dragging-panel-tab .unassigned-section .unassigned-tiles {
     min-height: 60px;
 }
 
@@ -853,7 +854,8 @@ body.dragging-tile .unassigned-section.drag-active {
 }
 
 /* Show drop zone only when a tile is being dragged AND hovering near it */
-body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unassigned-tiles {
+body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unassigned-tiles,
+body.dragging-panel-tab .unassigned-section.empty .unassigned-tiles {
     display: flex;
     min-height: 60px;
     border: 2px dashed var(--color-brand);
@@ -867,6 +869,12 @@ body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unas
 
 body.dragging-tile .unassigned-section.empty.drag-nearby:not(.drag-active) .unassigned-tiles::after {
     content: 'Drop tiles here';
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+body.dragging-panel-tab .unassigned-section.empty .unassigned-tiles::after {
+    content: 'Drop tabs here';
     color: var(--color-text-muted);
     font-size: 13px;
 }
@@ -2276,6 +2284,12 @@ body.tabs-panel-open .app-shell {
     outline: 2px dashed var(--color-brand);
     outline-offset: -2px;
     background: rgba(26, 115, 232, 0.06);
+}
+
+/* Suppress outer outline when empty section already shows inner drop zone */
+.unassigned-section.empty.tab-drop-target {
+    outline: none;
+    background: none;
 }
 
 /* Empty state */
