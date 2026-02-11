@@ -27,6 +27,30 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// --- Notes line utilities ---
+// Each line is plain text, a bullet (• prefix), or a checklist item (- [ ]/[x] prefix).
+// Lines are stored as-is in the notes string, no section markers needed.
+
+function parseNotesLines(notes) {
+    if (!notes) return [{ type: 'text', text: '' }];
+    // Strip legacy section markers from earlier format
+    const cleaned = notes.replace(/<!-- (?:bullets|checklist) -->\n?/g, '');
+    if (!cleaned.trim()) return [{ type: 'text', text: '' }];
+    return cleaned.split('\n').map(line => {
+        const cm = line.match(/^- \[([ x])\] (.*)$/);
+        if (cm) return { type: 'checklist', checked: cm[1] === 'x', text: cm[2] };
+        if (line.startsWith('\u2022 ')) return { type: 'bullet', text: line.substring(2) };
+        return { type: 'text', text: line };
+    });
+}
+
+function serializeNotesLines(lines) {
+    return lines.map(l => {
+        if (l.type === 'checklist') return `- [${l.checked ? 'x' : ' '}] ${l.text}`;
+        if (l.type === 'bullet') return `\u2022 ${l.text}`;
+        return l.text;
+    }).join('\n');
+}
 
 // --- internal URL helpers ---
 // Only allow http/https URLs to prevent javascript:/data: execution
@@ -375,6 +399,212 @@ document.addEventListener("DOMContentLoaded", async function () {
             editDashboardTitleInline();
         });
     }
+
+    // --- Inline notes editor (per-line contentEditable) ---
+    // Each .notes-line-text span is independently editable.
+    // The editor container is NOT contentEditable — stable and predictable.
+
+    function placeCursorIn(el, pos) {
+        if (!el) return;
+        el.focus();
+        const sel = window.getSelection();
+        const range = document.createRange();
+        if (el.childNodes.length) {
+            const textNode = pos === 'end' ? el.lastChild : el.firstChild;
+            const offset = pos === 'end' ? (textNode.length || 0) : 0;
+            range.setStart(textNode, offset);
+        } else {
+            range.selectNodeContents(el);
+        }
+        range.collapse(pos === 'start');
+        sel.removeAllRanges();
+        sel.addRange(range);
+    }
+
+    function createNotesLine(lineData, editor, projectId) {
+        const div = document.createElement('div');
+        div.className = 'notes-line';
+
+        if (lineData.type === 'bullet') {
+            div.classList.add('bullet-line');
+            const marker = document.createElement('span');
+            marker.className = 'bullet-marker';
+            marker.textContent = '\u2022';
+            div.appendChild(marker);
+        } else if (lineData.type === 'checklist') {
+            div.classList.add('checklist-line');
+            if (lineData.checked) div.classList.add('checked');
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'checklist-checkbox';
+            cb.checked = lineData.checked;
+            cb.addEventListener('change', () => {
+                div.classList.toggle('checked', cb.checked);
+                saveEditorNotes(editor, projectId);
+            });
+            div.appendChild(cb);
+        }
+
+        const span = document.createElement('span');
+        span.className = 'notes-line-text';
+        span.contentEditable = 'true';
+        span.textContent = lineData.text;
+
+        // Keyboard handling per line
+        span.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const isEmpty = !span.textContent.trim();
+                const isList = div.classList.contains('checklist-line') || div.classList.contains('bullet-line');
+                if (isEmpty && isList) {
+                    // Empty list item + Enter → revert to plain text
+                    const newLine = createNotesLine({ type: 'text', text: '' }, editor, projectId);
+                    div.replaceWith(newLine);
+                    placeCursorIn(newLine.querySelector('.notes-line-text'), 'start');
+                } else {
+                    // Create new line of same type
+                    const type = div.classList.contains('checklist-line') ? 'checklist'
+                        : div.classList.contains('bullet-line') ? 'bullet' : 'text';
+                    const data = type === 'checklist' ? { type: 'checklist', checked: false, text: '' }
+                        : type === 'bullet' ? { type: 'bullet', text: '' }
+                        : { type: 'text', text: '' };
+                    const newLine = createNotesLine(data, editor, projectId);
+                    div.after(newLine);
+                    placeCursorIn(newLine.querySelector('.notes-line-text'), 'start');
+                }
+                saveEditorNotes(editor, projectId);
+            } else if (e.key === 'Backspace') {
+                const isEmpty = !span.textContent;
+                const sel = window.getSelection();
+                const atStart = !isEmpty && sel.isCollapsed && sel.rangeCount &&
+                    sel.getRangeAt(0).startOffset === 0 &&
+                    (sel.getRangeAt(0).startContainer === span ||
+                     (sel.getRangeAt(0).startContainer.parentElement === span &&
+                      !sel.getRangeAt(0).startContainer.previousSibling));
+
+                if (!isEmpty && !atStart) return; // normal mid-text backspace
+
+                e.preventDefault();
+                const isList = div.classList.contains('checklist-line') || div.classList.contains('bullet-line');
+                if (isList) {
+                    // List item + Backspace at start → revert to plain text
+                    const newLine = createNotesLine({ type: 'text', text: span.textContent }, editor, projectId);
+                    div.replaceWith(newLine);
+                    placeCursorIn(newLine.querySelector('.notes-line-text'), 'start');
+                } else if (atStart) {
+                    // Merge with previous line
+                    const prev = div.previousElementSibling;
+                    if (!prev) return;
+                    const prevText = prev.querySelector('.notes-line-text');
+                    const joinOffset = prevText.textContent.length;
+                    prevText.textContent += span.textContent;
+                    div.remove();
+                    // Place cursor at the join point
+                    prevText.focus();
+                    const range = document.createRange();
+                    const textNode = prevText.firstChild;
+                    if (textNode) {
+                        range.setStart(textNode, joinOffset);
+                        range.collapse(true);
+                        const s = window.getSelection();
+                        s.removeAllRanges();
+                        s.addRange(range);
+                    }
+                } else if (isEmpty) {
+                    const prev = div.previousElementSibling;
+                    if (!prev && !div.nextElementSibling) return; // last line, keep it
+                    const next = div.nextElementSibling;
+                    div.remove();
+                    if (prev) {
+                        placeCursorIn(prev.querySelector('.notes-line-text'), 'end');
+                    } else if (next) {
+                        placeCursorIn(next.querySelector('.notes-line-text'), 'start');
+                    }
+                }
+                saveEditorNotes(editor, projectId);
+            } else if (e.key === 'ArrowUp') {
+                const prev = div.previousElementSibling;
+                if (prev) {
+                    e.preventDefault();
+                    placeCursorIn(prev.querySelector('.notes-line-text'), 'end');
+                }
+            } else if (e.key === 'ArrowDown') {
+                const next = div.nextElementSibling;
+                if (next) {
+                    e.preventDefault();
+                    placeCursorIn(next.querySelector('.notes-line-text'), 'start');
+                }
+            }
+        });
+
+        // Paste: split multi-line pastes into separate line elements
+        span.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pasted = (e.clipboardData || window.clipboardData).getData('text');
+            const pastedLines = pasted.split('\n');
+            if (pastedLines.length <= 1) {
+                document.execCommand('insertText', false, pasted.replace(/\n/g, ''));
+                saveEditorNotes(editor, projectId);
+                return;
+            }
+            // First chunk appends to current line
+            span.textContent = (span.textContent || '') + pastedLines[0];
+            let after = div;
+            for (let i = 1; i < pastedLines.length; i++) {
+                const parsed = parseNotesLines(pastedLines[i]);
+                const newLine = createNotesLine(parsed[0], editor, projectId);
+                after.after(newLine);
+                after = newLine;
+            }
+            placeCursorIn(after.querySelector('.notes-line-text'), 'end');
+            saveEditorNotes(editor, projectId);
+        });
+
+        // Auto-save on blur
+        span.addEventListener('blur', () => {
+            saveEditorNotes(editor, projectId);
+        });
+
+        div.appendChild(span);
+        return div;
+    }
+
+    function convertLineType(lineDiv, newType, editor, projectId) {
+        const textSpan = lineDiv.querySelector('.notes-line-text');
+        const text = textSpan ? textSpan.textContent : '';
+        const checked = lineDiv.querySelector('.checklist-checkbox')?.checked || false;
+        const data = { type: newType, text };
+        if (newType === 'checklist') data.checked = checked;
+        const newLine = createNotesLine(data, editor, projectId);
+        lineDiv.replaceWith(newLine);
+        placeCursorIn(newLine.querySelector('.notes-line-text'), 'end');
+        return newLine;
+    }
+
+    function collectEditorLines(editor) {
+        return Array.from(editor.querySelectorAll('.notes-line')).map(div => {
+            const textSpan = div.querySelector('.notes-line-text');
+            const text = textSpan ? textSpan.textContent : '';
+            if (div.classList.contains('checklist-line'))
+                return { type: 'checklist', checked: div.querySelector('.checklist-checkbox')?.checked || false, text };
+            if (div.classList.contains('bullet-line'))
+                return { type: 'bullet', text };
+            return { type: 'text', text };
+        });
+    }
+
+    async function saveEditorNotes(editor, projectId) {
+        const lines = collectEditorLines(editor);
+        const notes = serializeNotesLines(lines);
+        await db.projects.update(projectId, { notes });
+        const section = editor.closest('.project-notes-section');
+        const project = section?.closest('.project');
+        const toggle = project?.querySelector('.project-notes-toggle');
+        if (toggle) {
+            toggle.classList.toggle('has-notes', lines.some(l => l.text.trim()));
+        }
+    }
+    window.__saveEditorNotes = saveEditorNotes;
 
     // Edit tile name inline using contenteditable
     async function editTileNameInline(nameElement, tileData, tileElement) {
@@ -2255,7 +2485,9 @@ window.__lifetilesRefresh = async () => {
         // Notes toggle button
         const notesToggle = document.createElement("button");
         notesToggle.className = "project-notes-toggle";
-        if (projectData.notes) {
+        const rawNotes = projectData.notes || '';
+        const parsedLines = parseNotesLines(rawNotes);
+        if (parsedLines.some(l => l.text.trim())) {
             notesToggle.classList.add("has-notes");
         }
         notesToggle.title = "Project notes";
@@ -2264,45 +2496,75 @@ window.__lifetilesRefresh = async () => {
         // Notes section (hidden by default)
         const notesSection = document.createElement("div");
         notesSection.className = "project-notes-section";
-        const notesTextarea = document.createElement("textarea");
-        notesTextarea.className = "project-notes-textarea";
-        notesTextarea.placeholder = "Add notes about this project...";
-        notesTextarea.value = projectData.notes || "";
-        notesSection.appendChild(notesTextarea);
+
+        // Toolbar with bullets + checklist toggles
+        const notesToolbar = document.createElement("div");
+        notesToolbar.className = "notes-toolbar";
+
+        const bulletsToggle = document.createElement("button");
+        bulletsToggle.className = "notes-mode-toggle";
+        bulletsToggle.title = "Insert bullet list";
+        bulletsToggle.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
+
+        const checklistToggle = document.createElement("button");
+        checklistToggle.className = "notes-mode-toggle";
+        checklistToggle.title = "Insert checklist";
+        checklistToggle.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>`;
+
+        notesToolbar.appendChild(bulletsToggle);
+        notesToolbar.appendChild(checklistToggle);
+
+        // Inline notes editor (per-line contentEditable)
+        const notesEditor = document.createElement("div");
+        notesEditor.className = "notes-editor";
+        parsedLines.forEach(l => notesEditor.appendChild(createNotesLine(l, notesEditor, projectData.id)));
+
+        // Track last focused line for toggle buttons
+        let lastFocusedLine = notesEditor.firstElementChild;
+        notesEditor.addEventListener('focusin', (e) => {
+            const line = e.target.closest('.notes-line');
+            if (line) lastFocusedLine = line;
+        });
+
+        notesSection.appendChild(notesToolbar);
+        notesSection.appendChild(notesEditor);
+
+        // Toggle: convert focused line to bullet/checklist (or back to text)
+        bulletsToggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const line = lastFocusedLine || notesEditor.lastElementChild;
+            if (!line) return;
+            const isBullet = line.classList.contains('bullet-line');
+            lastFocusedLine = convertLineType(line, isBullet ? 'text' : 'bullet', notesEditor, projectData.id);
+            saveEditorNotes(notesEditor, projectData.id);
+        });
+
+        checklistToggle.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const line = lastFocusedLine || notesEditor.lastElementChild;
+            if (!line) return;
+            const isChecklist = line.classList.contains('checklist-line');
+            lastFocusedLine = convertLineType(line, isChecklist ? 'text' : 'checklist', notesEditor, projectData.id);
+            saveEditorNotes(notesEditor, projectData.id);
+        });
 
         // Toggle notes visibility
         notesToggle.addEventListener("click", async (e) => {
             e.stopPropagation();
 
-            // If project is collapsed, expand it and open notes
             const wasCollapsed = project.classList.contains("collapsed");
             if (wasCollapsed) {
                 project.classList.remove("collapsed");
-                // Save expanded state using Dexie
                 await db.projects.update(projectData.id, { collapsed: false });
-                // Always open notes when expanding from collapsed
                 notesSection.classList.add("expanded");
                 notesToggle.classList.add("active");
-                notesTextarea.focus();
             } else {
-                // Normal toggle behavior
                 notesSection.classList.toggle("expanded");
                 notesToggle.classList.toggle("active");
-                if (notesSection.classList.contains("expanded")) {
-                    notesTextarea.focus();
-                }
             }
-        });
-
-        // Auto-save notes on blur
-        notesTextarea.addEventListener("blur", async () => {
-            const newNotes = notesTextarea.value.trim();
-            await db.projects.update(projectData.id, { notes: newNotes });
-            // Update has-notes indicator
-            if (newNotes) {
-                notesToggle.classList.add("has-notes");
-            } else {
-                notesToggle.classList.remove("has-notes");
+            if (notesSection.classList.contains("expanded")) {
+                const first = notesEditor.querySelector('.notes-line-text');
+                if (first) placeCursorIn(first, 'end');
             }
         });
 
@@ -2966,7 +3228,7 @@ window.__lifetilesRefresh = async () => {
             el.closest('.project-menu, .tile-menu, .dashboard-actions-menu, .sidebar-menu, .project-menu-trigger, .tile-menu-trigger, .dashboard-menu-trigger, .sidebar-menu-trigger');
 
         const isNotesArea = (el) =>
-            el.closest('.project-notes-section, .project-notes-toggle');
+            el.closest('.project-notes-section, .project-notes-toggle, .notes-mode-toggle');
 
         const outsideClose = (e) => {
             if (isMenuOrTrigger(e.target)) return; // clicked inside a menu or on its trigger
@@ -2974,8 +3236,16 @@ window.__lifetilesRefresh = async () => {
 
             // Collapse project notes if clicking outside of notes area
             if (!isNotesArea(e.target)) {
-                document.querySelectorAll('.project-notes-section.expanded').forEach(notes => {
-                    notes.classList.remove('expanded');
+                document.querySelectorAll('.project-notes-section.expanded').forEach(section => {
+                    // Save editor content before collapsing
+                    const projEl = section.closest('.project');
+                    const projId = projEl?.dataset?.projectId;
+                    const editor = section.querySelector('.notes-editor');
+                    if (editor && projId) window.__saveEditorNotes?.(editor, projId);
+                    section.classList.remove('expanded');
+                    // Also remove active state from the toggle button
+                    const toggle = section.closest('.project')?.querySelector('.project-notes-toggle');
+                    if (toggle) toggle.classList.remove('active');
                 });
             }
         };
