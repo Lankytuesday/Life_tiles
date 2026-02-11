@@ -4648,11 +4648,6 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
         if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
 
-        // Re-render Quick Save view so empty state / drop target stays valid
-        if (localStorage.getItem('isViewingGlobalUnassigned') === 'true' && window.__lifetilesRefresh) {
-            await window.__lifetilesRefresh();
-        }
-
         exitBulkMode();
 
         const totalCount = selected.length;
@@ -4672,9 +4667,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 await db.tiles.add(tile);
             }
 
-            // Reload the current dashboard to restore DOM
-            await loadDashboards();
-
+            // Reload dashboard to restore DOM (use window.__ since loadDashboards is out of IIFE scope)
+            if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
             if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
         });
     });
