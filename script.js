@@ -3625,7 +3625,7 @@ window.__lifetilesRefresh = async () => {
                     // Restore tile to Dexie
                     await db.tiles.add(deletedTileData);
                     // Reload to restore DOM
-                    await loadDashboards();
+                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
                     await updateQuickSaveCount();
                     updateUnassignedEmptyState();
                 });
