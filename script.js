@@ -4408,6 +4408,14 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         bulkSelectBtn.classList.add('hidden');
         bulkActionBar.classList.remove('hidden');
         updateSelectionCount();
+        // Disable all Sortable instances during bulk mode
+        document.querySelectorAll('[data-sortable]').forEach(el => {
+            if (el.sortable) el.sortable.option('disabled', true);
+        });
+        // Sortable auto-sets data-sortable, but also check known containers
+        document.querySelectorAll('.tiles-grid, .tiles-container, #projects-list').forEach(el => {
+            if (el.sortable) el.sortable.option('disabled', true);
+        });
     }
 
     function exitBulkMode() {
@@ -4423,6 +4431,13 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             el.classList.remove('bulk-selected');
         });
         updateSelectionCount();
+        // Re-enable all Sortable instances
+        document.querySelectorAll('[data-sortable]').forEach(el => {
+            if (el.sortable) el.sortable.option('disabled', false);
+        });
+        document.querySelectorAll('.tiles-grid, .tiles-container, #projects-list').forEach(el => {
+            if (el.sortable) el.sortable.option('disabled', false);
+        });
     }
     // Expose for use outside bulk mode IIFE
     window.__exitBulkMode = exitBulkMode;
