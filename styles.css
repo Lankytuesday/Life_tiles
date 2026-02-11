@@ -433,9 +433,8 @@ body.dragging {
 }
 
 .dashboard-title {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    flex: 1;
+    text-align: center;
     font-size: 24px;
     font-weight: 500;
     color: #666;
@@ -443,6 +442,10 @@ body.dragging {
     padding: 4px 12px;
     border-radius: 6px;
     transition: box-shadow 0.2s ease;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .dashboard-title:hover {
