@@ -2140,9 +2140,10 @@ window.__lifetilesRefresh = async () => {
             label.textContent = `Quick Save${count > 0 ? ` (${count})` : ''}`;
         }
     }
-    // Expose for use in bulk mode IIFE
+    // Expose for use in bulk mode IIFE and tabs panel IIFE
     window.__updateQuickSaveCount = updateQuickSaveCount;
     window.__updateUnassignedEmptyState = updateUnassignedEmptyState;
+    window.__createTileElement = createTileElement;
 
     async function loadProjects(projects = []) {
         if (projects && projects.length > 0) {
@@ -5606,13 +5607,20 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 // Read dashboardId directly from DOM to avoid race with space switches
                 const dashboardId = target.dataset.dashboardId || null;
 
+                // Get max existing tile order so new tiles append at the end
+                const existingTiles = await db.tiles.where('projectId').equals(projectId).toArray();
+                const maxOrder = existingTiles.reduce((max, t) => {
+                    const o = Number.isFinite(+t.order) ? +t.order : 0;
+                    return o > max ? o : max;
+                }, -1);
+
                 const newTiles = tabs.map((tab, i) => ({
                     id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9) + i,
                     projectId: projectId,
                     dashboardId: dashboardId,
                     name: tab.title || tab.url,
                     url: tab.url,
-                    order: Date.now() + i,
+                    order: maxOrder + 1 + i,
                     favicon: tab.favIconUrl || ''
                 }));
                 await db.tiles.bulkAdd(newTiles);
@@ -5624,9 +5632,17 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     bc.close();
                 } catch (err) { /* ignore */ }
 
-                // Refresh dashboard and panel
-                if (window.__lifetilesRefresh) {
-                    await window.__lifetilesRefresh();
+                // Insert tiles directly into DOM (no full refresh — avoids scroll jump)
+                const tilesContainer = target.querySelector('.tiles-container')
+                    || target.querySelector('.unassigned-tiles')
+                    || target.querySelector('.global-unassigned-tiles');
+                if (tilesContainer && window.__createTileElement) {
+                    for (const tileData of newTiles) {
+                        await window.__createTileElement(tilesContainer, tileData);
+                    }
+                    // Update counts
+                    if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
+                    if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
                 }
                 selectedTabs.clear();
                 updateSaveBar();
@@ -5642,7 +5658,13 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 const tileIds = newTiles.map(t => t.id);
                 showUndoToast(`Saved ${count} tab${count > 1 ? 's' : ''} to ${escapeHtml(projectName)}`, async () => {
                     await db.tiles.bulkDelete(tileIds);
-                    if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                    // Remove tiles from DOM directly
+                    for (const id of tileIds) {
+                        const el = document.querySelector(`.tile[data-tile-id="${id}"]`);
+                        if (el) el.remove();
+                    }
+                    if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
+                    if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
                     refreshTabList();
                 });
             });
