@@ -2701,8 +2701,36 @@ window.__lifetilesRefresh = async () => {
         const endField = document.createElement("button");
         endField.className = "calendar-date-field";
         endField.textContent = "End date";
+        endField.style.display = "none";
         dateFields.appendChild(startField);
         dateFields.appendChild(endField);
+
+        // End date toggle
+        let endDateEnabled = false;
+        const endToggleRow = document.createElement("div");
+        endToggleRow.className = "calendar-end-toggle-row";
+        const endToggleLabel = document.createElement("span");
+        endToggleLabel.textContent = "End date";
+        const endToggleTrack = document.createElement("button");
+        endToggleTrack.className = "calendar-toggle-track";
+        endToggleTrack.innerHTML = `<span class="calendar-toggle-thumb"></span>`;
+        endToggleRow.appendChild(endToggleLabel);
+        endToggleRow.appendChild(endToggleTrack);
+
+        endToggleTrack.addEventListener("click", (e) => {
+            e.stopPropagation();
+            endDateEnabled = !endDateEnabled;
+            endToggleTrack.classList.toggle("on", endDateEnabled);
+            endField.style.display = endDateEnabled ? "" : "none";
+            if (!endDateEnabled) {
+                pickedEnd = null;
+                activeField = 'start';
+            } else {
+                activeField = 'end';
+            }
+            updateDateFields();
+            renderPicker();
+        });
 
         // Calendar grid
         let calViewYear = new Date().getFullYear();
@@ -2776,7 +2804,7 @@ window.__lifetilesRefresh = async () => {
         }
 
         startField.addEventListener("click", (e) => { e.stopPropagation(); activeField = 'start'; updateDateFields(); });
-        endField.addEventListener("click", (e) => { e.stopPropagation(); activeField = 'end'; updateDateFields(); });
+        endField.addEventListener("click", (e) => { e.stopPropagation(); if (endDateEnabled) { activeField = 'end'; updateDateFields(); } });
 
         function renderPicker() {
             const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -2822,7 +2850,11 @@ window.__lifetilesRefresh = async () => {
                 cell.textContent = d;
                 cell.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    if (activeField === 'start') {
+                    if (!endDateEnabled) {
+                        // Single date mode
+                        pickedStart = dateStr;
+                        pickedEnd = null;
+                    } else if (activeField === 'start') {
                         pickedStart = dateStr;
                         if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
                         activeField = 'end';
@@ -2872,6 +2904,7 @@ window.__lifetilesRefresh = async () => {
         dateModalContent.appendChild(labelInput);
         dateModalContent.appendChild(dateFields);
         dateModalContent.appendChild(calGrid);
+        dateModalContent.appendChild(endToggleRow);
         dateModalContent.appendChild(clearBtn);
         dateModalContent.appendChild(modalButtons);
         dateModal.appendChild(dateModalContent);
@@ -2880,6 +2913,9 @@ window.__lifetilesRefresh = async () => {
             pickedStart = null;
             pickedEnd = null;
             activeField = 'start';
+            endDateEnabled = false;
+            endToggleTrack.classList.remove("on");
+            endField.style.display = "none";
             const now = new Date();
             calViewYear = now.getFullYear();
             calViewMonth = now.getMonth();
