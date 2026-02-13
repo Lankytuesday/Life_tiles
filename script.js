@@ -2680,29 +2680,183 @@ window.__lifetilesRefresh = async () => {
         addDateBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add date`;
         calendarSection.appendChild(addDateBtn);
 
-        // Add-date modal
+        // Add-date modal (Notion-style calendar picker)
         const dateModal = document.createElement("div");
         dateModal.className = "calendar-date-modal";
         const dateModalContent = document.createElement("div");
         dateModalContent.className = "calendar-date-modal-content";
-        const modalTitle = document.createElement("h3");
-        modalTitle.textContent = "Add Date";
+
+        // Event name input at top
         const labelInput = document.createElement("input");
         labelInput.type = "text";
         labelInput.className = "calendar-label-input";
-        labelInput.placeholder = "Label (e.g. Sprint deadline)";
-        const startInput = document.createElement("input");
-        startInput.type = "date";
-        startInput.className = "calendar-date-input";
-        const startLabel = document.createElement("label");
-        startLabel.className = "calendar-field-label";
-        startLabel.textContent = "Start";
-        const endInput = document.createElement("input");
-        endInput.type = "date";
-        endInput.className = "calendar-date-input";
-        const endLabel = document.createElement("label");
-        endLabel.className = "calendar-field-label";
-        endLabel.textContent = "End (optional)";
+        labelInput.placeholder = "Event name";
+
+        // Date display fields
+        const dateFields = document.createElement("div");
+        dateFields.className = "calendar-date-fields";
+        const startField = document.createElement("button");
+        startField.className = "calendar-date-field active";
+        startField.textContent = "Start date";
+        const endField = document.createElement("button");
+        endField.className = "calendar-date-field";
+        endField.textContent = "End date";
+        dateFields.appendChild(startField);
+        dateFields.appendChild(endField);
+
+        // Calendar grid
+        let calViewYear = new Date().getFullYear();
+        let calViewMonth = new Date().getMonth();
+        let pickedStart = null; // 'YYYY-MM-DD'
+        let pickedEnd = null;
+        let activeField = 'start'; // which field clicks set
+
+        const calGrid = document.createElement("div");
+        calGrid.className = "calendar-picker-grid";
+
+        // Nav
+        const calNav = document.createElement("div");
+        calNav.className = "calendar-picker-nav";
+        const calMonthLabel = document.createElement("span");
+        calMonthLabel.className = "calendar-picker-month";
+        const todayBtn = document.createElement("button");
+        todayBtn.className = "calendar-picker-today";
+        todayBtn.textContent = "Today";
+        const navRight = document.createElement("span");
+        navRight.className = "calendar-picker-arrows";
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "calendar-picker-arrow";
+        prevBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "calendar-picker-arrow";
+        nextBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+        navRight.appendChild(todayBtn);
+        navRight.appendChild(prevBtn);
+        navRight.appendChild(nextBtn);
+        calNav.appendChild(calMonthLabel);
+        calNav.appendChild(navRight);
+        calGrid.appendChild(calNav);
+
+        prevBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; } renderPicker(); });
+        nextBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; } renderPicker(); });
+        todayBtn.addEventListener("click", (e) => { e.stopPropagation(); const now = new Date(); calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); renderPicker(); });
+
+        // DOW header
+        const dowRow = document.createElement("div");
+        dowRow.className = "calendar-picker-dow";
+        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
+            const cell = document.createElement("div");
+            cell.textContent = d;
+            dowRow.appendChild(cell);
+        });
+        calGrid.appendChild(dowRow);
+
+        // Days container
+        const daysContainer = document.createElement("div");
+        daysContainer.className = "calendar-picker-days";
+        calGrid.appendChild(daysContainer);
+
+        function toDateStr(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        function formatFieldDate(dateStr) {
+            if (!dateStr) return null;
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        function updateDateFields() {
+            startField.textContent = formatFieldDate(pickedStart) || 'Start date';
+            startField.classList.toggle('has-value', !!pickedStart);
+            endField.textContent = formatFieldDate(pickedEnd) || 'End date';
+            endField.classList.toggle('has-value', !!pickedEnd);
+            startField.classList.toggle('active', activeField === 'start');
+            endField.classList.toggle('active', activeField === 'end');
+        }
+
+        startField.addEventListener("click", (e) => { e.stopPropagation(); activeField = 'start'; updateDateFields(); });
+        endField.addEventListener("click", (e) => { e.stopPropagation(); activeField = 'end'; updateDateFields(); });
+
+        function renderPicker() {
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            calMonthLabel.textContent = `${monthNames[calViewMonth]} ${calViewYear}`;
+            daysContainer.innerHTML = '';
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
+            const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
+            const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                const blank = document.createElement("div");
+                blank.className = "calendar-picker-day empty";
+                daysContainer.appendChild(blank);
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const cell = document.createElement("div");
+                cell.className = "calendar-picker-day";
+                const dateStr = toDateStr(calViewYear, calViewMonth, d);
+
+                if (dateStr === todayStr) cell.classList.add("today");
+                if (dateStr === pickedStart) cell.classList.add("selected-start");
+                if (dateStr === pickedEnd) cell.classList.add("selected-end");
+
+                // Range highlighting
+                if (pickedStart && pickedEnd && dateStr > pickedStart && dateStr < pickedEnd) {
+                    cell.classList.add("in-range");
+                }
+                // Row-aware range caps
+                if (pickedStart && pickedEnd) {
+                    const dow = new Date(calViewYear, calViewMonth, d).getDay();
+                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
+                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
+                    // Row break handling
+                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
+                        if (dow === 6) cell.classList.add("row-end");
+                        if (dow === 0) cell.classList.add("row-start");
+                    }
+                }
+
+                cell.textContent = d;
+                cell.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    if (activeField === 'start') {
+                        pickedStart = dateStr;
+                        if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
+                        activeField = 'end';
+                    } else {
+                        if (pickedStart && dateStr < pickedStart) {
+                            pickedEnd = pickedStart;
+                            pickedStart = dateStr;
+                        } else {
+                            pickedEnd = dateStr;
+                        }
+                        activeField = 'start';
+                    }
+                    updateDateFields();
+                    renderPicker();
+                });
+
+                daysContainer.appendChild(cell);
+            }
+        }
+
+        // Clear link
+        const clearBtn = document.createElement("button");
+        clearBtn.className = "calendar-picker-clear";
+        clearBtn.textContent = "Clear";
+        clearBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            pickedStart = null;
+            pickedEnd = null;
+            activeField = 'start';
+            updateDateFields();
+            renderPicker();
+        });
+
+        // Modal buttons
         const modalButtons = document.createElement("div");
         modalButtons.className = "calendar-modal-buttons";
         const saveBtn = document.createElement("button");
@@ -2713,18 +2867,26 @@ window.__lifetilesRefresh = async () => {
         cancelBtn.textContent = "Cancel";
         modalButtons.appendChild(cancelBtn);
         modalButtons.appendChild(saveBtn);
-        dateModalContent.appendChild(modalTitle);
+
+        // Assemble modal
         dateModalContent.appendChild(labelInput);
-        dateModalContent.appendChild(startLabel);
-        dateModalContent.appendChild(startInput);
-        dateModalContent.appendChild(endLabel);
-        dateModalContent.appendChild(endInput);
+        dateModalContent.appendChild(dateFields);
+        dateModalContent.appendChild(calGrid);
+        dateModalContent.appendChild(clearBtn);
         dateModalContent.appendChild(modalButtons);
         dateModal.appendChild(dateModalContent);
 
         function showDateModal() {
+            pickedStart = null;
+            pickedEnd = null;
+            activeField = 'start';
+            const now = new Date();
+            calViewYear = now.getFullYear();
+            calViewMonth = now.getMonth();
             document.body.appendChild(dateModal);
             dateModal.style.display = "flex";
+            updateDateFields();
+            renderPicker();
             labelInput.focus();
         }
 
@@ -2732,8 +2894,8 @@ window.__lifetilesRefresh = async () => {
             dateModal.style.display = "none";
             if (dateModal.parentNode) dateModal.parentNode.removeChild(dateModal);
             labelInput.value = '';
-            startInput.value = '';
-            endInput.value = '';
+            pickedStart = null;
+            pickedEnd = null;
         }
 
         addDateBtn.addEventListener("click", (e) => {
@@ -2746,7 +2908,6 @@ window.__lifetilesRefresh = async () => {
             hideDateModal();
         });
 
-        // Close modal on backdrop click
         dateModal.addEventListener("click", (e) => {
             if (e.target === dateModal) hideDateModal();
         });
@@ -2828,16 +2989,14 @@ window.__lifetilesRefresh = async () => {
         saveBtn.addEventListener("click", async (e) => {
             e.stopPropagation();
             const label = labelInput.value.trim();
-            const start = startInput.value;
-            if (!label || !start) return;
-            const end = endInput.value || null;
+            if (!label || !pickedStart) return;
 
             const dateItem = {
                 id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
                 projectId: projectData.id,
                 label: label,
-                start: start,
-                end: end,
+                start: pickedStart,
+                end: pickedEnd || null,
                 createdAt: Date.now()
             };
 
