@@ -2488,13 +2488,18 @@ window.__lifetilesRefresh = async () => {
             const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
             const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
             const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+            const prevMonthDays = new Date(calViewYear, calViewMonth, 0).getDate();
+            const totalCells = 42; // always 6 rows
 
-            for (let i = 0; i < firstDay; i++) {
-                const blank = document.createElement("div");
-                blank.className = "calendar-picker-day empty";
-                daysContainer.appendChild(blank);
+            // Previous month trailing days
+            for (let i = firstDay - 1; i >= 0; i--) {
+                const cell = document.createElement("div");
+                cell.className = "calendar-picker-day outside";
+                cell.textContent = prevMonthDays - i;
+                daysContainer.appendChild(cell);
             }
 
+            // Current month days
             for (let d = 1; d <= daysInMonth; d++) {
                 const cell = document.createElement("div");
                 cell.className = "calendar-picker-day";
@@ -2513,7 +2518,6 @@ window.__lifetilesRefresh = async () => {
                     const dow = new Date(calViewYear, calViewMonth, d).getDay();
                     if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
                     if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
-                    // Row break handling
                     if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
                         if (dow === 6) cell.classList.add("row-end");
                         if (dow === 0) cell.classList.add("row-start");
@@ -2524,7 +2528,6 @@ window.__lifetilesRefresh = async () => {
                 cell.addEventListener("click", (e) => {
                     e.stopPropagation();
                     if (!endDateEnabled) {
-                        // Single date mode
                         pickedStart = dateStr;
                         pickedEnd = null;
                     } else if (activeField === 'start') {
@@ -2544,6 +2547,16 @@ window.__lifetilesRefresh = async () => {
                     renderPicker();
                 });
 
+                daysContainer.appendChild(cell);
+            }
+
+            // Next month leading days to fill 6 rows
+            const cellsSoFar = firstDay + daysInMonth;
+            const trailing = totalCells - cellsSoFar;
+            for (let d = 1; d <= trailing; d++) {
+                const cell = document.createElement("div");
+                cell.className = "calendar-picker-day outside";
+                cell.textContent = d;
                 daysContainer.appendChild(cell);
             }
         }
@@ -2583,13 +2596,13 @@ window.__lifetilesRefresh = async () => {
         dateModal.appendChild(dateModalContent);
 
         function showDateModal() {
-            pickedStart = null;
+            const now = new Date();
+            pickedStart = toDateStr(now.getFullYear(), now.getMonth(), now.getDate());
             pickedEnd = null;
             activeField = 'start';
             endDateEnabled = false;
             endToggleTrack.classList.remove("on");
             endField.style.display = "none";
-            const now = new Date();
             calViewYear = now.getFullYear();
             calViewMonth = now.getMonth();
             document.body.appendChild(dateModal);
@@ -3433,7 +3446,7 @@ window.__lifetilesRefresh = async () => {
             el.closest('.project-notes-section, .project-notes-toggle');
 
         const isCalendarArea = (el) =>
-            el.closest('.project-calendar-section, .project-calendar-toggle');
+            el.closest('.project-calendar-section, .project-calendar-toggle, .calendar-date-modal');
 
         const outsideClose = (e) => {
             if (isMenuOrTrigger(e.target)) return; // clicked inside a menu or on its trigger
