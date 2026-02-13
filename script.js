@@ -2211,6 +2211,16 @@ window.__lifetilesRefresh = async () => {
 
         await db.projects.add(projectData);
         createProjectElement(projectData);
+
+        // Highlight and scroll to the new project
+        const el = document.querySelector(`.project[data-project-id="${projectData.id}"]`);
+        if (el) {
+            const mainEl = document.getElementById('main');
+            const elBottom = el.offsetTop + el.offsetHeight + 20; // 20px breathing room
+            if (mainEl) mainEl.scrollTo({ top: elBottom - mainEl.clientHeight, behavior: 'smooth' });
+            el.classList.add('search-highlight');
+            el.addEventListener('animationend', () => el.classList.remove('search-highlight'), { once: true });
+        }
     }
 
     async function saveTile(projectId, tileData) {
@@ -5639,6 +5649,12 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 if (tilesContainer && window.__createTileElement) {
                     for (const tileData of newTiles) {
                         await window.__createTileElement(tilesContainer, tileData);
+                        // Highlight the newly inserted tile
+                        const el = tilesContainer.querySelector(`.tile[data-tile-id="${tileData.id}"]`);
+                        if (el) {
+                            el.classList.add('search-highlight');
+                            el.addEventListener('animationend', () => el.classList.remove('search-highlight'), { once: true });
+                        }
                     }
                     // Update counts
                     if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
