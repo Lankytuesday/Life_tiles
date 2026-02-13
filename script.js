@@ -2987,7 +2987,10 @@ window.__lifetilesRefresh = async () => {
             sidebarItem.classList.add('search-highlight');
             sidebarItem.addEventListener('animationend', () => {
                 sidebarItem.classList.remove('search-highlight');
-                sidebarItem.setAttribute('aria-selected', 'true');
+                // Only restore selected state if this space is still current
+                if (currentDashboardId === dashboardData.id) {
+                    sidebarItem.setAttribute('aria-selected', 'true');
+                }
             }, { once: true });
         }
     }
