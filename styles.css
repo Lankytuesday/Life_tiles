@@ -840,7 +840,7 @@ body.dragging {
 }
 
 .project-calendar-section.expanded {
-    max-height: 500px;
+    max-height: 350px;
     padding: 12px;
     margin-top: 8px;
     margin-bottom: 8px;
@@ -849,216 +849,19 @@ body.dragging {
     overflow-y: auto;
 }
 
-/* Mini calendar grid */
-.calendar-grid {
-    background: white;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    padding: 10px 12px 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-    max-width: 260px;
-    flex-shrink: 0;
-}
-
-.calendar-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 8px;
-    padding: 0 2px;
-}
-
-.calendar-nav-btn {
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: #5f6368;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    transition: background 0.15s;
-}
-
-.calendar-nav-btn:hover {
-    background: #f1f3f4;
-    color: #202124;
-}
-
-.calendar-nav-title {
-    font-weight: 500;
-    font-size: 13px;
-    color: #3c4043;
-    user-select: none;
-    letter-spacing: 0.01em;
-}
-
-.calendar-dow-row {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    text-align: center;
-    margin-bottom: 4px;
-    border-bottom: 1px solid #f0f0f0;
-    padding-bottom: 4px;
-}
-
-.calendar-dow-cell {
-    font-size: 10px;
-    font-weight: 500;
-    color: #70757a;
-    padding: 0;
-    user-select: none;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.calendar-days {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 2px 0;
-}
-
-.calendar-day-cell {
-    aspect-ratio: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    border-radius: 50%;
-    color: #3c4043;
-    user-select: none;
-    cursor: default;
-    transition: background 0.15s;
-    position: relative;
-    z-index: 0;
-}
-
-.calendar-day-cell:not(.empty):not(.has-event):hover {
-    background: #f1f3f4;
-}
-
-.calendar-day-cell.empty {
-    visibility: hidden;
-}
-
-.calendar-day-cell.today {
-    font-weight: 700;
-    color: white;
-    background: var(--color-brand);
-}
-
-.calendar-day-cell.today:hover {
-    background: var(--color-brand);
-}
-
-.calendar-day-cell.has-event {
-    background: #d2e3fc;
-    color: #1a73e8;
-    font-weight: 600;
-}
-
-.calendar-day-cell.has-event:hover {
-    background: #c0d7f7;
-}
-
-.calendar-day-cell.has-event.past-event {
-    background: #e8edf5;
-    color: #a8c0e6;
-}
-
-.calendar-day-cell.today.has-event {
-    background: var(--color-brand);
-    color: white;
-}
-
-/* Range band via ::before pseudo-element */
-.calendar-day-cell.range-start::before,
-.calendar-day-cell.range-mid::before,
-.calendar-day-cell.range-end::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: #e8f0fe;
-    z-index: -1;
-}
-
-.calendar-day-cell.range-start::before {
-    left: 50%;
-    right: 0;
-}
-
-.calendar-day-cell.range-mid::before {
-    left: 0;
-    right: 0;
-}
-
-.calendar-day-cell.range-mid {
-    background: #e8f0fe;
-    border-radius: 0;
-    color: #1a73e8;
-}
-
-.calendar-day-cell.range-mid:hover {
-    background: #dce8fa;
-}
-
-.calendar-day-cell.range-end::before {
-    left: 0;
-    right: 50%;
-}
-
-/* Past range */
-.calendar-day-cell.range-start.past-event::before,
-.calendar-day-cell.range-mid.past-event::before,
-.calendar-day-cell.range-end.past-event::before {
-    background: #f0f2f6;
-}
-
-.calendar-day-cell.range-mid.past-event {
-    background: #f0f2f6;
-    color: #a8c0e6;
-}
-
-/* Today inside a range */
-.calendar-day-cell.today.range-start::before,
-.calendar-day-cell.today.range-mid::before,
-.calendar-day-cell.today.range-end::before {
-    background: #e8f0fe;
-}
-
-.calendar-day-cell.today.range-mid {
-    background: var(--color-brand);
-    color: white;
-    border-radius: 50%;
-}
-
-/* Top row: grid + date list side by side */
-.calendar-top-row {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    margin-bottom: 10px;
-}
-
 /* Date entries list */
 .calendar-date-list {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    flex: 1;
-    min-width: 0;
-    overflow-y: auto;
-    max-height: 220px;
+    margin-bottom: 8px;
 }
 
 .calendar-date-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 5px 8px;
+    padding: 6px 10px;
     background: white;
     border-radius: 6px;
     border: 1px solid #e8e8e8;
@@ -1067,6 +870,17 @@ body.dragging {
 
 .calendar-date-item.past {
     opacity: 0.5;
+}
+
+.calendar-date-icon {
+    display: flex;
+    align-items: center;
+    color: #1a73e8;
+    flex-shrink: 0;
+}
+
+.calendar-date-item.past .calendar-date-icon {
+    color: #999;
 }
 
 .calendar-date-label {
@@ -1101,12 +915,37 @@ body.dragging {
     background: rgba(231, 76, 60, 0.1);
 }
 
-/* Add form */
+/* Add date button */
+.calendar-add-date-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px dashed #ccc;
+    background: transparent;
+    color: #666;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.calendar-add-date-btn:hover {
+    border-color: var(--color-brand);
+    color: var(--color-brand);
+}
+
+/* Add form (hidden until + clicked) */
 .calendar-add-form {
-    display: flex;
+    display: none;
     gap: 6px;
     align-items: center;
     flex-wrap: wrap;
+}
+
+.calendar-add-form.visible {
+    display: flex;
 }
 
 .calendar-label-input,
@@ -1137,7 +976,7 @@ body.dragging {
     box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
-.calendar-add-btn {
+.calendar-save-btn {
     height: 30px;
     padding: 0 14px;
     background: var(--color-brand);
@@ -1150,8 +989,24 @@ body.dragging {
     white-space: nowrap;
 }
 
-.calendar-add-btn:hover {
+.calendar-save-btn:hover {
     opacity: 0.9;
+}
+
+.calendar-cancel-btn {
+    height: 30px;
+    padding: 0 10px;
+    background: transparent;
+    color: #666;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+}
+
+.calendar-cancel-btn:hover {
+    background: #f1f3f4;
 }
 
 /* Project collapse caret */
