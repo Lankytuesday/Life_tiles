@@ -2657,6 +2657,304 @@ window.__lifetilesRefresh = async () => {
             }
         });
 
+        // Calendar toggle button
+        const calendarToggle = document.createElement("button");
+        calendarToggle.className = "project-calendar-toggle";
+        calendarToggle.title = "Project calendar";
+        calendarToggle.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+
+        // Calendar section (hidden by default)
+        const calendarSection = document.createElement("div");
+        calendarSection.className = "project-calendar-section";
+
+        // Current viewed month state
+        let calViewYear = new Date().getFullYear();
+        let calViewMonth = new Date().getMonth(); // 0-indexed
+        let calDates = []; // cached projectDates array
+
+        // --- Mini month calendar grid ---
+        const calGrid = document.createElement("div");
+        calGrid.className = "calendar-grid";
+
+        // Navigation header
+        const calNav = document.createElement("div");
+        calNav.className = "calendar-nav";
+        const prevBtn = document.createElement("button");
+        prevBtn.className = "calendar-nav-btn";
+        prevBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+        prevBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; } renderCalendarGrid(); });
+        const nextBtn = document.createElement("button");
+        nextBtn.className = "calendar-nav-btn";
+        nextBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+        nextBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; } renderCalendarGrid(); });
+        const calTitle = document.createElement("span");
+        calTitle.className = "calendar-nav-title";
+        calNav.appendChild(prevBtn);
+        calNav.appendChild(calTitle);
+        calNav.appendChild(nextBtn);
+        calGrid.appendChild(calNav);
+
+        // Day-of-week header row
+        const dowRow = document.createElement("div");
+        dowRow.className = "calendar-dow-row";
+        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
+            const cell = document.createElement("div");
+            cell.className = "calendar-dow-cell";
+            cell.textContent = d;
+            dowRow.appendChild(cell);
+        });
+        calGrid.appendChild(dowRow);
+
+        // Days container
+        const daysContainer = document.createElement("div");
+        daysContainer.className = "calendar-days";
+        calGrid.appendChild(daysContainer);
+
+        // Top row: calendar grid (left) + date list (right)
+        const calTopRow = document.createElement("div");
+        calTopRow.className = "calendar-top-row";
+        calTopRow.appendChild(calGrid);
+
+        calendarSection.appendChild(calTopRow);
+
+        // Helper: YYYY-MM-DD string for a date
+        function toDateStr(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        // Build event map + connection set for range visualization
+        function buildDateSet() {
+            const events = new Map();      // dateStr -> [{label, id}]
+            const connections = new Set();  // "dateA>dateB" for consecutive days in same range
+            for (const item of calDates) {
+                const startParts = item.start.split('-').map(Number);
+                const s = new Date(startParts[0], startParts[1] - 1, startParts[2]);
+                let e = s;
+                if (item.end && item.end !== item.start) {
+                    const endParts = item.end.split('-').map(Number);
+                    e = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+                }
+                let prev = null;
+                for (let cur = new Date(s); cur <= e; cur.setDate(cur.getDate() + 1)) {
+                    const key = toDateStr(cur.getFullYear(), cur.getMonth(), cur.getDate());
+                    if (!events.has(key)) events.set(key, []);
+                    events.get(key).push({ label: item.label, id: item.id });
+                    if (prev) connections.add(prev + '>' + key);
+                    prev = key;
+                }
+            }
+            return { events, connections };
+        }
+
+        function renderCalendarGrid() {
+            const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            calTitle.textContent = `${monthNames[calViewMonth]} ${calViewYear}`;
+            daysContainer.innerHTML = '';
+
+            const { events: dateSet, connections } = buildDateSet();
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
+
+            const firstDay = new Date(calViewYear, calViewMonth, 1).getDay(); // 0=Sun
+            const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+
+            // Leading blanks
+            for (let i = 0; i < firstDay; i++) {
+                const blank = document.createElement("div");
+                blank.className = "calendar-day-cell empty";
+                daysContainer.appendChild(blank);
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const cell = document.createElement("div");
+                cell.className = "calendar-day-cell";
+                const dateStr = toDateStr(calViewYear, calViewMonth, d);
+                const dayOfWeek = new Date(calViewYear, calViewMonth, d).getDay();
+
+                if (dateStr === todayStr) cell.classList.add("today");
+
+                const evts = dateSet.get(dateStr);
+                if (evts) {
+                    cell.classList.add("has-event");
+                    cell.title = evts.map(e => e.label).join(', ');
+                    const cellDate = new Date(calViewYear, calViewMonth, d);
+                    if (cellDate < today) cell.classList.add("past-event");
+
+                    // Range connection: check if previous/next day is in the same range
+                    const prevDate = new Date(calViewYear, calViewMonth, d - 1);
+                    const nextDate = new Date(calViewYear, calViewMonth, d + 1);
+                    const prevStr = toDateStr(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate());
+                    const nextStr = toDateStr(nextDate.getFullYear(), nextDate.getMonth(), nextDate.getDate());
+                    let connectsLeft = connections.has(prevStr + '>' + dateStr) && dayOfWeek !== 0;
+                    let connectsRight = connections.has(dateStr + '>' + nextStr) && dayOfWeek !== 6;
+
+                    if (connectsLeft && connectsRight) cell.classList.add("range-mid");
+                    else if (connectsRight) cell.classList.add("range-start");
+                    else if (connectsLeft) cell.classList.add("range-end");
+                }
+
+                cell.textContent = d;
+                daysContainer.appendChild(cell);
+            }
+        }
+
+        // --- Date entries list (right of calendar) ---
+        const dateList = document.createElement("div");
+        dateList.className = "calendar-date-list";
+        calTopRow.appendChild(dateList);
+
+        // --- Add form ---
+        const addForm = document.createElement("div");
+        addForm.className = "calendar-add-form";
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.className = "calendar-label-input";
+        labelInput.placeholder = "Label";
+        const startInput = document.createElement("input");
+        startInput.type = "date";
+        startInput.className = "calendar-date-input";
+        const endInput = document.createElement("input");
+        endInput.type = "date";
+        endInput.className = "calendar-date-input";
+        const addBtn = document.createElement("button");
+        addBtn.className = "calendar-add-btn";
+        addBtn.textContent = "Add";
+        addForm.appendChild(labelInput);
+        addForm.appendChild(startInput);
+        addForm.appendChild(endInput);
+        addForm.appendChild(addBtn);
+        calendarSection.appendChild(addForm);
+
+        // Format date for display (short format, no year)
+        function formatDateShort(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const date = new Date(y, m - 1, d);
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        // Render a single date entry row
+        function renderDateRow(dateItem) {
+            const row = document.createElement("div");
+            row.className = "calendar-date-item";
+            row.dataset.dateId = dateItem.id;
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const endParts = (dateItem.end || dateItem.start).split('-').map(Number);
+            const endDate = new Date(endParts[0], endParts[1] - 1, endParts[2]);
+            if (endDate < today) row.classList.add("past");
+
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "calendar-date-label";
+            labelSpan.textContent = dateItem.label;
+
+            const rangeSpan = document.createElement("span");
+            rangeSpan.className = "calendar-date-range";
+            if (dateItem.end && dateItem.end !== dateItem.start) {
+                rangeSpan.textContent = `${formatDateShort(dateItem.start)} – ${formatDateShort(dateItem.end)}`;
+            } else {
+                rangeSpan.textContent = formatDateShort(dateItem.start);
+            }
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "calendar-date-delete";
+            deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+            deleteBtn.title = "Delete date";
+            deleteBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                await db.projectDates.delete(dateItem.id);
+                calDates = calDates.filter(d => d.id !== dateItem.id);
+                row.remove();
+                renderCalendarGrid();
+                if (calDates.length === 0) {
+                    calendarToggle.classList.remove("has-dates");
+                    dateList.innerHTML = '';
+                }
+            });
+
+            row.appendChild(labelSpan);
+            row.appendChild(rangeSpan);
+            row.appendChild(deleteBtn);
+            return row;
+        }
+
+        // Load existing dates and render everything
+        async function loadCalendarDates() {
+            calDates = await db.projectDates.where('projectId').equals(projectData.id).toArray();
+            calDates.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+            renderCalendarGrid();
+
+            dateList.innerHTML = '';
+            if (calDates.length > 0) {
+                calDates.forEach(d => dateList.appendChild(renderDateRow(d)));
+                calendarToggle.classList.add("has-dates");
+            } else {
+                calendarToggle.classList.remove("has-dates");
+            }
+        }
+
+        // Check for existing dates at render time (lightweight count)
+        db.projectDates.where('projectId').equals(projectData.id).count().then(count => {
+            if (count > 0) calendarToggle.classList.add("has-dates");
+        });
+
+        // Add date handler
+        addBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const label = labelInput.value.trim();
+            const start = startInput.value;
+            if (!label || !start) return;
+            const end = endInput.value || null;
+
+            const dateItem = {
+                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                projectId: projectData.id,
+                label: label,
+                start: start,
+                end: end,
+                createdAt: Date.now()
+            };
+
+            await db.projectDates.add(dateItem);
+
+            // Clear form
+            labelInput.value = '';
+            startInput.value = '';
+            endInput.value = '';
+
+            // Re-render everything
+            await loadCalendarDates();
+        });
+
+        // Toggle calendar visibility
+        let calendarLoaded = false;
+        calendarToggle.addEventListener("click", async (e) => {
+            e.stopPropagation();
+
+            // If project is collapsed, expand it and open calendar
+            const wasCollapsed = project.classList.contains("collapsed");
+            if (wasCollapsed) {
+                project.classList.remove("collapsed");
+                await db.projects.update(projectData.id, { collapsed: false });
+                if (!calendarLoaded) {
+                    await loadCalendarDates();
+                    calendarLoaded = true;
+                }
+                calendarSection.classList.add("expanded");
+                calendarToggle.classList.add("active");
+            } else {
+                // Normal toggle behavior
+                const isExpanding = !calendarSection.classList.contains("expanded");
+                calendarSection.classList.toggle("expanded");
+                calendarToggle.classList.toggle("active");
+                if (isExpanding && !calendarLoaded) {
+                    await loadCalendarDates();
+                    calendarLoaded = true;
+                }
+            }
+        });
+
         const menuTrigger = document.createElement("button");
         menuTrigger.className = "project-menu-trigger";
         menuTrigger.innerHTML = "⋮";
@@ -2970,10 +3268,12 @@ window.__lifetilesRefresh = async () => {
                 // Capture data for undo
                 const deletedProjectData = { ...projectData };
                 const deletedTiles = await db.tiles.where('projectId').equals(projectData.id).toArray();
+                const deletedDates = await db.projectDates.where('projectId').equals(projectData.id).toArray();
                 const parentContainer = project.parentElement;
                 const nextSibling = project.nextElementSibling;
 
-                // Delete tiles first, then project
+                // Delete dates, tiles, then project
+                await db.projectDates.where('projectId').equals(projectData.id).delete();
                 await db.tiles.where('projectId').equals(projectData.id).delete();
                 await db.projects.delete(projectData.id);
                 project.remove();
@@ -2989,6 +3289,10 @@ window.__lifetilesRefresh = async () => {
                     // Restore all tiles
                     for (const tile of deletedTiles) {
                         await db.tiles.add(tile);
+                    }
+                    // Restore all dates
+                    for (const date of deletedDates) {
+                        await db.projectDates.add(date);
                     }
                     // Reload to restore DOM
                     await loadDashboards();
@@ -3013,6 +3317,7 @@ window.__lifetilesRefresh = async () => {
         projectHeader.appendChild(bulkCheckbox);
         projectHeader.appendChild(projectTitle);
         projectHeader.appendChild(notesToggle);
+        projectHeader.appendChild(calendarToggle);
         projectHeader.appendChild(collapseCaret);
         projectHeader.appendChild(menuTrigger);
         projectHeader.appendChild(menu);
@@ -3142,6 +3447,7 @@ window.__lifetilesRefresh = async () => {
 
         project.appendChild(projectHeader);
         project.appendChild(notesSection);
+        project.appendChild(calendarSection);
         project.appendChild(tilesContainer);
         tilesContainer.appendChild(addTileButton);
 
@@ -3339,6 +3645,9 @@ window.__lifetilesRefresh = async () => {
         const isNotesArea = (el) =>
             el.closest('.project-notes-section, .project-notes-toggle');
 
+        const isCalendarArea = (el) =>
+            el.closest('.project-calendar-section, .project-calendar-toggle');
+
         const outsideClose = (e) => {
             if (isMenuOrTrigger(e.target)) return; // clicked inside a menu or on its trigger
             closeAllMenus();                       // otherwise, close everything
@@ -3347,6 +3656,16 @@ window.__lifetilesRefresh = async () => {
             if (!isNotesArea(e.target)) {
                 document.querySelectorAll('.project-notes-section.expanded').forEach(notes => {
                     notes.classList.remove('expanded');
+                });
+            }
+
+            // Collapse calendar panels if clicking outside of calendar area
+            if (!isCalendarArea(e.target)) {
+                document.querySelectorAll('.project-calendar-section.expanded').forEach(cal => {
+                    cal.classList.remove('expanded');
+                });
+                document.querySelectorAll('.project-calendar-toggle.active').forEach(btn => {
+                    btn.classList.remove('active');
                 });
             }
         };

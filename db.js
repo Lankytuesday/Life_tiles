@@ -25,8 +25,18 @@ db.version(7).stores({
     favicons: 'hostname'
 });
 
+// Version 8: adds projectDates table for calendar feature
+db.version(8).stores({
+    dashboards: 'id, order',
+    projects: 'id, dashboardId, order',
+    tiles: 'id, projectId, dashboardId, order',
+    favicons: 'hostname',
+    projectDates: 'id, projectId'
+});
+
 // Data models (for reference):
 // Dashboard: { id, name, order, color }
 // Project: { id, dashboardId, name, order, collapsed, notes }
 // Tile: { id, projectId, dashboardId, name, url, order }
 // Favicon: { hostname, dataUrl, timestamp }
+// ProjectDate: { id, projectId, label, start, end, createdAt }
