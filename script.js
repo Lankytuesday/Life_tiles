@@ -2973,6 +2973,23 @@ window.__lifetilesRefresh = async () => {
         currentDashboardId = dashboardData.id;
         await loadDashboards();
         closeDashboardModalHandler();
+
+        // Highlight the new space in the sidebar
+        const sidebarItem = document.querySelector(`.sidebar-item[data-dashboard-id="${dashboardData.id}"]`);
+        if (sidebarItem) {
+            const sidebarList = document.getElementById('sidebar-list');
+            if (sidebarList) {
+                const itemBottom = sidebarItem.offsetTop + sidebarItem.offsetHeight + 20;
+                sidebarList.scrollTo({ top: itemBottom - sidebarList.clientHeight, behavior: 'smooth' });
+            }
+            // Temporarily suppress selected styling so it doesn't clash with highlight
+            sidebarItem.setAttribute('aria-selected', 'false');
+            sidebarItem.classList.add('search-highlight');
+            sidebarItem.addEventListener('animationend', () => {
+                sidebarItem.classList.remove('search-highlight');
+                sidebarItem.setAttribute('aria-selected', 'true');
+            }, { once: true });
+        }
     }
       
     function closeAllMenus() {
@@ -3395,6 +3412,10 @@ window.__lifetilesRefresh = async () => {
                   document.querySelector(`.manage-dashboard-item[data-dashboard-id="${dashboardId}"]`);
                 itemEl?.remove();
 
+                // Save sidebar scroll position before rebuild
+                const sidebarList = document.getElementById('sidebar-list');
+                const savedSidebarScroll = sidebarList ? sidebarList.scrollTop : 0;
+
                 // If this was the current dashboard, switch to another one first
                 if (dashboardId === currentDashboardId) {
                     const remainingDashboards = dashboards.filter(d => d.id !== dashboardId);
@@ -3425,11 +3446,16 @@ window.__lifetilesRefresh = async () => {
                         projectsList.innerHTML = '';
 
                         // Only call loadDashboards to update the selector, it will load projects automatically
-                        loadDashboards();
+                        await loadDashboards();
                     }
                 } else {
                     // Just update the selector since we're not on the deleted dashboard
                     await updateDashboardSelector();
+                }
+
+                // Restore sidebar scroll position after rebuild
+                if (sidebarList && savedSidebarScroll > 0) {
+                    sidebarList.scrollTop = savedSidebarScroll;
                 }
 
                 const projectCount = deletedProjects.length;
