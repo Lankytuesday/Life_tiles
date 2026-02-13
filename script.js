@@ -2818,11 +2818,42 @@ window.__lifetilesRefresh = async () => {
             const prevMonthDays = new Date(calViewYear, calViewMonth, 0).getDate();
             const totalCells = 42; // always 6 rows
 
+            function pickDate(dateStr) {
+                if (!endDateEnabled) {
+                    pickedStart = dateStr;
+                    pickedEnd = null;
+                } else if (activeField === 'start') {
+                    pickedStart = dateStr;
+                    if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
+                    activeField = 'end';
+                } else {
+                    if (pickedStart && dateStr < pickedStart) {
+                        pickedEnd = pickedStart;
+                        pickedStart = dateStr;
+                    } else {
+                        pickedEnd = dateStr;
+                    }
+                    activeField = 'start';
+                }
+                updateDateFields();
+            }
+
             // Previous month trailing days
             for (let i = firstDay - 1; i >= 0; i--) {
                 const cell = document.createElement("div");
                 cell.className = "calendar-picker-day outside";
-                cell.textContent = prevMonthDays - i;
+                const day = prevMonthDays - i;
+                cell.textContent = day;
+                const prevMonth = calViewMonth === 0 ? 11 : calViewMonth - 1;
+                const prevYear = calViewMonth === 0 ? calViewYear - 1 : calViewYear;
+                const dateStr = toDateStr(prevYear, prevMonth, day);
+                cell.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    pickDate(dateStr);
+                    calViewMonth = prevMonth;
+                    calViewYear = prevYear;
+                    renderPicker();
+                });
                 daysContainer.appendChild(cell);
             }
 
@@ -2854,23 +2885,7 @@ window.__lifetilesRefresh = async () => {
                 cell.textContent = d;
                 cell.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    if (!endDateEnabled) {
-                        pickedStart = dateStr;
-                        pickedEnd = null;
-                    } else if (activeField === 'start') {
-                        pickedStart = dateStr;
-                        if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
-                        activeField = 'end';
-                    } else {
-                        if (pickedStart && dateStr < pickedStart) {
-                            pickedEnd = pickedStart;
-                            pickedStart = dateStr;
-                        } else {
-                            pickedEnd = dateStr;
-                        }
-                        activeField = 'start';
-                    }
-                    updateDateFields();
+                    pickDate(dateStr);
                     renderPicker();
                 });
 
@@ -2880,10 +2895,20 @@ window.__lifetilesRefresh = async () => {
             // Next month leading days to fill 6 rows
             const cellsSoFar = firstDay + daysInMonth;
             const trailing = totalCells - cellsSoFar;
+            const nextMonth = calViewMonth === 11 ? 0 : calViewMonth + 1;
+            const nextYear = calViewMonth === 11 ? calViewYear + 1 : calViewYear;
             for (let d = 1; d <= trailing; d++) {
                 const cell = document.createElement("div");
                 cell.className = "calendar-picker-day outside";
                 cell.textContent = d;
+                const dateStr = toDateStr(nextYear, nextMonth, d);
+                cell.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    pickDate(dateStr);
+                    calViewMonth = nextMonth;
+                    calViewYear = nextYear;
+                    renderPicker();
+                });
                 daysContainer.appendChild(cell);
             }
         }

@@ -1118,7 +1118,11 @@ body.dragging {
 
 .calendar-picker-day.outside {
     color: #ccc;
-    pointer-events: none;
+}
+
+.calendar-picker-day.outside:hover {
+    background: #f1f3f4;
+    color: #999;
 }
 
 .calendar-picker-day.today {
