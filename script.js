@@ -2674,59 +2674,81 @@ window.__lifetilesRefresh = async () => {
         dateList.className = "calendar-date-list";
         calendarSection.appendChild(dateList);
 
-        // Add form (hidden until + button clicked)
-        const addForm = document.createElement("div");
-        addForm.className = "calendar-add-form";
+        // Add date button (inside calendar section)
+        const addDateBtn = document.createElement("button");
+        addDateBtn.className = "calendar-add-date-btn";
+        addDateBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add date`;
+        calendarSection.appendChild(addDateBtn);
+
+        // Add-date modal
+        const dateModal = document.createElement("div");
+        dateModal.className = "calendar-date-modal";
+        const dateModalContent = document.createElement("div");
+        dateModalContent.className = "calendar-date-modal-content";
+        const modalTitle = document.createElement("h3");
+        modalTitle.textContent = "Add Date";
         const labelInput = document.createElement("input");
         labelInput.type = "text";
         labelInput.className = "calendar-label-input";
-        labelInput.placeholder = "Label";
+        labelInput.placeholder = "Label (e.g. Sprint deadline)";
         const startInput = document.createElement("input");
         startInput.type = "date";
         startInput.className = "calendar-date-input";
-        startInput.title = "Start date";
+        const startLabel = document.createElement("label");
+        startLabel.className = "calendar-field-label";
+        startLabel.textContent = "Start";
         const endInput = document.createElement("input");
         endInput.type = "date";
         endInput.className = "calendar-date-input";
-        endInput.title = "End date (optional)";
+        const endLabel = document.createElement("label");
+        endLabel.className = "calendar-field-label";
+        endLabel.textContent = "End (optional)";
+        const modalButtons = document.createElement("div");
+        modalButtons.className = "calendar-modal-buttons";
         const saveBtn = document.createElement("button");
         saveBtn.className = "calendar-save-btn";
         saveBtn.textContent = "Save";
         const cancelBtn = document.createElement("button");
         cancelBtn.className = "calendar-cancel-btn";
         cancelBtn.textContent = "Cancel";
-        addForm.appendChild(labelInput);
-        addForm.appendChild(startInput);
-        addForm.appendChild(endInput);
-        addForm.appendChild(saveBtn);
-        addForm.appendChild(cancelBtn);
-        calendarSection.appendChild(addForm);
+        modalButtons.appendChild(cancelBtn);
+        modalButtons.appendChild(saveBtn);
+        dateModalContent.appendChild(modalTitle);
+        dateModalContent.appendChild(labelInput);
+        dateModalContent.appendChild(startLabel);
+        dateModalContent.appendChild(startInput);
+        dateModalContent.appendChild(endLabel);
+        dateModalContent.appendChild(endInput);
+        dateModalContent.appendChild(modalButtons);
+        dateModal.appendChild(dateModalContent);
 
-        // Add date button
-        const addDateBtn = document.createElement("button");
-        addDateBtn.className = "calendar-add-date-btn";
-        addDateBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add date`;
-        calendarSection.appendChild(addDateBtn);
-
-        // Show/hide add form
-        addDateBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            addForm.classList.add("visible");
-            addDateBtn.style.display = "none";
+        function showDateModal() {
+            document.body.appendChild(dateModal);
+            dateModal.style.display = "flex";
             labelInput.focus();
-        });
+        }
 
-        function hideAddForm() {
-            addForm.classList.remove("visible");
-            addDateBtn.style.display = "";
+        function hideDateModal() {
+            dateModal.style.display = "none";
+            if (dateModal.parentNode) dateModal.parentNode.removeChild(dateModal);
             labelInput.value = '';
             startInput.value = '';
             endInput.value = '';
         }
 
+        addDateBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showDateModal();
+        });
+
         cancelBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            hideAddForm();
+            hideDateModal();
+        });
+
+        // Close modal on backdrop click
+        dateModal.addEventListener("click", (e) => {
+            if (e.target === dateModal) hideDateModal();
         });
 
         // Format date for display
@@ -2821,7 +2843,7 @@ window.__lifetilesRefresh = async () => {
 
             await db.projectDates.add(dateItem);
             calendarToggle.classList.add("has-dates");
-            hideAddForm();
+            hideDateModal();
             await loadCalendarDates();
         });
 
@@ -2848,7 +2870,7 @@ window.__lifetilesRefresh = async () => {
                     await loadCalendarDates();
                     calendarLoaded = true;
                 }
-                if (!isExpanding) hideAddForm();
+                if (!isExpanding) hideDateModal();
             }
         });
 

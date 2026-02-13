@@ -858,7 +858,7 @@ body.dragging {
 }
 
 .calendar-date-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
@@ -866,6 +866,7 @@ body.dragging {
     border-radius: 6px;
     border: 1px solid #e8e8e8;
     font-size: 12px;
+    align-self: flex-start;
 }
 
 .calendar-date-item.past {
@@ -936,37 +937,55 @@ body.dragging {
     color: var(--color-brand);
 }
 
-/* Add form (hidden until + clicked) */
-.calendar-add-form {
+/* Add date modal */
+.calendar-date-modal {
     display: none;
-    gap: 6px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    justify-content: center;
     align-items: center;
-    flex-wrap: wrap;
+    z-index: 1000;
 }
 
-.calendar-add-form.visible {
-    display: flex;
+.calendar-date-modal-content {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    width: 300px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+.calendar-date-modal-content h3 {
+    margin: 0 0 16px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.calendar-field-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 4px;
+    margin-top: 12px;
 }
 
 .calendar-label-input,
 .calendar-date-input {
-    height: 30px;
-    padding: 0 8px;
+    width: 100%;
+    height: 36px;
+    padding: 0 10px;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     font-family: inherit;
-    font-size: 12px;
+    font-size: 14px;
     background: white;
     box-sizing: border-box;
-}
-
-.calendar-label-input {
-    flex: 1;
-    min-width: 100px;
-}
-
-.calendar-date-input {
-    width: 130px;
 }
 
 .calendar-label-input:focus,
@@ -976,17 +995,23 @@ body.dragging {
     box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
 }
 
+.calendar-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
 .calendar-save-btn {
-    height: 30px;
-    padding: 0 14px;
+    height: 34px;
+    padding: 0 20px;
     background: var(--color-brand);
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
-    white-space: nowrap;
 }
 
 .calendar-save-btn:hover {
@@ -994,14 +1019,14 @@ body.dragging {
 }
 
 .calendar-cancel-btn {
-    height: 30px;
-    padding: 0 10px;
+    height: 34px;
+    padding: 0 16px;
     background: transparent;
     color: #666;
     border: 1px solid #ddd;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     font-family: inherit;
 }
 
