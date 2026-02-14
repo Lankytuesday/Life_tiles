@@ -2,6 +2,9 @@
 if (localStorage.getItem('isViewingGlobalUnassigned') === 'true') {
     document.body.classList.add('quick-save-view');
 }
+if (localStorage.getItem('isViewingTimeline') === 'true') {
+    document.body.classList.add('timeline-view');
+}
 
 // Global unassigned project ID (special project for tiles not assigned to any dashboard)
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
@@ -751,6 +754,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     let currentProjectId = null;
     let currentDashboardId = null;
     let isViewingGlobalUnassigned = false; // Track if viewing global unassigned view
+    let isViewingTimeline = false; // Track if viewing timeline Gantt view
     let draggedProjectId = null; // Track project being dragged to sidebar
     let draggedTileId = null; // Track tile being dragged (for sidebar drops)
     let draggedTileElement = null; // Track tile element being dragged
@@ -1212,21 +1216,31 @@ new Sortable(document.getElementById('projects-list'), {
                 currentDashboardId = validCurrentId;
             }
 
-            // Check if user was viewing Quick Save before refresh
+            // Check if user was viewing Quick Save or Timeline before refresh
             const wasViewingQuickSave = localStorage.getItem('isViewingGlobalUnassigned') === 'true';
+            const wasViewingTimeline = localStorage.getItem('isViewingTimeline') === 'true';
 
-            // Hide UI elements immediately if restoring Quick Save view (prevents flash)
-            if (wasViewingQuickSave) {
+            // Hide UI elements immediately if restoring Quick Save or Timeline view (prevents flash)
+            if (wasViewingQuickSave || wasViewingTimeline) {
                 const newProjectBtn = document.getElementById('new-project');
                 const expandAllBtn = document.getElementById('expand-all');
                 const collapseAllBtn = document.getElementById('collapse-all');
+                const bulkSelectBtn = document.getElementById('bulk-select');
                 if (newProjectBtn) newProjectBtn.style.display = 'none';
                 if (expandAllBtn) expandAllBtn.style.display = 'none';
                 if (collapseAllBtn) collapseAllBtn.style.display = 'none';
-                document.body.classList.add('quick-save-view');
+                if (wasViewingTimeline && bulkSelectBtn) bulkSelectBtn.style.display = 'none';
+                if (wasViewingQuickSave) document.body.classList.add('quick-save-view');
+                if (wasViewingTimeline) document.body.classList.add('timeline-view');
             }
 
             renderSidebar(dashboards, wasViewingQuickSave ? GLOBAL_UNASSIGNED_ID : validCurrentId);
+
+            // If was viewing Timeline, restore that view
+            if (wasViewingTimeline) {
+                await switchToTimeline();
+                return dashboards;
+            }
 
             // If was viewing Quick Save, restore that view
             if (wasViewingQuickSave) {
@@ -1275,7 +1289,10 @@ new Sortable(document.getElementById('projects-list'), {
 // make the dashboard reload callable from outside this closure
 // Preserve the current view state (Quick Save vs dashboard) when refreshing
 window.__lifetilesRefresh = async () => {
-    if (isViewingGlobalUnassigned) {
+    if (isViewingTimeline) {
+        projectsList.innerHTML = '';
+        await loadTimelineView();
+    } else if (isViewingGlobalUnassigned) {
         // Refresh Quick Save view without switching views
         // Clear first to prevent duplicates
         destroyAllEditors();
@@ -1519,6 +1536,21 @@ window.__lifetilesRefresh = async () => {
 
         list.appendChild(globalUnassignedLi);
 
+        // Add Timeline entry
+        const timelineLi = document.createElement('li');
+        timelineLi.className = 'sidebar-item sidebar-item-timeline';
+        timelineLi.setAttribute('role', 'option');
+        timelineLi.innerHTML = `
+            <span class="timeline-icon">📅</span>
+            <span class="label">Timeline</span>
+        `;
+        timelineLi.setAttribute('aria-selected', String(isViewingTimeline));
+        timelineLi.tabIndex = isViewingTimeline ? 0 : -1;
+        timelineLi.addEventListener('click', () => {
+            switchToTimeline();
+        });
+        list.appendChild(timelineLi);
+
         // Add separator
         const separator = document.createElement('li');
         separator.className = 'sidebar-separator';
@@ -1552,8 +1584,8 @@ window.__lifetilesRefresh = async () => {
 
         sortedDashboards.forEach(dashboard => {
             const li = createSidebarItem(dashboard);
-            // Only select dashboard if not viewing global unassigned
-            const isSelected = !isViewingGlobalUnassigned && dashboard.id === currentId;
+            // Only select dashboard if not viewing global unassigned or timeline
+            const isSelected = !isViewingGlobalUnassigned && !isViewingTimeline && dashboard.id === currentId;
             li.setAttribute('aria-selected', String(isSelected));
             li.tabIndex = isSelected ? 0 : -1;
 
@@ -1719,12 +1751,13 @@ window.__lifetilesRefresh = async () => {
             list.__sortable = new Sortable(list, {
                 animation: 150,
                 draggable: '.sidebar-item:not(.sidebar-item-unassigned)',
-                filter: '.sidebar-item-unassigned, .sidebar-separator, .sidebar-section-header',
+                filter: '.sidebar-item-unassigned, .sidebar-item-timeline, .sidebar-separator, .sidebar-section-header',
                 onMove: function(evt) {
                     // Prevent spaces from being dragged above the "Spaces" header
                     const related = evt.related;
                     if (related && (
                         related.classList.contains('sidebar-item-unassigned') ||
+                        related.classList.contains('sidebar-item-timeline') ||
                         related.classList.contains('sidebar-separator') ||
                         related.classList.contains('sidebar-section-header')
                     )) {
@@ -2016,8 +2049,8 @@ window.__lifetilesRefresh = async () => {
     }
 
     async function switchDashboard(dashboardId) {
-        // Skip if already on this dashboard and not viewing global unassigned
-        if (dashboardId === currentDashboardId && !isViewingGlobalUnassigned) return;
+        // Skip if already on this dashboard and not viewing global unassigned or timeline
+        if (dashboardId === currentDashboardId && !isViewingGlobalUnassigned && !isViewingTimeline) return;
 
         // Exit bulk mode if active
         if (typeof window.__exitBulkMode === 'function') {
@@ -2028,6 +2061,11 @@ window.__lifetilesRefresh = async () => {
         isViewingGlobalUnassigned = false;
         localStorage.removeItem('isViewingGlobalUnassigned');
         document.body.classList.remove('quick-save-view');
+
+        // Exit timeline view
+        isViewingTimeline = false;
+        localStorage.removeItem('isViewingTimeline');
+        document.body.classList.remove('timeline-view');
 
         // Show project controls (hidden in global unassigned view)
         const newProjectBtn = document.getElementById('new-project');
@@ -2090,6 +2128,11 @@ window.__lifetilesRefresh = async () => {
         localStorage.setItem('isViewingGlobalUnassigned', 'true');
         document.body.classList.add('quick-save-view');
 
+        // Exit timeline view
+        isViewingTimeline = false;
+        localStorage.removeItem('isViewingTimeline');
+        document.body.classList.remove('timeline-view');
+
         // Update active sidebar item
         document.querySelectorAll('.sidebar-item').forEach(item => {
             const isUnassigned = item.classList.contains('sidebar-item-unassigned');
@@ -2122,6 +2165,276 @@ window.__lifetilesRefresh = async () => {
 
         // Load and display global unassigned tiles
         await loadGlobalUnassignedView();
+    }
+
+    /**
+     * Switch to the Timeline Gantt chart view
+     */
+    async function switchToTimeline() {
+        if (isViewingTimeline) return;
+
+        if (typeof window.__exitBulkMode === 'function') {
+            window.__exitBulkMode();
+        }
+
+        isViewingTimeline = true;
+        isViewingGlobalUnassigned = false;
+        localStorage.setItem('isViewingTimeline', 'true');
+        localStorage.removeItem('isViewingGlobalUnassigned');
+        document.body.classList.add('timeline-view');
+        document.body.classList.remove('quick-save-view');
+
+        // Update sidebar selection
+        document.querySelectorAll('.sidebar-item').forEach(item => {
+            const isTimeline = item.classList.contains('sidebar-item-timeline');
+            item.setAttribute('aria-selected', String(isTimeline));
+            item.tabIndex = isTimeline ? 0 : -1;
+        });
+
+        // Title
+        if (currentDashboardTitle) {
+            currentDashboardTitle.textContent = 'Timeline';
+            currentDashboardTitle.title = '';
+            currentDashboardTitle.style.cursor = 'default';
+        }
+
+        // Hide project controls
+        const newProjectBtn = document.getElementById('new-project');
+        const expandAllBtn = document.getElementById('expand-all');
+        const collapseAllBtn = document.getElementById('collapse-all');
+        const bulkSelectBtn = document.getElementById('bulk-select');
+        if (newProjectBtn) newProjectBtn.style.display = 'none';
+        if (expandAllBtn) expandAllBtn.style.display = 'none';
+        if (collapseAllBtn) collapseAllBtn.style.display = 'none';
+        if (bulkSelectBtn) bulkSelectBtn.style.display = 'none';
+
+        projectsList.innerHTML = '';
+        await loadTimelineView();
+    }
+
+    /**
+     * Load timeline data and render the Gantt chart
+     */
+    async function loadTimelineView() {
+        // Query all project dates
+        const allDates = await db.projectDates.toArray();
+        if (!allDates || allDates.length === 0) {
+            projectsList.innerHTML = `
+                <div class="timeline-empty">
+                    <div class="timeline-empty-icon">📅</div>
+                    <div class="timeline-empty-title">No dates yet</div>
+                    <div class="timeline-empty-hint">Add dates to your projects using the calendar toggle to see them here.</div>
+                </div>
+            `;
+            return;
+        }
+
+        // Join with projects and dashboards for names/colors
+        const projectIds = [...new Set(allDates.map(d => d.projectId))];
+        const projects = await db.projects.bulkGet(projectIds);
+        const projectMap = {};
+        const dashboardIds = new Set();
+        for (const p of projects) {
+            if (p) {
+                projectMap[p.id] = p;
+                if (p.dashboardId) dashboardIds.add(p.dashboardId);
+            }
+        }
+        const dashboards = await db.dashboards.bulkGet([...dashboardIds]);
+        const dashboardMap = {};
+        for (const d of dashboards) {
+            if (d) dashboardMap[d.id] = d;
+        }
+
+        // Group dates by project
+        const grouped = {};
+        for (const dateItem of allDates) {
+            const project = projectMap[dateItem.projectId];
+            if (!project) continue;
+            if (!grouped[project.id]) {
+                const dashboard = project.dashboardId ? dashboardMap[project.dashboardId] : null;
+                grouped[project.id] = {
+                    projectName: project.name || 'Untitled Project',
+                    spaceName: dashboard ? dashboard.name : '',
+                    color: (dashboard && dashboard.color) || '#a5d0f4',
+                    dates: []
+                };
+            }
+            grouped[project.id].dates.push({
+                label: dateItem.label || 'Untitled',
+                start: dateItem.start,
+                end: dateItem.end || null
+            });
+        }
+
+        // Sort dates within each project by start date
+        const groups = Object.values(grouped);
+        groups.sort((a, b) => a.projectName.localeCompare(b.projectName));
+        for (const g of groups) {
+            g.dates.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+        }
+
+        renderGanttChart(groups);
+    }
+
+    /**
+     * Render the Gantt chart DOM into projectsList
+     * @param {Array} groups - Array of { projectName, spaceName, color, dates[] }
+     */
+    function renderGanttChart(groups) {
+        const DAY_W = 42;
+        const ROW_H = 36;
+        const HEADER_H = 32;
+        const BAR_H = 28;
+
+        // Calculate time bounds from all dates across all groups
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        let minDate = new Date(today);
+        let maxDate = new Date(today);
+
+        for (const group of groups) {
+            for (const d of group.dates) {
+                if (d.start) {
+                    const s = new Date(d.start + 'T00:00:00');
+                    if (s < minDate) minDate = new Date(s);
+                    const e = d.end ? new Date(d.end + 'T00:00:00') : s;
+                    if (e > maxDate) maxDate = new Date(e);
+                }
+            }
+        }
+
+        // Pad: 7 days before, 14 after
+        minDate.setDate(minDate.getDate() - 7);
+        maxDate.setDate(maxDate.getDate() + 14);
+
+        const totalDays = Math.ceil((maxDate - minDate) / 86400000) + 1;
+        const totalWidth = totalDays * DAY_W;
+
+        const dayOffset = (dateStr) => {
+            const d = new Date(dateStr + 'T00:00:00');
+            return Math.round((d - minDate) / 86400000);
+        };
+
+        // Build month labels
+        let monthsHtml = '';
+        const cursor = new Date(minDate);
+        cursor.setDate(1);
+        while (cursor <= maxDate) {
+            const monthStart = new Date(cursor);
+            if (monthStart < minDate) monthStart.setTime(minDate.getTime());
+            const off = Math.round((monthStart - minDate) / 86400000);
+            const monthName = cursor.toLocaleString('default', { month: 'short', year: 'numeric' });
+            monthsHtml += `<div class="timeline-month" style="left:${off * DAY_W}px">${escapeHtml(monthName)}</div>`;
+            cursor.setMonth(cursor.getMonth() + 1);
+            cursor.setDate(1);
+        }
+
+        // Build daily ticks
+        let ticksHtml = '';
+        const tickCursor = new Date(minDate);
+        while (tickCursor <= maxDate) {
+            const off = Math.round((tickCursor - minDate) / 86400000);
+            const dow = tickCursor.getDay();
+            const isMonday = dow === 1;
+            const isWeekend = dow === 0 || dow === 6;
+            const cls = 'timeline-day-tick' + (isMonday ? ' monday' : '') + (isWeekend ? ' weekend' : '');
+            ticksHtml += `<div class="${cls}" style="left:${off * DAY_W}px;width:${DAY_W}px">${tickCursor.getDate()}</div>`;
+            tickCursor.setDate(tickCursor.getDate() + 1);
+        }
+
+        // Build label rows and bar rows, grouped by project
+        let labelsHtml = '';
+        let barsHtml = '';
+        let yPos = 0; // current pixel offset
+        let eventIdx = 0; // for alternating stripes
+
+        for (const group of groups) {
+            // Project heading row
+            const colorDot = `<span class="timeline-heading-dot" style="background:${group.color}"></span>`;
+            labelsHtml += `<div class="timeline-heading-row" style="height:${HEADER_H}px">${colorDot}<span class="timeline-heading-name" title="${escapeHtml(group.spaceName + ' / ' + group.projectName)}">${escapeHtml(group.projectName)}</span></div>`;
+            barsHtml += `<div class="timeline-heading-stripe" style="top:${yPos}px;height:${HEADER_H}px;width:${totalWidth}px"></div>`;
+            yPos += HEADER_H;
+
+            // Event rows
+            for (const d of group.dates) {
+                const alt = eventIdx % 2 === 1 ? ' alt' : '';
+
+                labelsHtml += `<div class="timeline-label-row${alt}">
+                    <div class="timeline-label-name" title="${escapeHtml(d.label)}">${escapeHtml(d.label)}</div>
+                </div>`;
+
+                barsHtml += `<div class="timeline-row-stripe${alt}" style="top:${yPos}px;width:${totalWidth}px"></div>`;
+
+                if (d.start) {
+                    const startOff = dayOffset(d.start);
+                    const isSingle = !d.end || d.end === d.start;
+                    const dateDisplay = isSingle ? d.start : `${d.start} → ${d.end}`;
+                    const tipText = escapeHtml(d.label + ': ' + dateDisplay);
+
+                    if (isSingle) {
+                        // Dot marker + label text beside it
+                        const dotTop = yPos + ROW_H / 2;
+                        const dotLeft = startOff * DAY_W + DAY_W / 2;
+                        barsHtml += `<div class="timeline-marker" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
+                        barsHtml += `<span class="timeline-marker-label" style="left:${dotLeft + 8}px;top:${yPos}px;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
+                    } else {
+                        const endOff = dayOffset(d.end);
+                        const barLeft = startOff * DAY_W;
+                        const barWidth = (endOff - startOff + 1) * DAY_W;
+                        const barTop = yPos + (ROW_H - BAR_H) / 2;
+                        const textLabel = `<span class="timeline-bar-text">${escapeHtml(d.label)}</span>`;
+                        barsHtml += `<div class="timeline-bar" style="left:${barLeft}px;top:${barTop}px;width:${barWidth}px;background-color:${group.color}" title="${tipText}">${textLabel}</div>`;
+                    }
+                }
+
+                yPos += ROW_H;
+                eventIdx++;
+            }
+        }
+
+        const totalHeight = yPos;
+
+        // Today marker
+        const todayOff = Math.round((today - minDate) / 86400000);
+        barsHtml += `<div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight}px"><span class="timeline-today-label">Today</span></div>`;
+
+        const container = document.createElement('div');
+        container.className = 'timeline-view-container';
+        container.innerHTML = `
+            <div class="timeline-label-side">
+                <div class="timeline-label-header">Project / Date</div>
+                <div class="timeline-label-col-body">${labelsHtml}</div>
+            </div>
+            <div class="timeline-chart">
+                <div class="timeline-chart-inner" style="width:${totalWidth}px">
+                    <div class="timeline-chart-header">
+                        <div class="timeline-months">${monthsHtml}</div>
+                        <div class="timeline-days">${ticksHtml}</div>
+                    </div>
+                    <div class="timeline-bars" style="width:${totalWidth}px;height:${totalHeight}px">
+                        ${barsHtml}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        projectsList.innerHTML = '';
+        projectsList.appendChild(container);
+
+        // Scroll sync: only vertical (label column tracks chart scroll)
+        const chart = container.querySelector('.timeline-chart');
+        const labelColBody = container.querySelector('.timeline-label-col-body');
+
+        chart.addEventListener('scroll', () => {
+            labelColBody.scrollTop = chart.scrollTop;
+        });
+
+        // Auto-scroll to make today visible
+        const todayLeft = todayOff * DAY_W;
+        const viewWidth = chart.clientWidth;
+        chart.scrollLeft = Math.max(0, todayLeft - viewWidth / 3);
     }
 
     /**
@@ -2847,11 +3160,23 @@ window.__lifetilesRefresh = async () => {
                 const prevMonth = calViewMonth === 0 ? 11 : calViewMonth - 1;
                 const prevYear = calViewMonth === 0 ? calViewYear - 1 : calViewYear;
                 const dateStr = toDateStr(prevYear, prevMonth, day);
+
+                if (dateStr === pickedStart) cell.classList.add("selected-start");
+                if (dateStr === pickedEnd) cell.classList.add("selected-end");
+                if (pickedStart && pickedEnd) {
+                    if (dateStr > pickedStart && dateStr < pickedEnd) cell.classList.add("in-range");
+                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
+                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
+                    const dow = new Date(prevYear, prevMonth, day).getDay();
+                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
+                        if (dow === 6) cell.classList.add("row-end");
+                        if (dow === 0) cell.classList.add("row-start");
+                    }
+                }
+
                 cell.addEventListener("click", (e) => {
                     e.stopPropagation();
                     pickDate(dateStr);
-                    calViewMonth = prevMonth;
-                    calViewYear = prevYear;
                     renderPicker();
                 });
                 daysContainer.appendChild(cell);
@@ -2902,11 +3227,23 @@ window.__lifetilesRefresh = async () => {
                 cell.className = "calendar-picker-day outside";
                 cell.textContent = d;
                 const dateStr = toDateStr(nextYear, nextMonth, d);
+
+                if (dateStr === pickedStart) cell.classList.add("selected-start");
+                if (dateStr === pickedEnd) cell.classList.add("selected-end");
+                if (pickedStart && pickedEnd) {
+                    if (dateStr > pickedStart && dateStr < pickedEnd) cell.classList.add("in-range");
+                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
+                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
+                    const dow = new Date(nextYear, nextMonth, d).getDay();
+                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
+                        if (dow === 6) cell.classList.add("row-end");
+                        if (dow === 0) cell.classList.add("row-start");
+                    }
+                }
+
                 cell.addEventListener("click", (e) => {
                     e.stopPropagation();
                     pickDate(dateStr);
-                    calViewMonth = nextMonth;
-                    calViewYear = nextYear;
                     renderPicker();
                 });
                 daysContainer.appendChild(cell);

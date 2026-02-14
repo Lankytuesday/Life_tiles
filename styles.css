@@ -904,6 +904,7 @@ body.dragging {
     cursor: pointer;
     color: #bbb;
     padding: 2px;
+    margin: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -935,6 +936,7 @@ body.dragging {
 .calendar-add-date-btn:hover {
     border-color: var(--color-brand);
     color: var(--color-brand);
+    background: rgba(26, 115, 232, 0.08);
 }
 
 /* Add date modal */
@@ -3095,4 +3097,328 @@ body.tabs-panel-open .tabs-panel {
     height: 16px;
     color: #555;
     flex-shrink: 0;
+}
+
+/* =============================================================================
+   TIMELINE / GANTT CHART VIEW
+   ============================================================================= */
+
+/* Hide project controls in timeline view (mirrors quick-save-view) */
+body.timeline-view #new-project,
+body.timeline-view #expand-all,
+body.timeline-view #collapse-all,
+body.timeline-view #bulk-select {
+    display: none !important;
+}
+
+body.timeline-view .dashboard-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 8px;
+    cursor: default;
+}
+
+body.timeline-view .dashboard-title:hover {
+    box-shadow: none;
+}
+
+body.timeline-view .project-controls-right {
+    margin-left: auto;
+}
+
+/* Sidebar timeline item icon */
+.sidebar-item-timeline .timeline-icon {
+    font-size: 16px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+}
+
+/* Let the timeline manage its own scrolling */
+body.timeline-view #main {
+    overflow: hidden;
+}
+
+/* Container */
+.timeline-view-container {
+    display: flex;
+    flex-direction: row;
+    height: calc(100vh - var(--toolbar-h) - 20px);
+    overflow: hidden;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: white;
+    margin: 0 4px;
+}
+
+/* Label side (fixed left column) */
+.timeline-label-side {
+    width: 220px;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--color-border);
+}
+
+.timeline-label-header {
+    height: 52px;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: flex-end;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-bg-light);
+    box-sizing: border-box;
+    flex-shrink: 0;
+}
+
+.timeline-label-col-body {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Chart area (single scroll container for ticks + bars) */
+.timeline-chart {
+    flex: 1;
+    overflow: auto;
+}
+
+.timeline-chart-inner {
+    display: inline-block;
+    min-width: 100%;
+}
+
+.timeline-chart-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--color-bg-light);
+    height: 52px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.timeline-months {
+    position: absolute;
+    top: 4px;
+    left: 0;
+    height: 22px;
+}
+
+.timeline-month {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    padding-left: 4px;
+}
+
+.timeline-days {
+    position: absolute;
+    top: 28px;
+    left: 0;
+    height: 22px;
+}
+
+.timeline-day-tick {
+    position: absolute;
+    font-size: 10px;
+    color: #bbb;
+    border-left: 1px solid #f0f0f0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.timeline-day-tick.monday {
+    color: var(--color-text-muted);
+    font-weight: 600;
+    border-left-color: #d0d0d0;
+}
+
+.timeline-day-tick.weekend {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* Project heading row */
+.timeline-heading-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    background: #eef2f7;
+    border-bottom: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
+}
+
+.timeline-heading-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.timeline-heading-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-heading-stripe {
+    position: absolute;
+    left: 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* Event row */
+.timeline-label-row {
+    height: 36px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px 0 24px;
+    box-sizing: border-box;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.timeline-label-row.alt {
+    background: #fafbfc;
+}
+
+.timeline-label-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3;
+}
+
+.timeline-bars {
+    position: relative;
+}
+
+/* Row stripes */
+.timeline-row-stripe {
+    position: absolute;
+    height: 36px;
+    left: 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.timeline-row-stripe.alt {
+    background: #fafbfc;
+}
+
+/* Today marker */
+.timeline-today-marker {
+    position: absolute;
+    top: 0;
+    width: 2px;
+    background: var(--color-danger);
+    z-index: 3;
+    pointer-events: none;
+}
+
+.timeline-today-label {
+    position: absolute;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--color-danger);
+    white-space: nowrap;
+}
+
+/* Bars */
+.timeline-bar {
+    position: absolute;
+    height: 28px;
+    border-radius: 6px;
+    opacity: 0.85;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    box-sizing: border-box;
+    z-index: 2;
+    transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.timeline-bar:hover {
+    opacity: 1;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 4;
+}
+
+/* Single-date marker: dot + label beside it */
+.timeline-marker {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    box-shadow: 0 0 0 2px white;
+}
+
+.timeline-marker-label {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-text) !important;
+    white-space: nowrap;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Text inside bar */
+.timeline-bar-text {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Empty state */
+.timeline-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+
+.timeline-empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.timeline-empty-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 8px;
+}
+
+.timeline-empty-hint {
+    font-size: 14px;
+    max-width: 320px;
+    line-height: 1.5;
 }
