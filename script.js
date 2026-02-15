@@ -1483,7 +1483,19 @@ window.__lifetilesRefresh = async () => {
         if (window.Sortable && !list.__sortable) {
             list.__sortable = new Sortable(list, {
                 animation: 150,
+                draggable: '.sidebar-item:not(.sidebar-item-unassigned)',
                 filter: '.sidebar-item-unassigned, .sidebar-separator, .sidebar-section-header',
+                onMove: function(evt) {
+                    // Prevent spaces from being dragged above the "Spaces" header
+                    const related = evt.related;
+                    if (related && (
+                        related.classList.contains('sidebar-item-unassigned') ||
+                        related.classList.contains('sidebar-separator') ||
+                        related.classList.contains('sidebar-section-header')
+                    )) {
+                        return false;
+                    }
+                },
                 onEnd: async () => {
                     const ids = [...list.querySelectorAll('.sidebar-item:not(.sidebar-item-unassigned)')]
                         .map(li => li.dataset.dashboardId)
