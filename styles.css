@@ -34,9 +34,10 @@
 /* App shell layout */
 .app-shell {
     display: grid;
-    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-columns: var(--sidebar-w) 1fr 0px;
     grid-template-rows: var(--toolbar-h) 1fr;
     height: 100dvh;
+    transition: grid-template-columns 0.3s ease;
 }
 
 /* Sidebar styles */
@@ -2020,7 +2021,6 @@ body.bulk-mode .tile:hover {
     color: var(--color-brand);
 }
 
-/* 3-column grid when panel is open */
 body.tabs-panel-open .app-shell {
     grid-template-columns: var(--sidebar-w) 1fr var(--tabs-panel-w);
 }
@@ -2034,10 +2034,12 @@ body.tabs-panel-open .app-shell {
     border-left: 1px solid var(--color-border);
     background: #fff;
     overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-.tabs-panel.hidden {
-    display: none !important;
+body.tabs-panel-open .tabs-panel {
+    opacity: 1;
 }
 
 /* Panel header */

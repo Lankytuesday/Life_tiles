@@ -5286,7 +5286,6 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             if (window.__exitBulkMode) window.__exitBulkMode();
             panelOpen = true;
             document.body.classList.add('tabs-panel-open');
-            panel.classList.remove('hidden');
             toggleBtn.classList.add('active');
             selectedTabs.clear();
             refreshTabList();
@@ -5296,7 +5295,6 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         function closePanel() {
             panelOpen = false;
             document.body.classList.remove('tabs-panel-open');
-            panel.classList.add('hidden');
             toggleBtn.classList.remove('active');
             if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
             selectedTabs.clear();
