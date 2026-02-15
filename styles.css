@@ -2391,3 +2391,80 @@ body.tabs-panel-open .app-shell {
     border-style: solid;
     border-color: var(--color-text);
 }
+
+/* ===== Onboarding Pin Banner ===== */
+
+#onboarding-pin-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 16px;
+    margin: 0;
+    background: #FFF9C4;
+    border-bottom: 1px solid #F0E68C;
+    font-size: 13px;
+    color: var(--color-text);
+    line-height: 1.5;
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.4s ease, padding 0.4s ease, opacity 0.4s ease;
+}
+
+#onboarding-pin-banner.visible {
+    max-height: 60px;
+    padding: 10px 16px;
+    opacity: 1;
+}
+
+.pin-banner-text {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pin-banner-icon {
+    display: inline-block;
+    vertical-align: middle;
+    width: 16px;
+    height: 16px;
+    color: #555;
+    flex-shrink: 0;
+}
+
+.pin-banner-dismiss {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    margin: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: #999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pin-banner-dismiss:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--color-text);
+}
+
+.pin-banner-arrow {
+    flex-shrink: 0;
+    margin-right: 110px;
+    color: #555;
+    animation: pin-arrow-bounce 1.2s ease-in-out infinite;
+}
+
+@keyframes pin-arrow-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}

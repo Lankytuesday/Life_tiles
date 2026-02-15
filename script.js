@@ -694,16 +694,21 @@ document.addEventListener("DOMContentLoaded", async function () {
     // First-run check
     if (!localStorage.getItem('linktiles_first_run_complete')) {
         const welcomeModal = document.getElementById('welcome-modal');
+
+        // Show welcome modal; pin banner will show after via separate flag
         if (welcomeModal) {
             welcomeModal.style.display = 'flex';
 
             document.getElementById('welcome-start-fresh').onclick = () => {
                 localStorage.setItem('linktiles_first_run_complete', 'true');
+                localStorage.setItem('linktiles_show_pin_banner', 'true');
                 welcomeModal.style.display = 'none';
+                showPinBanner();
             };
 
             document.getElementById('welcome-import').onclick = async () => {
                 localStorage.setItem('linktiles_first_run_complete', 'true');
+                localStorage.setItem('linktiles_show_pin_banner', 'true');
                 welcomeModal.style.display = 'none';
                 if (chrome?.bookmarks) {
                     await importGoogleBookmarks();
@@ -712,6 +717,30 @@ document.addEventListener("DOMContentLoaded", async function () {
                 }
             };
         }
+    }
+
+    // Pin banner — persists across refreshes until dismissed
+    function showPinBanner() {
+        const pinBanner = document.getElementById('onboarding-pin-banner');
+        if (pinBanner) setTimeout(() => { pinBanner.classList.add('visible'); }, 500);
+    }
+
+    if (localStorage.getItem('linktiles_show_pin_banner')) {
+        showPinBanner();
+    }
+
+    const pinDismissBtn = document.getElementById('pin-banner-dismiss');
+    if (pinDismissBtn) {
+        pinDismissBtn.onclick = () => {
+            const pinBanner = document.getElementById('onboarding-pin-banner');
+            if (pinBanner) {
+                pinBanner.classList.remove('visible');
+                pinBanner.addEventListener('transitionend', () => {
+                    pinBanner.style.display = 'none';
+                }, { once: true });
+            }
+            localStorage.removeItem('linktiles_show_pin_banner');
+        };
     }
 
 // Track last known mouse position during drag
