@@ -956,6 +956,10 @@ body.quick-save-view .project-controls-right {
     text-align: center;
     padding: 48px 24px;
     color: var(--color-text-muted);
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .global-unassigned-empty p {
@@ -973,7 +977,7 @@ body.quick-save-view .project-controls-right {
     grid-template-columns: repeat(auto-fill, minmax(106px, 106px));
     gap: 12px;
     align-items: start;
-    justify-content: center;
+    justify-content: start;
 }
 
 .project {
@@ -1105,22 +1109,9 @@ body.quick-save-view .project-controls-right {
     width: 100%;
     line-height: 1.3;
     max-height: 50px; /* Approx height for 3 lines with descenders */
-    cursor: text;
+    cursor: pointer;
     border-radius: 3px;
-    transition: box-shadow 0.2s ease;
     box-sizing: border-box;
-}
-
-.tile-name:hover {
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
-}
-
-.bulk-mode .tile-name {
-    cursor: default;
-}
-
-.bulk-mode .tile-name:hover {
-    box-shadow: none;
 }
 
 .bulk-mode .tile,

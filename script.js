@@ -2181,9 +2181,27 @@ window.__lifetilesRefresh = async () => {
             label.textContent = `Quick Save${count > 0 ? ` (${count})` : ''}`;
         }
     }
+    /**
+     * If viewing Quick Save and all tiles are gone, restore the empty state UI
+     */
+    function updateQuickSaveViewEmptyState() {
+        if (!isViewingGlobalUnassigned) return;
+        const view = document.querySelector('.global-unassigned-view');
+        if (!view) return;
+        const grid = view.querySelector('.global-unassigned-tiles');
+        if (grid && grid.querySelectorAll('.tile').length === 0) {
+            grid.remove();
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'global-unassigned-empty';
+            emptyEl.innerHTML = '<p>No unassigned tiles</p><p class="hint">Save tiles from the browser extension without assigning them to a project, and they\'ll appear here.</p>';
+            view.appendChild(emptyEl);
+        }
+    }
+
     // Expose for use in bulk mode IIFE and tabs panel IIFE
     window.__updateQuickSaveCount = updateQuickSaveCount;
     window.__updateUnassignedEmptyState = updateUnassignedEmptyState;
+    window.__updateQuickSaveViewEmptyState = updateQuickSaveViewEmptyState;
     window.__createTileElement = createTileElement;
 
     async function loadProjects(projects = []) {
@@ -3638,8 +3656,8 @@ window.__lifetilesRefresh = async () => {
 
             // Always get the CURRENT container and project ID at the time of clicking edit
             // This ensures we're editing the tile in its current location, not its original one
-            const currentContainer = tile.closest('.tiles-container') || tile.closest('.global-unassigned-tiles');
-            const currentProject = tile.closest('.project') || tile.closest('.global-unassigned-view');
+            const currentContainer = tile.closest('.tiles-container') || tile.closest('.global-unassigned-tiles') || tile.closest('.unassigned-tiles');
+            const currentProject = tile.closest('.project') || tile.closest('.global-unassigned-view') || tile.closest('.unassigned-section');
             if (!currentContainer || !currentProject) return;
 
             currentProjectContainer = currentContainer;
@@ -3654,6 +3672,9 @@ window.__lifetilesRefresh = async () => {
             tileNameInput.value = freshTile.name;
             tileUrlInput.value = freshTile.url;
             validateTileInputs();
+            tileNameInput.focus();
+            tileNameInput.setSelectionRange(0, tileNameInput.value.length);
+            tileNameInput.scrollLeft = 0;
 
             // Create a new button to avoid event listener buildup
             const newSubmitBtn = submitTileBtn.cloneNode(true);
@@ -3701,6 +3722,7 @@ window.__lifetilesRefresh = async () => {
                 // Update Quick Save count in case this was a Quick Save tile
                 await updateQuickSaveCount();
                 updateUnassignedEmptyState();
+                updateQuickSaveViewEmptyState();
 
                 showUndoToast('Tile deleted', async () => {
                     // Restore tile to Dexie
@@ -3742,7 +3764,7 @@ window.__lifetilesRefresh = async () => {
                 }
                 return;
             }
-            if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger') && !e.target.closest('.tile-name')) {
+            if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
                 e.preventDefault(); // keep drag/click behavior clean
                 // Always open tiles in a new tab
                 const win = window.open(tileData.url, '_blank', 'noopener,noreferrer');
@@ -3788,16 +3810,7 @@ window.__lifetilesRefresh = async () => {
         const nameElement = document.createElement("div");
         nameElement.className = "tile-name";
         nameElement.textContent = truncateText(tileData.name, 60);
-        nameElement.setAttribute("title", "Double-click to edit");
         tile.setAttribute("title", tileData.name);
-
-        // Double-click to edit tile name (disabled in bulk mode)
-        nameElement.addEventListener("dblclick", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (document.body.classList.contains('bulk-mode')) return;
-            editTileNameInline(nameElement, tileData, tile);
-        });
 
         tile.appendChild(thumbnailElement);
         tile.appendChild(nameElement);
@@ -4728,6 +4741,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         // Update Quick Save count in case any were Quick Save tiles
         if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
         if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
+        if (window.__updateQuickSaveViewEmptyState) window.__updateQuickSaveViewEmptyState();
 
         exitBulkMode();
 
@@ -5727,6 +5741,10 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                     // Update counts
                     if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
                     if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
+                } else if (window.__lifetilesRefresh) {
+                    // No tiles container (e.g., empty Quick Save) — full refresh
+                    await window.__lifetilesRefresh();
+                    if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
                 }
                 selectedTabs.clear();
                 updateSaveBar();
@@ -5748,6 +5766,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                         if (el) el.remove();
                     }
                     if (window.__updateUnassignedEmptyState) window.__updateUnassignedEmptyState();
+                    if (window.__updateQuickSaveViewEmptyState) window.__updateQuickSaveViewEmptyState();
                     if (window.__updateQuickSaveCount) await window.__updateQuickSaveCount();
                     refreshTabList();
                 });
