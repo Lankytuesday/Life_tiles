@@ -28,6 +28,122 @@ function escapeHtml(str) {
 }
 
 
+// =============================================================================
+// TIPTAP EDITOR MODULE — Rich text notes with checklists
+// =============================================================================
+
+const tiptapEditors = new Map(); // projectId → Editor instance
+const _notesSaveTimers = new Map(); // projectId → timeout id
+
+function destroyAllEditors() {
+    for (const [, editor] of tiptapEditors) {
+        editor.destroy();
+    }
+    tiptapEditors.clear();
+    for (const [, timer] of _notesSaveTimers) {
+        clearTimeout(timer);
+    }
+    _notesSaveTimers.clear();
+}
+
+function destroyEditorForProject(projectId) {
+    const editor = tiptapEditors.get(projectId);
+    if (editor) {
+        editor.destroy();
+        tiptapEditors.delete(projectId);
+    }
+    const timer = _notesSaveTimers.get(projectId);
+    if (timer) {
+        clearTimeout(timer);
+        _notesSaveTimers.delete(projectId);
+    }
+}
+
+// Lazy migration: plain text / checklist-notes branch format → HTML
+function migrateNotesToHtml(notes) {
+    if (!notes || typeof notes !== 'string') return '';
+    const trimmed = notes.trim();
+    if (!trimmed) return '';
+    // Already HTML
+    if (trimmed.startsWith('<')) return trimmed;
+
+    const lines = trimmed.split('\n');
+    const htmlParts = [];
+    let inTaskList = false;
+    let inBulletList = false;
+
+    function closeOpenLists() {
+        if (inTaskList) { htmlParts.push('</ul>'); inTaskList = false; }
+        if (inBulletList) { htmlParts.push('</ul>'); inBulletList = false; }
+    }
+
+    for (const line of lines) {
+        const taskMatch = line.match(/^- \[([ xX])\] (.*)$/);
+        const bulletMatch = line.match(/^[•\-\*] (.+)$/);
+
+        if (taskMatch) {
+            if (!inTaskList) { closeOpenLists(); htmlParts.push('<ul data-type="taskList">'); inTaskList = true; }
+            const checked = taskMatch[1] !== ' ' ? ' data-checked="true"' : ' data-checked="false"';
+            htmlParts.push(`<li data-type="taskItem"${checked}><label><input type="checkbox"${taskMatch[1] !== ' ' ? ' checked' : ''}><span></span></label><div><p>${escapeHtml(taskMatch[2])}</p></div></li>`);
+        } else if (bulletMatch && !taskMatch) {
+            if (!inBulletList) { closeOpenLists(); htmlParts.push('<ul>'); inBulletList = true; }
+            htmlParts.push(`<li><p>${escapeHtml(bulletMatch[1])}</p></li>`);
+        } else {
+            closeOpenLists();
+            if (line.trim()) {
+                htmlParts.push(`<p>${escapeHtml(line)}</p>`);
+            } else {
+                htmlParts.push('<p></p>');
+            }
+        }
+    }
+    closeOpenLists();
+    return htmlParts.join('');
+}
+
+function debouncedSaveNotes(projectId, html, notesToggle) {
+    const existing = _notesSaveTimers.get(projectId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(async () => {
+        _notesSaveTimers.delete(projectId);
+        const cleanHtml = html.trim();
+        await db.projects.update(projectId, { notes: cleanHtml });
+        // Update has-notes indicator
+        const isEmpty = !cleanHtml || cleanHtml === '<p></p>';
+        if (notesToggle) {
+            notesToggle.classList.toggle('has-notes', !isEmpty);
+        }
+    }, 300);
+    _notesSaveTimers.set(projectId, timer);
+}
+
+function createEditorForProject(container, projectId, htmlContent, notesToggle) {
+    // Destroy any existing editor for this project
+    destroyEditorForProject(projectId);
+
+    const editor = new TipTap.Editor({
+        element: container,
+        extensions: [
+            TipTap.StarterKit.configure({
+                heading: false,
+                codeBlock: false,
+                blockquote: false,
+                horizontalRule: false,
+            }),
+            TipTap.TaskList,
+            TipTap.TaskItem.configure({ nested: true }),
+            TipTap.Placeholder.configure({ placeholder: 'Add notes...' }),
+        ],
+        content: htmlContent || '',
+        onUpdate: ({ editor: ed }) => {
+            debouncedSaveNotes(projectId, ed.getHTML(), notesToggle);
+        },
+    });
+
+    tiptapEditors.set(projectId, editor);
+    return editor;
+}
+
 // --- internal URL helpers ---
 // Only allow http/https URLs to prevent javascript:/data: execution
 function isInternalUrl(u) {
@@ -994,6 +1110,7 @@ new Sortable(document.getElementById('projects-list'), {
                 // Paint the UI immediately
                 renderSidebar([defaultDashboard], defaultDashboard.id);
                 if (currentDashboardTitle) currentDashboardTitle.textContent = defaultDashboard.name;
+                destroyAllEditors();
                 projectsList.innerHTML = '';
 
                 return [defaultDashboard];
@@ -1035,6 +1152,7 @@ new Sortable(document.getElementById('projects-list'), {
             if (currentDashboardTitle) currentDashboardTitle.textContent = currentDash ? currentDash.name : '';
 
             // Clear existing projects before loading new ones
+            destroyAllEditors();
             projectsList.innerHTML = '';
 
             // Load projects for current dashboard
@@ -1073,6 +1191,7 @@ window.__lifetilesRefresh = async () => {
     if (isViewingGlobalUnassigned) {
         // Refresh Quick Save view without switching views
         // Clear first to prevent duplicates
+        destroyAllEditors();
         projectsList.innerHTML = '';
         await loadGlobalUnassignedView();
         await updateQuickSaveCount();
@@ -1835,6 +1954,7 @@ window.__lifetilesRefresh = async () => {
         currentDashboardId = dashboardId;
 
         // Clear projects list
+        destroyAllEditors();
         projectsList.innerHTML = '';
 
         // Load projects for selected dashboard
@@ -1884,6 +2004,7 @@ window.__lifetilesRefresh = async () => {
         if (bulkSelectBtn) bulkSelectBtn.style.display = '';
 
         // Clear projects list
+        destroyAllEditors();
         projectsList.innerHTML = '';
 
         // Load and display global unassigned tiles
@@ -2347,13 +2468,45 @@ window.__lifetilesRefresh = async () => {
         // Notes section (hidden by default)
         const notesSection = document.createElement("div");
         notesSection.className = "project-notes-section";
-        const notesTextarea = document.createElement("textarea");
-        notesTextarea.className = "project-notes-textarea";
-        notesTextarea.placeholder = "Add notes about this project...";
-        notesTextarea.value = projectData.notes || "";
-        notesSection.appendChild(notesTextarea);
 
-        // Toggle notes visibility
+        // Toolbar with list/checklist buttons
+        const notesToolbar = document.createElement("div");
+        notesToolbar.className = "notes-toolbar";
+
+        const bulletBtn = document.createElement("button");
+        bulletBtn.className = "notes-toolbar-btn";
+        bulletBtn.title = "Bullet list";
+        bulletBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg>`;
+
+        const checklistBtn = document.createElement("button");
+        checklistBtn.className = "notes-toolbar-btn";
+        checklistBtn.title = "Checklist";
+        checklistBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="4" height="4" rx="0.5"/><line x1="12" y1="7" x2="21" y2="7"/><path d="M3.5 15.5l1.5 1.5 3-3"/><line x1="12" y1="17" x2="21" y2="17"/></svg>`;
+
+        notesToolbar.appendChild(bulletBtn);
+        notesToolbar.appendChild(checklistBtn);
+
+        // Editor container (TipTap mounts here)
+        const editorContainer = document.createElement("div");
+        editorContainer.className = "notes-editor-container";
+
+        notesSection.appendChild(notesToolbar);
+        notesSection.appendChild(editorContainer);
+
+        // Toolbar click handlers (editor created lazily on expand)
+        bulletBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const editor = tiptapEditors.get(projectData.id);
+            if (editor) editor.chain().focus().toggleBulletList().run();
+        });
+
+        checklistBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const editor = tiptapEditors.get(projectData.id);
+            if (editor) editor.chain().focus().toggleTaskList().run();
+        });
+
+        // Toggle notes visibility (lazy editor init)
         notesToggle.addEventListener("click", async (e) => {
             e.stopPropagation();
 
@@ -2361,31 +2514,33 @@ window.__lifetilesRefresh = async () => {
             const wasCollapsed = project.classList.contains("collapsed");
             if (wasCollapsed) {
                 project.classList.remove("collapsed");
-                // Save expanded state using Dexie
                 await db.projects.update(projectData.id, { collapsed: false });
-                // Always open notes when expanding from collapsed
-                notesSection.classList.add("expanded");
-                notesToggle.classList.add("active");
-                notesTextarea.focus();
-            } else {
-                // Normal toggle behavior
-                notesSection.classList.toggle("expanded");
-                notesToggle.classList.toggle("active");
-                if (notesSection.classList.contains("expanded")) {
-                    notesTextarea.focus();
-                }
             }
-        });
 
-        // Auto-save notes on blur
-        notesTextarea.addEventListener("blur", async () => {
-            const newNotes = notesTextarea.value.trim();
-            await db.projects.update(projectData.id, { notes: newNotes });
-            // Update has-notes indicator
-            if (newNotes) {
-                notesToggle.classList.add("has-notes");
+            const isExpanding = wasCollapsed || !notesSection.classList.contains("expanded");
+            notesSection.classList.toggle("expanded", isExpanding);
+            notesToggle.classList.toggle("active", isExpanding);
+
+            if (isExpanding) {
+                // Always fetch fresh content from DB (not stale projectData)
+                const fresh = await db.projects.get(projectData.id);
+                const htmlContent = migrateNotesToHtml(fresh?.notes || '');
+                createEditorForProject(editorContainer, projectData.id, htmlContent, notesToggle);
+                const editor = tiptapEditors.get(projectData.id);
+                if (editor) editor.commands.focus('end');
             } else {
-                notesToggle.classList.remove("has-notes");
+                // Flush any pending save immediately before destroying
+                const editor = tiptapEditors.get(projectData.id);
+                if (editor) {
+                    const pendingTimer = _notesSaveTimers.get(projectData.id);
+                    if (pendingTimer) clearTimeout(pendingTimer);
+                    _notesSaveTimers.delete(projectData.id);
+                    const html = editor.getHTML().trim();
+                    const isEmpty = !html || html === '<p></p>';
+                    await db.projects.update(projectData.id, { notes: isEmpty ? '' : html });
+                    notesToggle.classList.toggle('has-notes', !isEmpty);
+                }
+                destroyEditorForProject(projectData.id);
             }
         });
 
@@ -3257,6 +3412,7 @@ window.__lifetilesRefresh = async () => {
                         currentDashboardId = newCurrentId;
 
                         // Clear projects list
+                        destroyAllEditors();
                         projectsList.innerHTML = '';
                     }
                 }
@@ -3505,6 +3661,7 @@ window.__lifetilesRefresh = async () => {
                         currentDashboardId = newCurrentId;
 
                         // Clear projects list
+                        destroyAllEditors();
                         projectsList.innerHTML = '';
 
                         // Only call loadDashboards to update the selector, it will load projects automatically
