@@ -30,6 +30,11 @@ function escapeHtml(str) {
 
 // =============================================================================
 // TIPTAP EDITOR MODULE — Rich text notes with checklists
+//
+// SECURITY INVARIANT: project.notes contains raw HTML and must ONLY be rendered
+// through TipTap/ProseMirror's parser (createEditorForProject), which strips
+// unsupported tags/attributes. NEVER insert project.notes via innerHTML or
+// similar — that would bypass sanitization and introduce XSS risk.
 // =============================================================================
 
 const tiptapEditors = new Map(); // projectId → Editor instance
@@ -101,12 +106,15 @@ function migrateNotesToHtml(notes) {
     return htmlParts.join('');
 }
 
+const MAX_NOTE_SIZE = 51200; // 50KB per note
+
 function debouncedSaveNotes(projectId, html, notesToggle) {
     const existing = _notesSaveTimers.get(projectId);
     if (existing) clearTimeout(existing);
     const timer = setTimeout(async () => {
         _notesSaveTimers.delete(projectId);
         const cleanHtml = html.trim();
+        if (cleanHtml.length > MAX_NOTE_SIZE) return; // silently refuse oversized notes
         await db.projects.update(projectId, { notes: cleanHtml });
         // Update has-notes indicator
         const isEmpty = !cleanHtml || cleanHtml === '<p></p>';
