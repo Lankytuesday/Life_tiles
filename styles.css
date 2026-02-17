@@ -2484,37 +2484,94 @@ body.tabs-panel-open .tabs-panel {
     border-color: var(--color-text);
 }
 
-/* ===== Onboarding Pin Banner ===== */
+/* ===== Onboarding Floating Callouts ===== */
 
-#onboarding-pin-banner {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    margin: 0;
-    background: #FFF9C4;
-    border-bottom: 1px solid #F0E68C;
+.onboarding-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1100;
+}
+
+.onboarding-overlay.visible {
+    display: block;
+}
+
+.onboarding-spotlight {
+    display: none;
+    position: fixed;
+    border-radius: 8px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    z-index: 1101;
+}
+
+.onboarding-spotlight.visible {
+    display: block;
+}
+
+.onboarding-callout {
+    display: none;
+    position: fixed;
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+    max-width: 300px;
+    z-index: 1102;
+}
+
+.onboarding-callout.visible {
+    display: block;
+}
+
+.onboarding-callout-text {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+}
+
+.onboarding-callout::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #fff;
+    transform: rotate(45deg);
+}
+
+.onboarding-callout.arrow-up::before {
+    top: -7px;
+    right: 32px;
+}
+
+.onboarding-callout.arrow-up-left {
+    max-width: 600px;
+}
+
+.onboarding-callout.arrow-up-left::before {
+    top: -7px;
+    right: 72px;
+}
+
+.onboarding-dismiss {
+    display: block;
+    margin-left: auto;
+    padding: 6px 20px;
+    border: none;
+    border-radius: 20px;
+    background: var(--color-accent, #4a90d9);
+    color: #fff;
     font-size: 13px;
-    color: var(--color-text);
-    line-height: 1.5;
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 0.4s ease, padding 0.4s ease, opacity 0.4s ease;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease;
 }
 
-#onboarding-pin-banner.visible {
-    max-height: 60px;
-    padding: 10px 16px;
-    opacity: 1;
-}
-
-.pin-banner-text {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 4px;
+.onboarding-dismiss:hover {
+    background: var(--color-accent-hover, #3a7bc8);
 }
 
 .pin-banner-icon {
@@ -2524,39 +2581,4 @@ body.tabs-panel-open .tabs-panel {
     height: 16px;
     color: #555;
     flex-shrink: 0;
-}
-
-.pin-banner-dismiss {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    margin: 0;
-    border: none;
-    border-radius: var(--radius-sm);
-    background: none;
-    cursor: pointer;
-    font-size: 20px;
-    line-height: 1;
-    color: #999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.pin-banner-dismiss:hover {
-    background: rgba(0, 0, 0, 0.08);
-    color: var(--color-text);
-}
-
-.pin-banner-arrow {
-    flex-shrink: 0;
-    margin-right: 110px;
-    color: #555;
-    animation: pin-arrow-bounce 1.2s ease-in-out infinite;
-}
-
-@keyframes pin-arrow-bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
 }

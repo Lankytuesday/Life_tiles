@@ -825,14 +825,14 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             document.getElementById('welcome-start-fresh').onclick = () => {
                 localStorage.setItem('linktiles_first_run_complete', 'true');
-                localStorage.setItem('linktiles_show_pin_banner', 'true');
+                localStorage.setItem('linktiles_onboarding_step', 'pin');
                 welcomeModal.style.display = 'none';
-                showPinBanner();
+                showOnboardingStep();
             };
 
             document.getElementById('welcome-import').onclick = async () => {
                 localStorage.setItem('linktiles_first_run_complete', 'true');
-                localStorage.setItem('linktiles_show_pin_banner', 'true');
+                localStorage.setItem('linktiles_onboarding_step', 'pin');
                 welcomeModal.style.display = 'none';
                 if (chrome?.bookmarks) {
                     await importGoogleBookmarks();
@@ -843,28 +843,95 @@ document.addEventListener("DOMContentLoaded", async function () {
         }
     }
 
-    // Pin banner — persists across refreshes until dismissed
-    function showPinBanner() {
-        const pinBanner = document.getElementById('onboarding-pin-banner');
-        if (pinBanner) setTimeout(() => { pinBanner.classList.add('visible'); }, 500);
+    // Floating onboarding callout system
+    const onboardingOverlay = document.getElementById('onboarding-overlay');
+    const onboardingSpotlight = document.getElementById('onboarding-spotlight');
+    const onboardingCallout = document.getElementById('onboarding-callout');
+    const onboardingText = document.getElementById('onboarding-callout-text');
+    const onboardingDismiss = document.getElementById('onboarding-dismiss');
+
+    function hideOnboarding() {
+        if (onboardingOverlay) onboardingOverlay.classList.remove('visible');
+        if (onboardingSpotlight) onboardingSpotlight.classList.remove('visible');
+        if (onboardingCallout) {
+            onboardingCallout.classList.remove('visible', 'arrow-up', 'arrow-up-left');
+        }
     }
 
-    if (localStorage.getItem('linktiles_show_pin_banner')) {
-        showPinBanner();
-    }
+    function showOnboardingStep() {
+        const step = localStorage.getItem('linktiles_onboarding_step');
+        if (!step) return;
 
-    const pinDismissBtn = document.getElementById('pin-banner-dismiss');
-    if (pinDismissBtn) {
-        pinDismissBtn.onclick = () => {
-            const pinBanner = document.getElementById('onboarding-pin-banner');
-            if (pinBanner) {
-                pinBanner.classList.remove('visible');
-                pinBanner.addEventListener('transitionend', () => {
-                    pinBanner.style.display = 'none';
-                }, { once: true });
+        if (step === 'pin') {
+            // Full overlay + callout near top-right pointing up toward extension area
+            if (onboardingOverlay) onboardingOverlay.classList.add('visible');
+            if (onboardingSpotlight) onboardingSpotlight.classList.remove('visible');
+            if (onboardingCallout) {
+                onboardingText.innerHTML =
+                    'Can\'t find the LinkTiles icon on the toolbar? Click the ' +
+                    '<svg class="pin-banner-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4c-1.1 0-2 .9-2 2v3.8h1.5c1.4 0 2.5 1.1 2.5 2.5s-1.1 2.5-2.5 2.5H2V19c0 1.1.9 2 2 2h3.8v-1.5c0-1.4 1.1-2.5 2.5-2.5s2.5 1.1 2.5 2.5V21H16c1.1 0 2-.9 2-2v-4h1.5a2.5 2.5 0 0 0 0-5Z"/></svg>' +
+                    ' puzzle icon and then pin ' +
+                    '<svg class="pin-banner-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2Z"/></svg>' +
+                    ' LinkTiles for easy access.';
+                onboardingCallout.classList.add('arrow-up');
+                onboardingCallout.style.top = '16px';
+                onboardingCallout.style.right = '80px';
+                onboardingCallout.style.left = '';
+                onboardingCallout.style.bottom = '';
+                onboardingCallout.classList.add('visible');
             }
-            localStorage.removeItem('linktiles_show_pin_banner');
+        } else if (step === 'tabs') {
+            const tabsBtn = document.getElementById('tabs-panel-toggle');
+            if (!tabsBtn) return;
+
+            const rect = tabsBtn.getBoundingClientRect();
+            const pad = 6;
+
+            // Spotlight hole around the tabs button
+            if (onboardingOverlay) onboardingOverlay.classList.remove('visible');
+            if (onboardingSpotlight) {
+                onboardingSpotlight.style.top = (rect.top - pad) + 'px';
+                onboardingSpotlight.style.left = (rect.left - pad) + 'px';
+                onboardingSpotlight.style.width = (rect.width + pad * 2) + 'px';
+                onboardingSpotlight.style.height = (rect.height + pad * 2) + 'px';
+                onboardingSpotlight.classList.add('visible');
+            }
+
+            // Callout below the button
+            if (onboardingCallout) {
+                onboardingText.innerHTML = 'This is the <strong>Browser Tabs</strong> panel — it shows all your open tabs. ' +
+                    'Drag any tab directly into a project to save it as a tile, or select multiple tabs and save them all at once.';
+                onboardingCallout.classList.remove('arrow-up');
+                onboardingCallout.classList.add('arrow-up-left');
+                onboardingCallout.style.top = (rect.bottom + 14) + 'px';
+                onboardingCallout.style.right = '12px';
+                onboardingCallout.style.left = '';
+                onboardingCallout.style.bottom = '';
+                onboardingCallout.classList.add('visible');
+            }
+
+            // Auto-open tabs panel
+            if (window.__openTabsPanel) window.__openTabsPanel();
+        }
+    }
+
+    if (onboardingDismiss) {
+        onboardingDismiss.onclick = () => {
+            const step = localStorage.getItem('linktiles_onboarding_step');
+            hideOnboarding();
+
+            if (step === 'pin') {
+                localStorage.setItem('linktiles_onboarding_step', 'tabs');
+                setTimeout(showOnboardingStep, 400);
+            } else {
+                localStorage.removeItem('linktiles_onboarding_step');
+            }
         };
+    }
+
+    // Resume onboarding on load if mid-sequence
+    if (localStorage.getItem('linktiles_onboarding_step')) {
+        setTimeout(showOnboardingStep, 500);
     }
 
 // Track last known mouse position during drag
@@ -1110,6 +1177,7 @@ new Sortable(document.getElementById('projects-list'), {
                 };
 
                 await db.dashboards.add(defaultDashboard);
+                await ensureUnassignedProjects();
 
                 // Select it
                 localStorage.setItem('currentDashboardId', defaultDashboard.id);
@@ -1120,6 +1188,7 @@ new Sortable(document.getElementById('projects-list'), {
                 if (currentDashboardTitle) currentDashboardTitle.textContent = defaultDashboard.name;
                 destroyAllEditors();
                 projectsList.innerHTML = '';
+                await loadProjectsForDashboard(defaultDashboard.id);
 
                 return [defaultDashboard];
             }
@@ -5481,6 +5550,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
             updateSaveBar();
         }
         window.__closeTabsPanel = closePanel;
+        window.__openTabsPanel = openPanel;
 
         // Escape key closes panel when no modal is open
         document.addEventListener('keydown', (e) => {
