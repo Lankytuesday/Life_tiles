@@ -2494,7 +2494,7 @@ window.__lifetilesRefresh = async () => {
 
         // Open each tile URL in a new tab (using chrome.tabs API for proper ordering)
         for (const tile of tiles) {
-            if (tile.url) {
+            if (tile.url && !isInternalUrl(tile.url)) {
                 if (typeof chrome !== 'undefined' && chrome.tabs?.create) {
                     await chrome.tabs.create({ url: tile.url, active: false });
                 } else {
@@ -3767,6 +3767,7 @@ window.__lifetilesRefresh = async () => {
             if (!e.target.closest('.tile-menu') && !e.target.closest('.tile-menu-trigger')) {
                 e.preventDefault(); // keep drag/click behavior clean
                 // Always open tiles in a new tab
+                if (isInternalUrl(tileData.url)) return;
                 const win = window.open(tileData.url, '_blank', 'noopener,noreferrer');
                 // (optional) focus the new tab if the browser allows
                 win?.focus?.();
