@@ -4228,8 +4228,14 @@ async function importDashboardsJSON() {
                 const existingDashboards = await db.dashboards.toArray();
                 for (const dash of existingDashboards) {
                     if (dash.name === 'Personal' || dash.name === 'My Dashboard') {
-                        const projectCount = await db.projects.where('dashboardId').equals(dash.id).count();
-                        if (projectCount === 0) {
+                        const projects = await db.projects.where('dashboardId').equals(dash.id).toArray();
+                        const hasRealProjects = projects.some(p => !p.isUnassigned);
+                        if (!hasRealProjects) {
+                            // Remove the unassigned project and any tiles in it too
+                            for (const p of projects) {
+                                await db.tiles.where('projectId').equals(p.id).delete();
+                                await db.projects.delete(p.id);
+                            }
                             await db.dashboards.delete(dash.id);
                         }
                     }
