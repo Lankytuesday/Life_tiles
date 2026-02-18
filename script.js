@@ -875,7 +875,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                     ' LinkTiles for easy access.';
                 onboardingCallout.classList.add('arrow-up');
                 onboardingCallout.style.top = '16px';
-                onboardingCallout.style.right = '80px';
+                onboardingCallout.style.right = '140px';
                 onboardingCallout.style.left = '';
                 onboardingCallout.style.bottom = '';
                 onboardingCallout.classList.add('visible');
@@ -1178,6 +1178,15 @@ new Sortable(document.getElementById('projects-list'), {
 
                 await db.dashboards.add(defaultDashboard);
                 await ensureUnassignedProjects();
+
+                // Create a default starter project
+                await db.projects.add({
+                    id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                    dashboardId: defaultDashboard.id,
+                    name: 'My Project',
+                    order: 0,
+                    collapsed: false
+                });
 
                 // Select it
                 localStorage.setItem('currentDashboardId', defaultDashboard.id);
@@ -4229,8 +4238,16 @@ async function importDashboardsJSON() {
                 for (const dash of existingDashboards) {
                     if (dash.name === 'Personal' || dash.name === 'My Dashboard') {
                         const projects = await db.projects.where('dashboardId').equals(dash.id).toArray();
-                        const hasRealProjects = projects.some(p => !p.isUnassigned);
-                        if (!hasRealProjects) {
+                        let hasUserContent = false;
+                        for (const p of projects) {
+                            if (p.isUnassigned) continue;
+                            const tileCount = await db.tiles.where('projectId').equals(p.id).count();
+                            if (tileCount > 0 || p.name !== 'My Project') {
+                                hasUserContent = true;
+                                break;
+                            }
+                        }
+                        if (!hasUserContent) {
                             // Remove the unassigned project and any tiles in it too
                             for (const p of projects) {
                                 await db.tiles.where('projectId').equals(p.id).delete();
@@ -4364,6 +4381,22 @@ function processBookmarksBar(bookmarkBar) {
     const projects = [];
     const looseBookmarks = []; // Tiles to go to Unsorted
 
+    // Recursively collect all bookmarks from a folder and its subfolders
+    function collectBookmarks(node, tiles) {
+        if (!node.children) return;
+        for (const child of node.children) {
+            if (child.url && !isInternalUrl(child.url)) {
+                tiles.push({
+                    id: crypto.randomUUID(),
+                    name: child.title,
+                    url: child.url
+                });
+            } else if (child.children) {
+                collectBookmarks(child, tiles);
+            }
+        }
+    }
+
     bookmarkBar.children.forEach(child => {
         if (child.url && !isInternalUrl(child.url)) {
             // Single bookmark goes into Unsorted
@@ -4373,17 +4406,9 @@ function processBookmarksBar(bookmarkBar) {
                 url: child.url
             });
         } else if (child.children) {
-            // Folder becomes a new project
+            // Folder becomes a new project — flatten all subfolders into it
             const tiles = [];
-            child.children.forEach(bookmark => {
-                if (bookmark.url && !isInternalUrl(bookmark.url)) {
-                    tiles.push({
-                        id: crypto.randomUUID(),
-                        name: bookmark.title,
-                        url: bookmark.url
-                    });
-                }
-            });
+            collectBookmarks(child, tiles);
             if (tiles.length > 0) {
                 projects.push({
                     id: crypto.randomUUID(),
@@ -4473,6 +4498,15 @@ async function importGoogleBookmarks() {
                         tile.dashboardId = selectedDashboardId;
                         tile.order = tileOrder++;
                         await db.tiles.put(tile);
+                    }
+                }
+
+                // Remove empty default "My Project" after import
+                const allProjects = await db.projects.where('dashboardId').equals(selectedDashboardId).toArray();
+                for (const p of allProjects) {
+                    if (p.name === 'My Project' && !p.isUnassigned) {
+                        const tileCount = await db.tiles.where('projectId').equals(p.id).count();
+                        if (tileCount === 0) await db.projects.delete(p.id);
                     }
                 }
 
