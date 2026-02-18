@@ -5858,7 +5858,7 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                         item.classList.add('dragging');
                         document.body.classList.add('dragging', 'dragging-panel-tab');
                         e.dataTransfer.effectAllowed = 'copy';
-                        e.dataTransfer.setData('text/plain', draggedTabs.map(t => t.url).join('\n'));
+                        e.dataTransfer.setData('application/x-linktiles', '1');
 
                         // Custom drag image showing count when multi-dragging
                         if (draggedTabs.length > 1) {
