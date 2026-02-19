@@ -2254,6 +2254,7 @@ window.__lifetilesRefresh = async () => {
             if (!grouped[project.id]) {
                 const dashboard = project.dashboardId ? dashboardMap[project.dashboardId] : null;
                 grouped[project.id] = {
+                    projectId: project.id,
                     projectName: project.name || 'Untitled Project',
                     spaceName: dashboard ? dashboard.name : '',
                     color: (dashboard && dashboard.color) || '#a5d0f4',
@@ -2261,6 +2262,7 @@ window.__lifetilesRefresh = async () => {
                 };
             }
             grouped[project.id].dates.push({
+                dateId: dateItem.id,
                 label: dateItem.label || 'Untitled',
                 start: dateItem.start,
                 end: dateItem.end || null
@@ -2361,7 +2363,7 @@ window.__lifetilesRefresh = async () => {
             for (const d of group.dates) {
                 const alt = eventIdx % 2 === 1 ? ' alt' : '';
 
-                labelsHtml += `<div class="timeline-label-row${alt}">
+                labelsHtml += `<div class="timeline-label-row${alt}" data-project-id="${group.projectId}" data-date-id="${d.dateId}">
                     <div class="timeline-label-name" title="${escapeHtml(d.label)}">${escapeHtml(d.label)}</div>
                 </div>`;
 
@@ -2377,7 +2379,7 @@ window.__lifetilesRefresh = async () => {
                         // Dot marker + label text beside it
                         const dotTop = yPos + ROW_H / 2;
                         const dotLeft = startOff * DAY_W + DAY_W / 2;
-                        barsHtml += `<div class="timeline-marker" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
+                        barsHtml += `<div class="timeline-marker" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
                         barsHtml += `<span class="timeline-marker-label" style="left:${dotLeft + 8}px;top:${yPos}px;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
                     } else {
                         const endOff = dayOffset(d.end);
@@ -2385,7 +2387,7 @@ window.__lifetilesRefresh = async () => {
                         const barWidth = (endOff - startOff + 1) * DAY_W;
                         const barTop = yPos + (ROW_H - BAR_H) / 2;
                         const textLabel = `<span class="timeline-bar-text">${escapeHtml(d.label)}</span>`;
-                        barsHtml += `<div class="timeline-bar" style="left:${barLeft}px;top:${barTop}px;width:${barWidth}px;background-color:${group.color}" title="${tipText}">${textLabel}</div>`;
+                        barsHtml += `<div class="timeline-bar" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${barLeft}px;top:${barTop}px;width:${barWidth}px;background-color:${group.color}" title="${tipText}">${textLabel}</div>`;
                     }
                 }
 
@@ -2431,10 +2433,185 @@ window.__lifetilesRefresh = async () => {
             labelColBody.scrollTop = chart.scrollTop;
         });
 
+        // Click handlers for bars, markers, and label rows
+        container.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-date-id]');
+            if (!target) return;
+            const projectId = target.dataset.projectId;
+            const dateId = target.dataset.dateId;
+            if (projectId && dateId) openTimelineDetail(projectId, dateId, container);
+        });
+
         // Auto-scroll to make today visible
         const todayLeft = todayOff * DAY_W;
         const viewWidth = chart.clientWidth;
         chart.scrollLeft = Math.max(0, todayLeft - viewWidth / 3);
+    }
+
+    // Track active detail for re-opening after chart re-render
+    let activeDetailProjectId = null;
+    let activeDetailDateId = null;
+
+    /**
+     * Re-render the timeline and re-open the detail sidebar if one was active
+     */
+    async function refreshTimeline() {
+        const pId = activeDetailProjectId;
+        const dId = activeDetailDateId;
+        await loadTimelineView();
+        if (pId && dId) {
+            const container = projectsList.querySelector('.timeline-view-container');
+            if (container) openTimelineDetail(pId, dId, container);
+        }
+    }
+
+    /**
+     * Open the timeline detail sidebar for a specific date entry
+     */
+    async function openTimelineDetail(projectId, dateId, container) {
+        const project = await db.projects.get(projectId);
+        const dateItem = await db.projectDates.get(dateId);
+        if (!project || !dateItem) return;
+
+        activeDetailProjectId = projectId;
+        activeDetailDateId = dateId;
+
+        // Get space name
+        let spaceName = '';
+        if (project.dashboardId) {
+            const dashboard = await db.dashboards.get(project.dashboardId);
+            if (dashboard) spaceName = dashboard.name;
+        }
+
+        // Remove existing sidebar if any
+        closeTimelineDetail(container);
+
+        const sidebar = document.createElement('div');
+        sidebar.className = 'timeline-detail-sidebar';
+        sidebar.innerHTML = `
+            <div class="timeline-detail-header">
+                <span class="timeline-detail-title">Details</span>
+                <button class="timeline-detail-close" title="Close" aria-label="Close">&times;</button>
+            </div>
+            <div class="timeline-detail-body">
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Space</label>
+                    <div class="timeline-detail-value timeline-detail-readonly">${escapeHtml(spaceName)}</div>
+                </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Project</label>
+                    <div class="timeline-detail-value timeline-detail-editable" data-field="projectName" contenteditable="true">${escapeHtml(project.name || '')}</div>
+                </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Date Label</label>
+                    <div class="timeline-detail-value timeline-detail-editable" data-field="dateLabel" contenteditable="true">${escapeHtml(dateItem.label || '')}</div>
+                </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Start Date</label>
+                    <input type="date" class="timeline-detail-date" data-field="startDate" value="${dateItem.start || ''}">
+                </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">End Date</label>
+                    <input type="date" class="timeline-detail-date" data-field="endDate" value="${dateItem.end || ''}">
+                </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Notes</label>
+                    <textarea class="timeline-detail-notes" data-field="notes" placeholder="Add notes...">${escapeHtml(project.notes || '')}</textarea>
+                </div>
+            </div>
+        `;
+
+        container.appendChild(sidebar);
+
+        // Trigger slide-in
+        requestAnimationFrame(() => {
+            sidebar.classList.add('open');
+            container.classList.add('detail-open');
+        });
+
+        // Close button
+        sidebar.querySelector('.timeline-detail-close').onclick = () => {
+            closeTimelineDetail(container);
+        };
+
+        // Save on blur for editable fields
+        sidebar.querySelector('[data-field="projectName"]').addEventListener('blur', async (e) => {
+            const newName = e.target.textContent.trim();
+            if (newName && newName !== project.name) {
+                await db.projects.update(projectId, { name: newName });
+                await refreshTimeline();
+            }
+        });
+
+        sidebar.querySelector('[data-field="dateLabel"]').addEventListener('blur', async (e) => {
+            const newLabel = e.target.textContent.trim();
+            if (newLabel && newLabel !== dateItem.label) {
+                await db.projectDates.update(dateId, { label: newLabel });
+                await refreshTimeline();
+            }
+        });
+
+        sidebar.querySelector('[data-field="startDate"]').addEventListener('change', async (e) => {
+            const newStart = e.target.value;
+            if (newStart && newStart !== dateItem.start) {
+                await db.projectDates.update(dateId, { start: newStart });
+                await refreshTimeline();
+            }
+        });
+
+        sidebar.querySelector('[data-field="endDate"]').addEventListener('change', async (e) => {
+            const newEnd = e.target.value || null;
+            if (newEnd !== (dateItem.end || null)) {
+                await db.projectDates.update(dateId, { end: newEnd });
+                await refreshTimeline();
+            }
+        });
+
+        sidebar.querySelector('[data-field="notes"]').addEventListener('blur', async (e) => {
+            const newNotes = e.target.value;
+            if (newNotes !== (project.notes || '')) {
+                await db.projects.update(projectId, { notes: newNotes });
+            }
+        });
+
+        // Enter key on editable fields should blur instead of inserting newline
+        sidebar.querySelectorAll('.timeline-detail-editable').forEach(el => {
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    el.blur();
+                }
+            });
+        });
+
+        // Escape closes sidebar
+        sidebar._escHandler = (e) => {
+            if (e.key === 'Escape') closeTimelineDetail(container);
+        };
+        document.addEventListener('keydown', sidebar._escHandler);
+    }
+
+    /**
+     * Close the timeline detail sidebar
+     */
+    function closeTimelineDetail(container) {
+        if (!container) return;
+        const sidebar = container.querySelector('.timeline-detail-sidebar');
+        if (!sidebar) return;
+
+        activeDetailProjectId = null;
+        activeDetailDateId = null;
+
+        if (sidebar._escHandler) {
+            document.removeEventListener('keydown', sidebar._escHandler);
+        }
+
+        sidebar.classList.remove('open');
+        container.classList.remove('detail-open');
+
+        sidebar.addEventListener('transitionend', () => {
+            sidebar.remove();
+        }, { once: true });
     }
 
     /**
