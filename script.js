@@ -2355,7 +2355,7 @@ window.__lifetilesRefresh = async () => {
         for (const group of groups) {
             // Project heading row
             const colorDot = `<span class="timeline-heading-dot" style="background:${group.color}"></span>`;
-            labelsHtml += `<div class="timeline-heading-row" style="height:${HEADER_H}px">${colorDot}<span class="timeline-heading-name" title="${escapeHtml(group.spaceName + ' / ' + group.projectName)}">${escapeHtml(group.projectName)}</span></div>`;
+            labelsHtml += `<div class="timeline-heading-row" data-project-id="${group.projectId}" style="height:${HEADER_H}px">${colorDot}<span class="timeline-heading-name" title="${escapeHtml(group.spaceName + ' / ' + group.projectName)}">${escapeHtml(group.projectName)}</span></div>`;
             barsHtml += `<div class="timeline-heading-stripe" style="top:${yPos}px;height:${HEADER_H}px;width:${totalWidth}px"></div>`;
             yPos += HEADER_H;
 
@@ -2433,13 +2433,13 @@ window.__lifetilesRefresh = async () => {
             labelColBody.scrollTop = chart.scrollTop;
         });
 
-        // Click handlers for bars, markers, and label rows
+        // Click handlers for bars, markers, label rows, and project headings
         container.addEventListener('click', (e) => {
-            const target = e.target.closest('[data-date-id]');
+            const target = e.target.closest('[data-project-id]');
             if (!target) return;
             const projectId = target.dataset.projectId;
-            const dateId = target.dataset.dateId;
-            if (projectId && dateId) openTimelineDetail(projectId, dateId, container);
+            const dateId = target.dataset.dateId || null;
+            if (projectId) openTimelineDetail(projectId, dateId, container);
         });
 
         // Auto-scroll to make today visible
@@ -2448,147 +2448,605 @@ window.__lifetilesRefresh = async () => {
         chart.scrollLeft = Math.max(0, todayLeft - viewWidth / 3);
     }
 
-    // Track active detail for re-opening after chart re-render
+    // Track active project/date for re-opening sidebar after chart re-render
     let activeDetailProjectId = null;
     let activeDetailDateId = null;
+
+    /**
+     * Highlight the selected date's bar/marker on the timeline chart.
+     * Clears previous highlight, then adds .highlighted to matching element.
+     */
+    function highlightTimelineBar(container, dateId) {
+        activeDetailDateId = dateId;
+        container.querySelectorAll('.timeline-bar.highlighted, .timeline-marker.highlighted').forEach(el => el.classList.remove('highlighted'));
+        if (dateId) {
+            const bar = container.querySelector(`.timeline-bar[data-date-id="${dateId}"], .timeline-marker[data-date-id="${dateId}"]`);
+            if (bar) bar.classList.add('highlighted');
+        }
+    }
 
     /**
      * Re-render the timeline and re-open the detail sidebar if one was active
      */
     async function refreshTimeline() {
         const pId = activeDetailProjectId;
-        const dId = activeDetailDateId;
+
+        // Preserve scroll position and sidebar before re-rendering
+        const oldContainer = projectsList.querySelector('.timeline-view-container');
+        const oldChart = oldContainer ? oldContainer.querySelector('.timeline-chart') : null;
+        const savedScrollLeft = oldChart ? oldChart.scrollLeft : null;
+        const savedScrollTop = oldChart ? oldChart.scrollTop : null;
+        const existingSidebar = oldContainer ? oldContainer.querySelector('.timeline-detail-sidebar') : null;
+        if (existingSidebar) existingSidebar.remove();
+
         await loadTimelineView();
-        if (pId && dId) {
-            const container = projectsList.querySelector('.timeline-view-container');
-            if (container) openTimelineDetail(pId, dId, container);
+
+        // Restore scroll position
+        const newContainer = projectsList.querySelector('.timeline-view-container');
+        if (savedScrollLeft !== null && newContainer) {
+            const newChart = newContainer.querySelector('.timeline-chart');
+            if (newChart) {
+                newChart.scrollLeft = savedScrollLeft;
+                newChart.scrollTop = savedScrollTop;
+            }
         }
+        if (existingSidebar && newContainer) {
+            // Re-attach the sidebar without close/reopen animation
+            newContainer.appendChild(existingSidebar);
+            newContainer.classList.add('detail-open');
+            // Re-highlight bar/marker on fresh chart
+            highlightTimelineBar(newContainer, activeDetailDateId);
+        } else if (pId && newContainer) {
+            openTimelineDetail(pId, null, newContainer);
+        }
+    }
+
+    /**
+     * Shared Notion-style calendar date picker modal.
+     * Used by both the timeline sidebar and the project calendar section.
+     * @param {Object} opts
+     * @param {string} [opts.initialStart] - Pre-populate start date (YYYY-MM-DD)
+     * @param {string} [opts.initialEnd] - Pre-populate end date (YYYY-MM-DD)
+     * @param {string} [opts.initialLabel] - Pre-fill the label input
+     * @param {boolean} [opts.showLabel=false] - Show "Event name" text input
+     * @param {function} opts.onSave - Callback receiving { start, end, label }
+     */
+    function openCalendarDatePickerModal({ initialStart, initialEnd, initialLabel, showLabel, onSave }) {
+        // Remove any existing modal
+        const existing = document.querySelector('.calendar-date-modal');
+        if (existing) existing.remove();
+
+        // Modal overlay
+        const dateModal = document.createElement('div');
+        dateModal.className = 'calendar-date-modal';
+        const dateModalContent = document.createElement('div');
+        dateModalContent.className = 'calendar-date-modal-content';
+
+        // Date display fields
+        const dateFields = document.createElement('div');
+        dateFields.className = 'calendar-date-fields';
+        const startField = document.createElement('button');
+        startField.className = 'calendar-date-field active';
+        startField.textContent = 'Start date';
+        const endField = document.createElement('button');
+        endField.className = 'calendar-date-field';
+        endField.textContent = 'End date';
+        endField.style.display = 'none';
+        dateFields.appendChild(startField);
+        dateFields.appendChild(endField);
+
+        // End date toggle
+        let endDateEnabled = !!initialEnd;
+        const endToggleRow = document.createElement('div');
+        endToggleRow.className = 'calendar-end-toggle-row';
+        const endToggleLabel = document.createElement('span');
+        endToggleLabel.textContent = 'End date';
+        const endToggleTrack = document.createElement('button');
+        endToggleTrack.className = 'calendar-toggle-track' + (endDateEnabled ? ' on' : '');
+        endToggleTrack.innerHTML = `<span class="calendar-toggle-thumb"></span>`;
+        endToggleRow.appendChild(endToggleLabel);
+        endToggleRow.appendChild(endToggleTrack);
+
+        endToggleTrack.addEventListener('click', (e) => {
+            e.stopPropagation();
+            endDateEnabled = !endDateEnabled;
+            endToggleTrack.classList.toggle('on', endDateEnabled);
+            endField.style.display = endDateEnabled ? '' : 'none';
+            if (!endDateEnabled) {
+                pickedEnd = null;
+                activeField = 'start';
+            } else {
+                activeField = 'end';
+            }
+            updateDateFields();
+            renderPicker();
+        });
+
+        // Calendar grid state
+        let pickedStart = initialStart || null;
+        let pickedEnd = initialEnd || null;
+        let activeField = 'start';
+
+        // Open to the month of the start date, or today
+        const initDate = pickedStart ? (() => { const [y, m] = pickedStart.split('-').map(Number); return { y, m: m - 1 }; })() : { y: new Date().getFullYear(), m: new Date().getMonth() };
+        let calViewYear = initDate.y;
+        let calViewMonth = initDate.m;
+
+        // Show end field if end date exists
+        if (endDateEnabled) {
+            endField.style.display = '';
+        }
+
+        const calGrid = document.createElement('div');
+        calGrid.className = 'calendar-picker-grid';
+
+        // Nav
+        const calNav = document.createElement('div');
+        calNav.className = 'calendar-picker-nav';
+        const calMonthLabel = document.createElement('span');
+        calMonthLabel.className = 'calendar-picker-month';
+        const todayBtn = document.createElement('button');
+        todayBtn.className = 'calendar-picker-today';
+        todayBtn.textContent = 'Today';
+        const navRight = document.createElement('span');
+        navRight.className = 'calendar-picker-arrows';
+        const prevBtn = document.createElement('button');
+        prevBtn.className = 'calendar-picker-arrow';
+        prevBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'calendar-picker-arrow';
+        nextBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+        navRight.appendChild(todayBtn);
+        navRight.appendChild(prevBtn);
+        navRight.appendChild(nextBtn);
+        calNav.appendChild(calMonthLabel);
+        calNav.appendChild(navRight);
+        calGrid.appendChild(calNav);
+
+        prevBtn.addEventListener('click', (e) => { e.stopPropagation(); calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; } renderPicker(); });
+        nextBtn.addEventListener('click', (e) => { e.stopPropagation(); calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; } renderPicker(); });
+        todayBtn.addEventListener('click', (e) => { e.stopPropagation(); const now = new Date(); calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); renderPicker(); });
+
+        // DOW header
+        const dowRow = document.createElement('div');
+        dowRow.className = 'calendar-picker-dow';
+        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
+            const cell = document.createElement('div');
+            cell.textContent = d;
+            dowRow.appendChild(cell);
+        });
+        calGrid.appendChild(dowRow);
+
+        // Days container
+        const daysContainer = document.createElement('div');
+        daysContainer.className = 'calendar-picker-days';
+        calGrid.appendChild(daysContainer);
+
+        function toDateStr(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        function formatFieldDate(dateStr) {
+            if (!dateStr) return null;
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+
+        function updateDateFields() {
+            startField.textContent = formatFieldDate(pickedStart) || 'Start date';
+            startField.classList.toggle('has-value', !!pickedStart);
+            endField.textContent = formatFieldDate(pickedEnd) || 'End date';
+            endField.classList.toggle('has-value', !!pickedEnd);
+            startField.classList.toggle('active', activeField === 'start');
+            endField.classList.toggle('active', activeField === 'end');
+        }
+
+        startField.addEventListener('click', (e) => { e.stopPropagation(); activeField = 'start'; updateDateFields(); });
+        endField.addEventListener('click', (e) => { e.stopPropagation(); if (endDateEnabled) { activeField = 'end'; updateDateFields(); } });
+
+        function renderPicker() {
+            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            calMonthLabel.textContent = `${monthNames[calViewMonth]} ${calViewYear}`;
+            daysContainer.innerHTML = '';
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
+            const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
+            const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+            const prevMonthDays = new Date(calViewYear, calViewMonth, 0).getDate();
+            const totalCells = 42;
+
+            function pickDate(dateStr) {
+                if (!endDateEnabled) {
+                    pickedStart = dateStr;
+                    pickedEnd = null;
+                } else if (activeField === 'start') {
+                    pickedStart = dateStr;
+                    if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
+                    activeField = 'end';
+                } else {
+                    if (pickedStart && dateStr < pickedStart) {
+                        pickedEnd = pickedStart;
+                        pickedStart = dateStr;
+                    } else {
+                        pickedEnd = dateStr;
+                    }
+                    activeField = 'start';
+                }
+                updateDateFields();
+            }
+
+            function makeCell(dateStr, dayNum, isOutside) {
+                const cell = document.createElement('div');
+                cell.className = 'calendar-picker-day' + (isOutside ? ' outside' : '');
+                cell.textContent = dayNum;
+                if (dateStr === todayStr) cell.classList.add('today');
+                if (dateStr === pickedStart) cell.classList.add('selected-start');
+                if (dateStr === pickedEnd) cell.classList.add('selected-end');
+                if (pickedStart && pickedEnd) {
+                    if (dateStr > pickedStart && dateStr < pickedEnd) cell.classList.add('in-range');
+                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add('range-start');
+                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add('range-end');
+                    const [cy, cm, cd] = dateStr.split('-').map(Number);
+                    const dow = new Date(cy, cm - 1, cd).getDay();
+                    if (cell.classList.contains('in-range') || cell.classList.contains('range-start') || cell.classList.contains('range-end')) {
+                        if (dow === 6) cell.classList.add('row-end');
+                        if (dow === 0) cell.classList.add('row-start');
+                    }
+                }
+                cell.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    pickDate(dateStr);
+                    renderPicker();
+                });
+                return cell;
+            }
+
+            // Previous month trailing days
+            for (let i = firstDay - 1; i >= 0; i--) {
+                const day = prevMonthDays - i;
+                const pm = calViewMonth === 0 ? 11 : calViewMonth - 1;
+                const py = calViewMonth === 0 ? calViewYear - 1 : calViewYear;
+                daysContainer.appendChild(makeCell(toDateStr(py, pm, day), day, true));
+            }
+
+            // Current month
+            for (let d = 1; d <= daysInMonth; d++) {
+                daysContainer.appendChild(makeCell(toDateStr(calViewYear, calViewMonth, d), d, false));
+            }
+
+            // Next month trailing days
+            const cellsSoFar = firstDay + daysInMonth;
+            const trailing = totalCells - cellsSoFar;
+            const nm = calViewMonth === 11 ? 0 : calViewMonth + 1;
+            const ny = calViewMonth === 11 ? calViewYear + 1 : calViewYear;
+            for (let d = 1; d <= trailing; d++) {
+                daysContainer.appendChild(makeCell(toDateStr(ny, nm, d), d, true));
+            }
+        }
+
+        // Clear button
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'calendar-picker-clear';
+        clearBtn.textContent = 'Clear';
+        clearBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            pickedStart = null;
+            pickedEnd = null;
+            activeField = 'start';
+            updateDateFields();
+            renderPicker();
+        });
+
+        // Modal buttons
+        const modalButtons = document.createElement('div');
+        modalButtons.className = 'calendar-modal-buttons';
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'calendar-save-btn';
+        saveBtn.textContent = 'Save';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'calendar-cancel-btn';
+        cancelBtn.textContent = 'Cancel';
+        modalButtons.appendChild(cancelBtn);
+        modalButtons.appendChild(saveBtn);
+
+        // Optional label input
+        let labelInput = null;
+        if (showLabel) {
+            labelInput = document.createElement('input');
+            labelInput.type = 'text';
+            labelInput.className = 'calendar-label-input';
+            labelInput.placeholder = 'Event name';
+            if (initialLabel) labelInput.value = initialLabel;
+        }
+
+        // Assemble modal
+        if (labelInput) dateModalContent.appendChild(labelInput);
+        dateModalContent.appendChild(dateFields);
+        dateModalContent.appendChild(calGrid);
+        dateModalContent.appendChild(endToggleRow);
+        dateModalContent.appendChild(clearBtn);
+        dateModalContent.appendChild(modalButtons);
+        dateModal.appendChild(dateModalContent);
+
+        function hideModal() {
+            dateModal.style.display = 'none';
+            if (dateModal.parentNode) dateModal.parentNode.removeChild(dateModal);
+        }
+
+        saveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (showLabel) {
+                const label = labelInput.value.trim();
+                if (!label || !pickedStart) return;
+                hideModal();
+                onSave({ start: pickedStart, end: pickedEnd, label: label });
+            } else {
+                hideModal();
+                if (pickedStart) {
+                    onSave({ start: pickedStart, end: pickedEnd });
+                }
+            }
+        });
+
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideModal();
+        });
+
+        dateModal.addEventListener('click', (e) => {
+            if (e.target === dateModal) hideModal();
+        });
+
+        // Show modal
+        document.body.appendChild(dateModal);
+        dateModal.style.display = 'flex';
+        updateDateFields();
+        renderPicker();
+        if (labelInput) labelInput.focus();
     }
 
     /**
      * Open the timeline detail sidebar for a specific date entry
      */
-    async function openTimelineDetail(projectId, dateId, container) {
+    // Format date range for display
+    function formatTimelineDateRange(startStr, endStr) {
+        if (!startStr) return '';
+        const [sy, sm, sd] = startStr.split('-').map(Number);
+        const startDate = new Date(sy, sm - 1, sd);
+        if (!endStr || endStr === startStr) {
+            return startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
+        const [ey, em, ed] = endStr.split('-').map(Number);
+        const endDate = new Date(ey, em - 1, ed);
+        const startOpts = { month: 'short', day: 'numeric' };
+        const endOpts = { month: 'short', day: 'numeric' };
+        if (sy !== ey) { startOpts.year = 'numeric'; endOpts.year = 'numeric'; }
+        return `${startDate.toLocaleDateString('en-US', startOpts)} – ${endDate.toLocaleDateString('en-US', endOpts)}`;
+    }
+
+    async function openTimelineDetail(projectId, highlightDateId, container) {
         const project = await db.projects.get(projectId);
-        const dateItem = await db.projectDates.get(dateId);
-        if (!project || !dateItem) return;
+        if (!project) return;
 
-        activeDetailProjectId = projectId;
-        activeDetailDateId = dateId;
-
-        // Get space name
-        let spaceName = '';
-        if (project.dashboardId) {
-            const dashboard = await db.dashboards.get(project.dashboardId);
-            if (dashboard) spaceName = dashboard.name;
+        // If sidebar is already showing this project, just update highlight
+        const existingSidebar = container.querySelector('.timeline-detail-sidebar');
+        if (existingSidebar && activeDetailProjectId === projectId) {
+            // Update highlight on date rows and chart bar
+            existingSidebar.querySelectorAll('.timeline-sidebar-date').forEach(row => {
+                row.classList.toggle('highlighted', row.dataset.dateId === highlightDateId);
+            });
+            highlightTimelineBar(container, highlightDateId);
+            return;
         }
 
-        // Remove existing sidebar if any
-        closeTimelineDetail(container);
+        activeDetailProjectId = projectId;
 
+        // If sidebar exists for a different project, repopulate in place
+        if (existingSidebar) {
+            await populateTimelineSidebar(existingSidebar, project, projectId, highlightDateId, container);
+            return;
+        }
+
+        // Create fresh sidebar shell
         const sidebar = document.createElement('div');
         sidebar.className = 'timeline-detail-sidebar';
         sidebar.innerHTML = `
-            <div class="timeline-detail-header">
-                <span class="timeline-detail-title">Details</span>
-                <button class="timeline-detail-close" title="Close" aria-label="Close">&times;</button>
-            </div>
+            <button class="timeline-detail-collapse" title="Close sidebar" aria-label="Close sidebar">&rsaquo;&rsaquo;</button>
             <div class="timeline-detail-body">
                 <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Space</label>
-                    <div class="timeline-detail-value timeline-detail-readonly">${escapeHtml(spaceName)}</div>
+                    <div class="timeline-detail-value timeline-detail-editable" data-field="projectName" contenteditable="true"></div>
                 </div>
                 <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Project</label>
-                    <div class="timeline-detail-value timeline-detail-editable" data-field="projectName" contenteditable="true">${escapeHtml(project.name || '')}</div>
-                </div>
-                <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Date Label</label>
-                    <div class="timeline-detail-value timeline-detail-editable" data-field="dateLabel" contenteditable="true">${escapeHtml(dateItem.label || '')}</div>
-                </div>
-                <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Start Date</label>
-                    <input type="date" class="timeline-detail-date" data-field="startDate" value="${dateItem.start || ''}">
-                </div>
-                <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">End Date</label>
-                    <input type="date" class="timeline-detail-date" data-field="endDate" value="${dateItem.end || ''}">
+                    <label class="timeline-detail-label">Dates</label>
+                    <div class="timeline-sidebar-dates" data-field="datesList"></div>
                 </div>
                 <div class="timeline-detail-field">
                     <label class="timeline-detail-label">Notes</label>
-                    <textarea class="timeline-detail-notes" data-field="notes" placeholder="Add notes...">${escapeHtml(project.notes || '')}</textarea>
+                    <div class="timeline-detail-notes-editor" data-field="notes"></div>
                 </div>
             </div>
         `;
 
         container.appendChild(sidebar);
 
-        // Trigger slide-in
+        sidebar.querySelector('.timeline-detail-collapse').onclick = () => {
+            closeTimelineDetail(container);
+        };
+
+        sidebar._escHandler = (e) => {
+            if (e.key === 'Escape') closeTimelineDetail(container);
+        };
+        document.addEventListener('keydown', sidebar._escHandler);
+
+        await populateTimelineSidebar(sidebar, project, projectId, highlightDateId, container);
+
         requestAnimationFrame(() => {
             sidebar.classList.add('open');
             container.classList.add('detail-open');
         });
+    }
 
-        // Close button
-        sidebar.querySelector('.timeline-detail-close').onclick = () => {
-            closeTimelineDetail(container);
-        };
+    /**
+     * Populate or re-populate the timeline sidebar for a project.
+     * Shows project name, all dates as a list, and the notes editor.
+     */
+    async function populateTimelineSidebar(sidebar, project, projectId, highlightDateId, container) {
+        // Destroy any prior timeline TipTap editor
+        if (sidebar._timelineEditorKey) {
+            destroyEditorForProject(sidebar._timelineEditorKey);
+        }
 
-        // Save on blur for editable fields
-        sidebar.querySelector('[data-field="projectName"]').addEventListener('blur', async (e) => {
+        const projectNameEl = sidebar.querySelector('[data-field="projectName"]');
+        const datesListEl = sidebar.querySelector('[data-field="datesList"]');
+        const notesContainer = sidebar.querySelector('[data-field="notes"]');
+
+        // Project name
+        const newProjectName = projectNameEl.cloneNode(false);
+        newProjectName.textContent = project.name || '';
+        newProjectName.setAttribute('contenteditable', 'true');
+        newProjectName.setAttribute('data-field', 'projectName');
+        newProjectName.className = projectNameEl.className;
+        projectNameEl.parentNode.replaceChild(newProjectName, projectNameEl);
+
+        newProjectName.addEventListener('blur', async (e) => {
             const newName = e.target.textContent.trim();
             if (newName && newName !== project.name) {
                 await db.projects.update(projectId, { name: newName });
                 await refreshTimeline();
             }
         });
+        newProjectName.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); newProjectName.blur(); }
+        });
 
-        sidebar.querySelector('[data-field="dateLabel"]').addEventListener('blur', async (e) => {
-            const newLabel = e.target.textContent.trim();
-            if (newLabel && newLabel !== dateItem.label) {
-                await db.projectDates.update(dateId, { label: newLabel });
+        // Dates list
+        const allDates = await db.projectDates.where('projectId').equals(projectId).toArray();
+        allDates.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+        datesListEl.innerHTML = '';
+
+        for (const dateItem of allDates) {
+            const row = document.createElement('div');
+            row.className = 'timeline-sidebar-date';
+            row.dataset.dateId = dateItem.id;
+            if (dateItem.id === highlightDateId) row.classList.add('highlighted');
+
+            const label = document.createElement('span');
+            label.className = 'timeline-sidebar-date-label';
+            label.textContent = dateItem.label || 'Untitled';
+
+            const range = document.createElement('span');
+            range.className = 'timeline-sidebar-date-range';
+            range.textContent = formatTimelineDateRange(dateItem.start, dateItem.end);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'timeline-sidebar-date-delete';
+            deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+            deleteBtn.title = 'Delete date';
+
+            row.appendChild(label);
+            row.appendChild(range);
+            row.appendChild(deleteBtn);
+            datesListEl.appendChild(row);
+
+            // Click row to highlight and edit date in modal
+            row.addEventListener('click', (e) => {
+                if (e.target.closest('.timeline-sidebar-date-delete')) return;
+                // Highlight this row in sidebar and on chart
+                datesListEl.querySelectorAll('.timeline-sidebar-date').forEach(r => r.classList.remove('highlighted'));
+                row.classList.add('highlighted');
+                highlightTimelineBar(container, dateItem.id);
+                openCalendarDatePickerModal({
+                    initialStart: dateItem.start,
+                    initialEnd: dateItem.end,
+                    onSave: async ({ start, end }) => {
+                        await db.projectDates.update(dateItem.id, { start, end: end || null });
+                        dateItem.start = start;
+                        dateItem.end = end;
+                        range.textContent = formatTimelineDateRange(start, end);
+                        await refreshTimeline();
+                    }
+                });
+            });
+
+            // Delete
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await db.projectDates.delete(dateItem.id);
+                row.remove();
                 await refreshTimeline();
-            }
-        });
+            });
+        }
 
-        sidebar.querySelector('[data-field="startDate"]').addEventListener('change', async (e) => {
-            const newStart = e.target.value;
-            if (newStart && newStart !== dateItem.start) {
-                await db.projectDates.update(dateId, { start: newStart });
-                await refreshTimeline();
-            }
-        });
-
-        sidebar.querySelector('[data-field="endDate"]').addEventListener('change', async (e) => {
-            const newEnd = e.target.value || null;
-            if (newEnd !== (dateItem.end || null)) {
-                await db.projectDates.update(dateId, { end: newEnd });
-                await refreshTimeline();
-            }
-        });
-
-        sidebar.querySelector('[data-field="notes"]').addEventListener('blur', async (e) => {
-            const newNotes = e.target.value;
-            if (newNotes !== (project.notes || '')) {
-                await db.projects.update(projectId, { notes: newNotes });
-            }
-        });
-
-        // Enter key on editable fields should blur instead of inserting newline
-        sidebar.querySelectorAll('.timeline-detail-editable').forEach(el => {
-            el.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    el.blur();
+        // Add date button
+        const addBtn = document.createElement('button');
+        addBtn.className = 'timeline-sidebar-add-date';
+        addBtn.textContent = '+ Add date';
+        addBtn.addEventListener('click', () => {
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            openCalendarDatePickerModal({
+                initialStart: todayStr,
+                initialEnd: null,
+                showLabel: true,
+                onSave: async ({ start, end, label }) => {
+                    const newDateItem = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                        projectId: projectId,
+                        label: label,
+                        start: start,
+                        end: end || null,
+                        createdAt: Date.now()
+                    };
+                    await db.projectDates.add(newDateItem);
+                    // Re-populate sidebar to show new date
+                    const updatedProject = await db.projects.get(projectId);
+                    await populateTimelineSidebar(sidebar, updatedProject, projectId, newDateItem.id, container);
+                    await refreshTimeline();
                 }
             });
         });
+        datesListEl.appendChild(addBtn);
 
-        // Escape closes sidebar
-        sidebar._escHandler = (e) => {
-            if (e.key === 'Escape') closeTimelineDetail(container);
-        };
-        document.addEventListener('keydown', sidebar._escHandler);
+        // Notes — clear and recreate TipTap
+        notesContainer.innerHTML = '';
+        const timelineEditorKey = 'timeline-' + projectId;
+        sidebar._timelineEditorKey = timelineEditorKey;
+        const htmlContent = migrateNotesToHtml(project.notes || '');
+
+        destroyEditorForProject(timelineEditorKey);
+
+        const timelineEditor = new TipTap.Editor({
+            element: notesContainer,
+            extensions: [
+                TipTap.StarterKit.configure({
+                    heading: false,
+                    codeBlock: false,
+                    blockquote: false,
+                    horizontalRule: false,
+                }),
+                TipTap.TaskList,
+                TipTap.TaskItem.configure({ nested: true }),
+                TipTap.Placeholder.configure({ placeholder: 'Add notes...' }),
+            ],
+            content: htmlContent || '',
+            onUpdate: ({ editor: ed }) => {
+                const existingTimer = _notesSaveTimers.get(timelineEditorKey);
+                if (existingTimer) clearTimeout(existingTimer);
+                const timer = setTimeout(async () => {
+                    _notesSaveTimers.delete(timelineEditorKey);
+                    const cleanHtml = ed.getHTML().trim();
+                    if (cleanHtml.length > MAX_NOTE_SIZE) return;
+                    await db.projects.update(projectId, { notes: cleanHtml });
+                }, 300);
+                _notesSaveTimers.set(timelineEditorKey, timer);
+            },
+        });
+        tiptapEditors.set(timelineEditorKey, timelineEditor);
+
+        // Highlight the selected date's bar/marker on the chart
+        highlightTimelineBar(container, highlightDateId);
     }
 
     /**
@@ -2599,8 +3057,19 @@ window.__lifetilesRefresh = async () => {
         const sidebar = container.querySelector('.timeline-detail-sidebar');
         if (!sidebar) return;
 
+        // Destroy TipTap editor for this sidebar
+        if (sidebar._timelineEditorKey) {
+            destroyEditorForProject(sidebar._timelineEditorKey);
+        } else if (activeDetailProjectId) {
+            destroyEditorForProject('timeline-' + activeDetailProjectId);
+        }
+
+        // Remove any open calendar date modal
+        const modal = document.querySelector('.calendar-date-modal');
+        if (modal) modal.remove();
+
         activeDetailProjectId = null;
-        activeDetailDateId = null;
+        highlightTimelineBar(container, null);
 
         if (sidebar._escHandler) {
             document.removeEventListener('keydown', sidebar._escHandler);
@@ -3170,334 +3639,27 @@ window.__lifetilesRefresh = async () => {
         addDateBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add date`;
         calendarSection.appendChild(addDateBtn);
 
-        // Add-date modal (Notion-style calendar picker)
-        const dateModal = document.createElement("div");
-        dateModal.className = "calendar-date-modal";
-        const dateModalContent = document.createElement("div");
-        dateModalContent.className = "calendar-date-modal-content";
-
-        // Event name input at top
-        const labelInput = document.createElement("input");
-        labelInput.type = "text";
-        labelInput.className = "calendar-label-input";
-        labelInput.placeholder = "Event name";
-
-        // Date display fields
-        const dateFields = document.createElement("div");
-        dateFields.className = "calendar-date-fields";
-        const startField = document.createElement("button");
-        startField.className = "calendar-date-field active";
-        startField.textContent = "Start date";
-        const endField = document.createElement("button");
-        endField.className = "calendar-date-field";
-        endField.textContent = "End date";
-        endField.style.display = "none";
-        dateFields.appendChild(startField);
-        dateFields.appendChild(endField);
-
-        // End date toggle
-        let endDateEnabled = false;
-        const endToggleRow = document.createElement("div");
-        endToggleRow.className = "calendar-end-toggle-row";
-        const endToggleLabel = document.createElement("span");
-        endToggleLabel.textContent = "End date";
-        const endToggleTrack = document.createElement("button");
-        endToggleTrack.className = "calendar-toggle-track";
-        endToggleTrack.innerHTML = `<span class="calendar-toggle-thumb"></span>`;
-        endToggleRow.appendChild(endToggleLabel);
-        endToggleRow.appendChild(endToggleTrack);
-
-        endToggleTrack.addEventListener("click", (e) => {
-            e.stopPropagation();
-            endDateEnabled = !endDateEnabled;
-            endToggleTrack.classList.toggle("on", endDateEnabled);
-            endField.style.display = endDateEnabled ? "" : "none";
-            if (!endDateEnabled) {
-                pickedEnd = null;
-                activeField = 'start';
-            } else {
-                activeField = 'end';
-            }
-            updateDateFields();
-            renderPicker();
-        });
-
-        // Calendar grid
-        let calViewYear = new Date().getFullYear();
-        let calViewMonth = new Date().getMonth();
-        let pickedStart = null; // 'YYYY-MM-DD'
-        let pickedEnd = null;
-        let activeField = 'start'; // which field clicks set
-
-        const calGrid = document.createElement("div");
-        calGrid.className = "calendar-picker-grid";
-
-        // Nav
-        const calNav = document.createElement("div");
-        calNav.className = "calendar-picker-nav";
-        const calMonthLabel = document.createElement("span");
-        calMonthLabel.className = "calendar-picker-month";
-        const todayBtn = document.createElement("button");
-        todayBtn.className = "calendar-picker-today";
-        todayBtn.textContent = "Today";
-        const navRight = document.createElement("span");
-        navRight.className = "calendar-picker-arrows";
-        const prevBtn = document.createElement("button");
-        prevBtn.className = "calendar-picker-arrow";
-        prevBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`;
-        const nextBtn = document.createElement("button");
-        nextBtn.className = "calendar-picker-arrow";
-        nextBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
-        navRight.appendChild(todayBtn);
-        navRight.appendChild(prevBtn);
-        navRight.appendChild(nextBtn);
-        calNav.appendChild(calMonthLabel);
-        calNav.appendChild(navRight);
-        calGrid.appendChild(calNav);
-
-        prevBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth--; if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; } renderPicker(); });
-        nextBtn.addEventListener("click", (e) => { e.stopPropagation(); calViewMonth++; if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; } renderPicker(); });
-        todayBtn.addEventListener("click", (e) => { e.stopPropagation(); const now = new Date(); calViewYear = now.getFullYear(); calViewMonth = now.getMonth(); renderPicker(); });
-
-        // DOW header
-        const dowRow = document.createElement("div");
-        dowRow.className = "calendar-picker-dow";
-        ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
-            const cell = document.createElement("div");
-            cell.textContent = d;
-            dowRow.appendChild(cell);
-        });
-        calGrid.appendChild(dowRow);
-
-        // Days container
-        const daysContainer = document.createElement("div");
-        daysContainer.className = "calendar-picker-days";
-        calGrid.appendChild(daysContainer);
-
-        function toDateStr(y, m, d) {
-            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        }
-
-        function formatFieldDate(dateStr) {
-            if (!dateStr) return null;
-            const [y, m, d] = dateStr.split('-').map(Number);
-            return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        }
-
-        function updateDateFields() {
-            startField.textContent = formatFieldDate(pickedStart) || 'Start date';
-            startField.classList.toggle('has-value', !!pickedStart);
-            endField.textContent = formatFieldDate(pickedEnd) || 'End date';
-            endField.classList.toggle('has-value', !!pickedEnd);
-            startField.classList.toggle('active', activeField === 'start');
-            endField.classList.toggle('active', activeField === 'end');
-        }
-
-        startField.addEventListener("click", (e) => { e.stopPropagation(); activeField = 'start'; updateDateFields(); });
-        endField.addEventListener("click", (e) => { e.stopPropagation(); if (endDateEnabled) { activeField = 'end'; updateDateFields(); } });
-
-        function renderPicker() {
-            const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-            calMonthLabel.textContent = `${monthNames[calViewMonth]} ${calViewYear}`;
-            daysContainer.innerHTML = '';
-
-            const today = new Date(); today.setHours(0, 0, 0, 0);
-            const todayStr = toDateStr(today.getFullYear(), today.getMonth(), today.getDate());
-            const firstDay = new Date(calViewYear, calViewMonth, 1).getDay();
-            const daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
-            const prevMonthDays = new Date(calViewYear, calViewMonth, 0).getDate();
-            const totalCells = 42; // always 6 rows
-
-            function pickDate(dateStr) {
-                if (!endDateEnabled) {
-                    pickedStart = dateStr;
-                    pickedEnd = null;
-                } else if (activeField === 'start') {
-                    pickedStart = dateStr;
-                    if (pickedEnd && pickedEnd < pickedStart) pickedEnd = null;
-                    activeField = 'end';
-                } else {
-                    if (pickedStart && dateStr < pickedStart) {
-                        pickedEnd = pickedStart;
-                        pickedStart = dateStr;
-                    } else {
-                        pickedEnd = dateStr;
-                    }
-                    activeField = 'start';
-                }
-                updateDateFields();
-            }
-
-            // Previous month trailing days
-            for (let i = firstDay - 1; i >= 0; i--) {
-                const cell = document.createElement("div");
-                cell.className = "calendar-picker-day outside";
-                const day = prevMonthDays - i;
-                cell.textContent = day;
-                const prevMonth = calViewMonth === 0 ? 11 : calViewMonth - 1;
-                const prevYear = calViewMonth === 0 ? calViewYear - 1 : calViewYear;
-                const dateStr = toDateStr(prevYear, prevMonth, day);
-
-                if (dateStr === pickedStart) cell.classList.add("selected-start");
-                if (dateStr === pickedEnd) cell.classList.add("selected-end");
-                if (pickedStart && pickedEnd) {
-                    if (dateStr > pickedStart && dateStr < pickedEnd) cell.classList.add("in-range");
-                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
-                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
-                    const dow = new Date(prevYear, prevMonth, day).getDay();
-                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
-                        if (dow === 6) cell.classList.add("row-end");
-                        if (dow === 0) cell.classList.add("row-start");
-                    }
-                }
-
-                cell.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    pickDate(dateStr);
-                    renderPicker();
-                });
-                daysContainer.appendChild(cell);
-            }
-
-            // Current month days
-            for (let d = 1; d <= daysInMonth; d++) {
-                const cell = document.createElement("div");
-                cell.className = "calendar-picker-day";
-                const dateStr = toDateStr(calViewYear, calViewMonth, d);
-
-                if (dateStr === todayStr) cell.classList.add("today");
-                if (dateStr === pickedStart) cell.classList.add("selected-start");
-                if (dateStr === pickedEnd) cell.classList.add("selected-end");
-
-                // Range highlighting
-                if (pickedStart && pickedEnd && dateStr > pickedStart && dateStr < pickedEnd) {
-                    cell.classList.add("in-range");
-                }
-                // Row-aware range caps
-                if (pickedStart && pickedEnd) {
-                    const dow = new Date(calViewYear, calViewMonth, d).getDay();
-                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
-                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
-                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
-                        if (dow === 6) cell.classList.add("row-end");
-                        if (dow === 0) cell.classList.add("row-start");
-                    }
-                }
-
-                cell.textContent = d;
-                cell.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    pickDate(dateStr);
-                    renderPicker();
-                });
-
-                daysContainer.appendChild(cell);
-            }
-
-            // Next month leading days to fill 6 rows
-            const cellsSoFar = firstDay + daysInMonth;
-            const trailing = totalCells - cellsSoFar;
-            const nextMonth = calViewMonth === 11 ? 0 : calViewMonth + 1;
-            const nextYear = calViewMonth === 11 ? calViewYear + 1 : calViewYear;
-            for (let d = 1; d <= trailing; d++) {
-                const cell = document.createElement("div");
-                cell.className = "calendar-picker-day outside";
-                cell.textContent = d;
-                const dateStr = toDateStr(nextYear, nextMonth, d);
-
-                if (dateStr === pickedStart) cell.classList.add("selected-start");
-                if (dateStr === pickedEnd) cell.classList.add("selected-end");
-                if (pickedStart && pickedEnd) {
-                    if (dateStr > pickedStart && dateStr < pickedEnd) cell.classList.add("in-range");
-                    if (dateStr === pickedStart && dateStr !== pickedEnd) cell.classList.add("range-start");
-                    if (dateStr === pickedEnd && dateStr !== pickedStart) cell.classList.add("range-end");
-                    const dow = new Date(nextYear, nextMonth, d).getDay();
-                    if (cell.classList.contains("in-range") || cell.classList.contains("range-start") || cell.classList.contains("range-end")) {
-                        if (dow === 6) cell.classList.add("row-end");
-                        if (dow === 0) cell.classList.add("row-start");
-                    }
-                }
-
-                cell.addEventListener("click", (e) => {
-                    e.stopPropagation();
-                    pickDate(dateStr);
-                    renderPicker();
-                });
-                daysContainer.appendChild(cell);
-            }
-        }
-
-        // Clear link
-        const clearBtn = document.createElement("button");
-        clearBtn.className = "calendar-picker-clear";
-        clearBtn.textContent = "Clear";
-        clearBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            pickedStart = null;
-            pickedEnd = null;
-            activeField = 'start';
-            updateDateFields();
-            renderPicker();
-        });
-
-        // Modal buttons
-        const modalButtons = document.createElement("div");
-        modalButtons.className = "calendar-modal-buttons";
-        const saveBtn = document.createElement("button");
-        saveBtn.className = "calendar-save-btn";
-        saveBtn.textContent = "Save";
-        const cancelBtn = document.createElement("button");
-        cancelBtn.className = "calendar-cancel-btn";
-        cancelBtn.textContent = "Cancel";
-        modalButtons.appendChild(cancelBtn);
-        modalButtons.appendChild(saveBtn);
-
-        // Assemble modal
-        dateModalContent.appendChild(labelInput);
-        dateModalContent.appendChild(dateFields);
-        dateModalContent.appendChild(calGrid);
-        dateModalContent.appendChild(endToggleRow);
-        dateModalContent.appendChild(clearBtn);
-        dateModalContent.appendChild(modalButtons);
-        dateModal.appendChild(dateModalContent);
-
-        function showDateModal() {
-            const now = new Date();
-            pickedStart = toDateStr(now.getFullYear(), now.getMonth(), now.getDate());
-            pickedEnd = null;
-            activeField = 'start';
-            endDateEnabled = false;
-            endToggleTrack.classList.remove("on");
-            endField.style.display = "none";
-            calViewYear = now.getFullYear();
-            calViewMonth = now.getMonth();
-            document.body.appendChild(dateModal);
-            dateModal.style.display = "flex";
-            updateDateFields();
-            renderPicker();
-            labelInput.focus();
-        }
-
-        function hideDateModal() {
-            dateModal.style.display = "none";
-            if (dateModal.parentNode) dateModal.parentNode.removeChild(dateModal);
-            labelInput.value = '';
-            pickedStart = null;
-            pickedEnd = null;
-        }
-
         addDateBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            showDateModal();
-        });
-
-        cancelBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            hideDateModal();
-        });
-
-        dateModal.addEventListener("click", (e) => {
-            if (e.target === dateModal) hideDateModal();
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            openCalendarDatePickerModal({
+                initialStart: todayStr,
+                showLabel: true,
+                onSave: async ({ start, end, label }) => {
+                    const dateItem = {
+                        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                        projectId: projectData.id,
+                        label: label,
+                        start: start,
+                        end: end || null,
+                        createdAt: Date.now()
+                    };
+                    await db.projectDates.add(dateItem);
+                    calendarToggle.classList.add("has-dates");
+                    await loadCalendarDates();
+                }
+            });
         });
 
         // Format date for display
@@ -3573,27 +3735,6 @@ window.__lifetilesRefresh = async () => {
             if (count > 0) calendarToggle.classList.add("has-dates");
         });
 
-        // Save date handler
-        saveBtn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const label = labelInput.value.trim();
-            if (!label || !pickedStart) return;
-
-            const dateItem = {
-                id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
-                projectId: projectData.id,
-                label: label,
-                start: pickedStart,
-                end: pickedEnd || null,
-                createdAt: Date.now()
-            };
-
-            await db.projectDates.add(dateItem);
-            calendarToggle.classList.add("has-dates");
-            hideDateModal();
-            await loadCalendarDates();
-        });
-
         // Toggle calendar visibility
         let calendarLoaded = false;
         calendarToggle.addEventListener("click", async (e) => {
@@ -3617,7 +3758,7 @@ window.__lifetilesRefresh = async () => {
                     await loadCalendarDates();
                     calendarLoaded = true;
                 }
-                if (!isExpanding) hideDateModal();
+                if (!isExpanding) { const m = document.querySelector('.calendar-date-modal'); if (m) m.remove(); }
             }
         });
 
@@ -5212,11 +5353,13 @@ async function exportDashboardsJSON() {
     const dashboards = await db.dashboards.toArray();
     const projects = await db.projects.toArray();
     const tiles = await db.tiles.toArray();
+    const projectDates = await db.projectDates.toArray();
 
     const exportData = {
         dashboards,
         projects,
         tiles,
+        projectDates,
         exportDate: new Date().toISOString()
     };
 
@@ -5271,6 +5414,7 @@ async function importDashboardsJSON() {
                 }
 
                 // Import new data while preserving existing
+                const projectIdMap = {}; // old project ID -> new project ID
                 for (const dashboard of importData.dashboards) {
                     const newDashboard = {
                         ...dashboard,
@@ -5298,6 +5442,7 @@ async function importDashboardsJSON() {
                     for (const project of dashboardProjects) {
                         // Skip unassigned projects - we already created one above with the correct ID
                         if (project.isUnassigned) {
+                            projectIdMap[project.id] = unassignedProjectId;
                             // But still import the tiles from the unassigned project
                             const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
                             const existingUnassignedTiles = await db.tiles.where('projectId').equals(unassignedProjectId).toArray();
@@ -5323,6 +5468,7 @@ async function importDashboardsJSON() {
                             order: Number.isFinite(+project.order) ? project.order : projectOrder++
                         };
                         await db.projects.add(newProject);
+                        projectIdMap[project.id] = newProject.id;
 
                         // Update tile references to new project ID
                         const projectTiles = importData.tiles.filter(t => t.projectId === project.id);
@@ -5373,6 +5519,19 @@ async function importDashboardsJSON() {
                             projectId: 'global-unassigned',
                             dashboardId: null,
                             order: nextOrder++
+                        });
+                    }
+                }
+
+                // Import project dates with remapped project IDs
+                if (importData.projectDates && importData.projectDates.length > 0) {
+                    for (const dateItem of importData.projectDates) {
+                        const newProjectId = projectIdMap[dateItem.projectId];
+                        if (!newProjectId) continue; // skip orphaned dates
+                        await db.projectDates.add({
+                            ...dateItem,
+                            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                            projectId: newProjectId
                         });
                     }
                 }

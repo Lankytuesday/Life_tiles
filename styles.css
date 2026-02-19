@@ -3361,6 +3361,12 @@ body.timeline-view #main {
     z-index: 4;
 }
 
+.timeline-bar.highlighted {
+    opacity: 1;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(0, 0, 0, 0.35), 0 2px 12px rgba(0, 0, 0, 0.25);
+    z-index: 5;
+}
+
 /* Single-date marker: dot + label beside it */
 .timeline-marker {
     position: absolute;
@@ -3370,6 +3376,13 @@ body.timeline-view #main {
     transform: translate(-50%, -50%);
     z-index: 3;
     box-shadow: 0 0 0 2px white;
+}
+
+.timeline-marker.highlighted {
+    width: 14px;
+    height: 14px;
+    box-shadow: 0 0 0 3px white, 0 0 0 5px rgba(0, 0, 0, 0.35);
+    z-index: 5;
 }
 
 .timeline-marker-label {
@@ -3450,6 +3463,7 @@ body.timeline-view #main {
 
 /* Detail sidebar */
 .timeline-detail-sidebar {
+    position: relative;
     width: 0;
     min-width: 0;
     overflow: hidden;
@@ -3466,39 +3480,28 @@ body.timeline-view #main {
     min-width: 300px;
 }
 
-.timeline-detail-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-}
-
-.timeline-detail-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.timeline-detail-close {
-    width: 28px;
-    height: 28px;
+.timeline-detail-collapse {
+    position: absolute;
+    top: 12px;
+    left: 8px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     margin: 0;
     border: none;
     border-radius: var(--radius-sm);
     background: none;
     cursor: pointer;
-    font-size: 20px;
+    font-size: 16px;
     line-height: 1;
     color: #999;
     display: flex;
     align-items: center;
     justify-content: center;
+    letter-spacing: -3px;
 }
 
-.timeline-detail-close:hover {
+.timeline-detail-collapse:hover {
     background: rgba(0, 0, 0, 0.08);
     color: var(--color-text);
 }
@@ -3506,7 +3509,7 @@ body.timeline-view #main {
 .timeline-detail-body {
     flex: 1;
     overflow-y: auto;
-    padding: 16px;
+    padding: 44px 16px 16px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -3527,15 +3530,11 @@ body.timeline-view #main {
 }
 
 .timeline-detail-value {
-    font-size: 14px;
+    font-size: 18px;
+    font-weight: 600;
     color: var(--color-text);
     line-height: 1.4;
     min-height: 24px;
-}
-
-.timeline-detail-readonly {
-    color: var(--color-text-muted);
-    font-size: 13px;
 }
 
 .timeline-detail-editable {
@@ -3555,34 +3554,182 @@ body.timeline-view #main {
     background: #fafbfc;
 }
 
-.timeline-detail-date {
-    padding: 4px 8px;
-    border: 1px solid #ddd;
-    border-radius: var(--radius-sm);
-    font-size: 14px;
-    color: var(--color-text);
-    background: #fff;
-    outline: none;
+/* Timeline sidebar date list */
+.timeline-sidebar-dates {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.timeline-detail-date:focus {
-    border-color: var(--color-accent, #4a90d9);
+.timeline-sidebar-date {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.15s;
 }
 
-.timeline-detail-notes {
-    width: 100%;
-    min-height: 100px;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: var(--radius-sm);
+.timeline-sidebar-date:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.timeline-sidebar-date.highlighted {
+    background: rgba(55, 53, 47, 0.08);
+    box-shadow: inset 3px 0 0 var(--color-accent, #4a90d9);
+    border-radius: 0;
+}
+
+.timeline-sidebar-date-label {
+    flex: 1;
     font-size: 13px;
-    font-family: inherit;
     color: var(--color-text);
-    resize: vertical;
-    outline: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-sidebar-date-range {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.timeline-sidebar-date-delete {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    color: #ccc;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+}
+
+.timeline-sidebar-date:hover .timeline-sidebar-date-delete {
+    opacity: 1;
+}
+
+.timeline-sidebar-date-delete:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.08);
+}
+
+.timeline-sidebar-add-date {
+    padding: 6px 8px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    text-align: left;
+    font-family: inherit;
+    transition: background 0.15s, color 0.15s;
+}
+
+.timeline-sidebar-add-date:hover {
+    background: rgba(0, 0, 0, 0.04);
+    color: var(--color-text);
+}
+
+/* Timeline sidebar TipTap notes editor */
+.timeline-detail-notes-editor {
+    width: 100%;
     box-sizing: border-box;
 }
 
-.timeline-detail-notes:focus {
-    border-color: var(--color-accent, #4a90d9);
+.timeline-detail-notes-editor .tiptap {
+    min-height: 80px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    font-size: 13px;
+    line-height: 1.5;
+    outline: none;
+    overscroll-behavior: contain;
+}
+
+.timeline-detail-notes-editor .tiptap:focus {
+    border-color: var(--color-brand);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.timeline-detail-notes-editor .tiptap p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #999;
+    pointer-events: none;
+    height: 0;
+}
+
+.timeline-detail-notes-editor .tiptap p {
+    margin: 0 0 4px 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul {
+    margin: 4px 0;
+    padding-left: 20px;
+}
+
+.timeline-detail-notes-editor .tiptap li {
+    margin: 2px 0;
+}
+
+.timeline-detail-notes-editor .tiptap li p {
+    margin: 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+    margin: 4px 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 2px 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] li > label {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    margin-top: 2px;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+    appearance: auto;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] li > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+    text-decoration: line-through;
+    color: #999;
+}
+
+.timeline-detail-notes-editor .tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
+    margin-left: 16px;
 }
