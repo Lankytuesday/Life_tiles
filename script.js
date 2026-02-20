@@ -2290,60 +2290,66 @@ window.__lifetilesRefresh = async () => {
         const BAR_H = 28;
 
         // Calculate time bounds from all dates across all groups
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Use UTC for all arithmetic to avoid DST off-by-one errors
+        const MS_PER_DAY = 86400000;
+        const nowLocal = new Date();
+        const todayUTC = Date.UTC(nowLocal.getFullYear(), nowLocal.getMonth(), nowLocal.getDate());
 
-        let minDate = new Date(today);
-        let maxDate = new Date(today);
+        const parseUTC = (dateStr) => {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return Date.UTC(y, m - 1, d);
+        };
+
+        let minDate = todayUTC;
+        let maxDate = todayUTC;
 
         for (const group of groups) {
             for (const d of group.dates) {
                 if (d.start) {
-                    const s = new Date(d.start + 'T00:00:00');
-                    if (s < minDate) minDate = new Date(s);
-                    const e = d.end ? new Date(d.end + 'T00:00:00') : s;
-                    if (e > maxDate) maxDate = new Date(e);
+                    const s = parseUTC(d.start);
+                    if (s < minDate) minDate = s;
+                    const e = d.end ? parseUTC(d.end) : s;
+                    if (e > maxDate) maxDate = e;
                 }
             }
         }
 
         // Pad: 7 days before, 14 after
-        minDate.setDate(minDate.getDate() - 7);
-        maxDate.setDate(maxDate.getDate() + 14);
+        minDate -= 7 * MS_PER_DAY;
+        maxDate += 14 * MS_PER_DAY;
 
-        const totalDays = Math.ceil((maxDate - minDate) / 86400000) + 1;
+        const totalDays = Math.floor((maxDate - minDate) / MS_PER_DAY) + 1;
         const totalWidth = totalDays * DAY_W;
 
         const dayOffset = (dateStr) => {
-            const d = new Date(dateStr + 'T00:00:00');
-            return Math.round((d - minDate) / 86400000);
+            return Math.floor((parseUTC(dateStr) - minDate) / MS_PER_DAY);
         };
 
-        // Build month labels
+        // Build month labels (use UTC methods to stay DST-safe)
         let monthsHtml = '';
         const cursor = new Date(minDate);
-        cursor.setDate(1);
-        while (cursor <= maxDate) {
-            const monthStart = new Date(cursor);
-            if (monthStart < minDate) monthStart.setTime(minDate.getTime());
-            const off = Math.round((monthStart - minDate) / 86400000);
-            const monthName = cursor.toLocaleString('default', { month: 'short', year: 'numeric' });
+        cursor.setUTCDate(1);
+        while (cursor.getTime() <= maxDate) {
+            const monthStartMs = Math.max(cursor.getTime(), minDate);
+            const off = Math.floor((monthStartMs - minDate) / MS_PER_DAY);
+            const monthName = cursor.toLocaleString('default', { month: 'short', year: 'numeric', timeZone: 'UTC' });
             monthsHtml += `<div class="timeline-month" style="left:${off * DAY_W}px">${escapeHtml(monthName)}</div>`;
-            cursor.setMonth(cursor.getMonth() + 1);
-            cursor.setDate(1);
+            cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+            cursor.setUTCDate(1);
         }
 
         // Build daily ticks
         let ticksHtml = '';
-        const tickCursor = new Date(minDate);
-        while (tickCursor <= maxDate) {
-            const off = Math.round((tickCursor - minDate) / 86400000);
-            const dow = tickCursor.getDay();
+        let tickMs = minDate;
+        while (tickMs <= maxDate) {
+            const off = Math.floor((tickMs - minDate) / MS_PER_DAY);
+            const tickDate = new Date(tickMs);
+            const dow = tickDate.getUTCDay();
             const isMonday = dow === 1;
             const isWeekend = dow === 0 || dow === 6;
             const cls = 'timeline-day-tick' + (isMonday ? ' monday' : '') + (isWeekend ? ' weekend' : '');
-            ticksHtml += `<div class="${cls}" style="left:${off * DAY_W}px;width:${DAY_W}px">${tickCursor.getDate()}</div>`;
-            tickCursor.setDate(tickCursor.getDate() + 1);
+            ticksHtml += `<div class="${cls}" style="left:${off * DAY_W}px;width:${DAY_W}px">${tickDate.getUTCDate()}</div>`;
+            tickMs += MS_PER_DAY;
         }
 
         // Build label rows and bar rows, grouped by project
@@ -2380,7 +2386,7 @@ window.__lifetilesRefresh = async () => {
                         const dotTop = yPos + ROW_H / 2;
                         const dotLeft = startOff * DAY_W + DAY_W / 2;
                         barsHtml += `<div class="timeline-marker" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
-                        barsHtml += `<span class="timeline-marker-label" style="left:${dotLeft + 8}px;top:${yPos}px;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
+                        barsHtml += `<span class="timeline-marker-label" style="left:${dotLeft + 12}px;top:${yPos}px;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
                     } else {
                         const endOff = dayOffset(d.end);
                         const barLeft = startOff * DAY_W;
@@ -2399,7 +2405,7 @@ window.__lifetilesRefresh = async () => {
         const totalHeight = yPos;
 
         // Today marker
-        const todayOff = Math.round((today - minDate) / 86400000);
+        const todayOff = Math.floor((todayUTC - minDate) / MS_PER_DAY);
         barsHtml += `<div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight}px"><span class="timeline-today-label">Today</span></div>`;
 
         const container = document.createElement('div');
@@ -2432,6 +2438,14 @@ window.__lifetilesRefresh = async () => {
         chart.addEventListener('scroll', () => {
             labelColBody.scrollTop = chart.scrollTop;
         });
+
+        // Translate vertical mouse wheel to horizontal scroll on the Gantt chart
+        chart.addEventListener('wheel', (e) => {
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+                e.preventDefault();
+                chart.scrollLeft += e.deltaY;
+            }
+        }, { passive: false });
 
         // Click handlers for bars, markers, label rows, and project headings
         container.addEventListener('click', (e) => {

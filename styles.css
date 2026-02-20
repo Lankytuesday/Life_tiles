@@ -3386,7 +3386,7 @@ body.timeline-view #projects-list {
     top: 0;
     width: 2px;
     background: var(--color-danger);
-    z-index: 3;
+    z-index: 10;
     pointer-events: none;
 }
 
@@ -3440,9 +3440,7 @@ body.timeline-view #projects-list {
 }
 
 .timeline-marker.highlighted {
-    width: 14px;
-    height: 14px;
-    box-shadow: 0 0 0 3px white, 0 0 0 5px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 0 3px white, 0 0 0 5px rgba(0, 0, 0, 0.4);
     z-index: 5;
 }
 
@@ -3454,7 +3452,7 @@ body.timeline-view #projects-list {
     font-weight: 600;
     color: var(--color-text) !important;
     white-space: nowrap;
-    z-index: 2;
+    z-index: 6;
     pointer-events: none;
 }
 
@@ -3537,23 +3535,24 @@ body.timeline-view #projects-list {
 }
 
 .timeline-detail-sidebar.open {
-    width: 300px;
-    min-width: 300px;
+    width: 340px;
+    min-width: 340px;
 }
 
 .timeline-detail-collapse {
     position: absolute;
     top: 12px;
     left: 8px;
-    width: 24px;
-    height: 24px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
     padding: 0;
     margin: 0;
     border: none;
     border-radius: var(--radius-sm);
     background: none;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 20px;
     line-height: 1;
     color: #999;
     display: flex;
@@ -3669,6 +3668,7 @@ body.timeline-view #projects-list {
     width: 20px;
     height: 20px;
     padding: 0;
+    margin: 0;
     border: none;
     border-radius: var(--radius-sm);
     background: none;
@@ -3680,6 +3680,10 @@ body.timeline-view #projects-list {
     flex-shrink: 0;
     opacity: 0;
     transition: opacity 0.15s, color 0.15s;
+}
+
+.timeline-sidebar-date-delete svg {
+    display: block;
 }
 
 .timeline-sidebar-date:hover .timeline-sidebar-date-delete {
