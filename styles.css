@@ -135,9 +135,12 @@
     gap: 8px;
 }
 
-.search-result-item:hover,
-.search-result-item.active {
+.search-result-item:hover {
     background: var(--color-bg-hover);
+}
+
+.search-result-item.active {
+    background: rgba(26, 115, 232, 0.12);
 }
 
 .search-result-item .result-context {
