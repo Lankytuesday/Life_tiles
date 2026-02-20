@@ -2183,6 +2183,7 @@ window.__lifetilesRefresh = async () => {
         localStorage.removeItem('isViewingGlobalUnassigned');
         document.body.classList.add('timeline-view');
         document.body.classList.remove('quick-save-view');
+        if (window.__closeTabsPanel) window.__closeTabsPanel();
 
         // Update sidebar selection
         document.querySelectorAll('.sidebar-item').forEach(item => {
