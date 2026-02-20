@@ -2439,14 +2439,6 @@ window.__lifetilesRefresh = async () => {
             labelColBody.scrollTop = chart.scrollTop;
         });
 
-        // Translate vertical mouse wheel to horizontal scroll on the Gantt chart
-        chart.addEventListener('wheel', (e) => {
-            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-                e.preventDefault();
-                chart.scrollLeft += e.deltaY;
-            }
-        }, { passive: false });
-
         // Click handlers for bars, markers, label rows, and project headings
         container.addEventListener('click', (e) => {
             const target = e.target.closest('[data-project-id]');
@@ -2866,8 +2858,8 @@ window.__lifetilesRefresh = async () => {
         const sidebar = document.createElement('div');
         sidebar.className = 'timeline-detail-sidebar';
         sidebar.innerHTML = `
-            <button class="timeline-detail-collapse" title="Close sidebar" aria-label="Close sidebar">&rsaquo;&rsaquo;</button>
             <div class="timeline-detail-body">
+                <button class="timeline-detail-collapse" title="Close sidebar" aria-label="Close sidebar">&rsaquo;&rsaquo;</button>
                 <div class="timeline-detail-field">
                     <div class="timeline-detail-value timeline-detail-editable" data-field="projectName" contenteditable="true"></div>
                 </div>
@@ -2875,7 +2867,10 @@ window.__lifetilesRefresh = async () => {
                     <div class="timeline-sidebar-dates" data-field="datesList"></div>
                 </div>
                 <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Notes</label>
+                    <div class="timeline-notes-header">
+                        <label class="timeline-detail-label">Notes</label>
+                        <div class="timeline-notes-toolbar" data-field="notesToolbar"></div>
+                    </div>
                     <div class="timeline-detail-notes-editor" data-field="notes"></div>
                 </div>
                 <div class="timeline-detail-field">
@@ -2966,9 +2961,13 @@ window.__lifetilesRefresh = async () => {
             deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
             deleteBtn.title = 'Delete date';
 
+            const textCol = document.createElement('div');
+            textCol.className = 'timeline-sidebar-date-text';
+            textCol.appendChild(label);
+            textCol.appendChild(range);
+
             row.appendChild(icon);
-            row.appendChild(label);
-            row.appendChild(range);
+            row.appendChild(textCol);
             row.appendChild(deleteBtn);
             datesListEl.appendChild(row);
 
@@ -3042,6 +3041,33 @@ window.__lifetilesRefresh = async () => {
         const htmlContent = migrateNotesToHtml(project.notes || '');
 
         destroyEditorForProject(timelineEditorKey);
+
+        // Toolbar with list/checklist buttons — insert into header row
+        const toolbarSlot = sidebar.querySelector('[data-field="notesToolbar"]');
+        toolbarSlot.innerHTML = '';
+
+        const bulletBtn = document.createElement('button');
+        bulletBtn.className = 'notes-toolbar-btn';
+        bulletBtn.title = 'Bullet list';
+        bulletBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor"/><circle cx="3" cy="12" r="1" fill="currentColor"/><circle cx="3" cy="18" r="1" fill="currentColor"/></svg>`;
+
+        const checklistBtn = document.createElement('button');
+        checklistBtn.className = 'notes-toolbar-btn';
+        checklistBtn.title = 'Checklist';
+        checklistBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="4" height="4" rx="0.5"/><line x1="12" y1="7" x2="21" y2="7"/><path d="M3.5 15.5l1.5 1.5 3-3"/><line x1="12" y1="17" x2="21" y2="17"/></svg>`;
+
+        toolbarSlot.appendChild(bulletBtn);
+        toolbarSlot.appendChild(checklistBtn);
+
+        bulletBtn.addEventListener('click', () => {
+            const editor = tiptapEditors.get(timelineEditorKey);
+            if (editor) editor.chain().focus().toggleBulletList().run();
+        });
+
+        checklistBtn.addEventListener('click', () => {
+            const editor = tiptapEditors.get(timelineEditorKey);
+            if (editor) editor.chain().focus().toggleTaskList().run();
+        });
 
         const timelineEditor = new TipTap.Editor({
             element: notesContainer,

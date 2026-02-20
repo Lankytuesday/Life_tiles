@@ -24,18 +24,20 @@ db.version(6).stores({
 
 const GLOBAL_UNASSIGNED_ID = 'global-unassigned';
 
-// Create context menu items on install
+// Create context menu items on install/update
 chrome.runtime.onInstalled.addListener((details) => {
-    chrome.contextMenus.create({
-        id: 'save-page-to-linktiles',
-        title: 'Save page to LinkTiles',
-        contexts: ['page']
-    });
+    chrome.contextMenus.removeAll(() => {
+        chrome.contextMenus.create({
+            id: 'save-page-to-linktiles',
+            title: 'Save page to LinkTiles',
+            contexts: ['page']
+        });
 
-    chrome.contextMenus.create({
-        id: 'save-link-to-linktiles',
-        title: 'Save link to LinkTiles',
-        contexts: ['link']
+        chrome.contextMenus.create({
+            id: 'save-link-to-linktiles',
+            title: 'Save link to LinkTiles',
+            contexts: ['link']
+        });
     });
 
     if (details.reason === 'install') {
