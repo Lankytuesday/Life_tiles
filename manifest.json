@@ -3,7 +3,8 @@
   "name": "LinkTiles",
   "version": "1.0.4",
   "description": "Organize your bookmarks in a tile-based dashboard",
-  "permissions": ["tabs", "bookmarks", "contextMenus"],
+  "permissions": ["tabs", "contextMenus"],
+  "optional_permissions": ["bookmarks"],
   "action": {
     "default_popup": "popup.html",
     "default_title": "LinkTiles"

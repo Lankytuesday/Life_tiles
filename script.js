@@ -4423,10 +4423,13 @@ function processBookmarksBar(bookmarkBar) {
 }
 
 async function importGoogleBookmarks() {
-    if (!chrome?.bookmarks) {
+    if (!chrome?.permissions) {
         alert('Bookmark access not available. This feature requires the Chrome extension.');
         return;
     }
+
+    const granted = await chrome.permissions.request({ permissions: ['bookmarks'] });
+    if (!granted) return;
 
     // Get dashboards to check if we need to show selection modal
     let dashboards;
