@@ -2964,10 +2964,14 @@ window.__lifetilesRefresh = async () => {
                 openCalendarDatePickerModal({
                     initialStart: dateItem.start,
                     initialEnd: dateItem.end,
-                    onSave: async ({ start, end }) => {
-                        await db.projectDates.update(dateItem.id, { start, end: end || null });
+                    showLabel: true,
+                    initialLabel: dateItem.label || '',
+                    onSave: async ({ start, end, label: newLabel }) => {
+                        await db.projectDates.update(dateItem.id, { start, end: end || null, label: newLabel });
                         dateItem.start = start;
                         dateItem.end = end;
+                        dateItem.label = newLabel;
+                        label.textContent = newLabel;
                         range.textContent = formatTimelineDateRange(start, end);
                         await refreshTimeline();
                     }

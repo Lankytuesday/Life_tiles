@@ -1132,17 +1132,35 @@ body.dragging {
     color: var(--color-brand);
 }
 
-/* Selected start/end: filled circle */
+/* Selected start/end: slightly darker than in-range band */
 .calendar-picker-day.selected-start,
 .calendar-picker-day.selected-end {
-    background: var(--color-brand);
-    color: white;
+    background: #b4d2f7;
+    color: #1a73e8;
     font-weight: 600;
+}
+
+.calendar-picker-day.selected-start {
+    border-radius: 6px 0 0 6px;
+}
+
+.calendar-picker-day.selected-end {
+    border-radius: 0 6px 6px 0;
+}
+
+/* Single-day selection: fully rounded */
+.calendar-picker-day.selected-start.selected-end {
+    border-radius: 6px;
+}
+
+.calendar-picker-day.selected-start::before,
+.calendar-picker-day.selected-end::before {
+    display: none;
 }
 
 .calendar-picker-day.selected-start:hover,
 .calendar-picker-day.selected-end:hover {
-    background: var(--color-brand);
+    background: #b4d2f7;
 }
 
 /* Range band via ::before */
@@ -1158,12 +1176,13 @@ body.dragging {
 }
 
 .calendar-picker-day.range-start::before {
-    left: 50%;
+    left: 0;
     right: 0;
+    border-radius: 6px 0 0 6px;
 }
 
 .calendar-picker-day.range-start.row-end::before {
-    display: none;
+    border-radius: 6px;
 }
 
 .calendar-picker-day.in-range::before {
@@ -1174,13 +1193,13 @@ body.dragging {
 .calendar-picker-day.in-range.row-start::before {
     left: 0;
     right: 0;
-    border-radius: 50% 0 0 50%;
+    border-radius: 6px 0 0 6px;
 }
 
 .calendar-picker-day.in-range.row-end::before {
     left: 0;
     right: 0;
-    border-radius: 0 50% 50% 0;
+    border-radius: 0 6px 6px 0;
 }
 
 .calendar-picker-day.in-range {
@@ -1190,11 +1209,12 @@ body.dragging {
 
 .calendar-picker-day.range-end::before {
     left: 0;
-    right: 50%;
+    right: 0;
+    border-radius: 0 6px 6px 0;
 }
 
 .calendar-picker-day.range-end.row-start::before {
-    display: none;
+    border-radius: 6px;
 }
 
 /* End date toggle row */
