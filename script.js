@@ -834,7 +834,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 localStorage.setItem('linktiles_first_run_complete', 'true');
                 localStorage.setItem('linktiles_onboarding_step', 'pin');
                 welcomeModal.style.display = 'none';
-                if (chrome?.bookmarks) {
+                if (chrome?.permissions) {
                     await importGoogleBookmarks();
                 } else {
                     await importDashboardsJSON();
