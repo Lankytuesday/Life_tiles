@@ -2864,6 +2864,10 @@ window.__lifetilesRefresh = async () => {
                     <label class="timeline-detail-label">Notes</label>
                     <div class="timeline-detail-notes-editor" data-field="notes"></div>
                 </div>
+                <div class="timeline-detail-field">
+                    <label class="timeline-detail-label">Tiles</label>
+                    <div class="timeline-sidebar-tiles" data-field="tilesList"></div>
+                </div>
             </div>
         `;
 
@@ -3052,6 +3056,65 @@ window.__lifetilesRefresh = async () => {
             },
         });
         tiptapEditors.set(timelineEditorKey, timelineEditor);
+
+        // Tiles list
+        const tilesListEl = sidebar.querySelector('[data-field="tilesList"]');
+        tilesListEl.innerHTML = '';
+        const tiles = await db.tiles.where('projectId').equals(projectId).sortBy('order');
+
+        for (const tile of tiles) {
+            const row = document.createElement('div');
+            row.className = 'timeline-sidebar-tile';
+
+            const faviconEl = document.createElement('div');
+            faviconEl.className = 'timeline-sidebar-tile-favicon';
+
+            let safeHost = '';
+            try { safeHost = new URL(tile.url).hostname; } catch {}
+
+            const storedFavicon = tile.favicon;
+            const hasGoodFavicon = storedFavicon && !isDeprecatedFavicon(storedFavicon);
+
+            const showInitials = () => {
+                const initials = getSiteInitials(safeHost) || 'LT';
+                const bgColor = generateColorFromString(safeHost || 'lifetiles');
+                faviconEl.style.backgroundColor = bgColor;
+                faviconEl.innerHTML = `<span class="timeline-sidebar-tile-initials">${escapeHtml(initials)}</span>`;
+            };
+
+            if (hasGoodFavicon) {
+                faviconEl.style.backgroundImage = `url('${storedFavicon}')`;
+            } else {
+                showInitials();
+                if (safeHost) {
+                    (async () => {
+                        try {
+                            let favicon = await checkFaviconCache(safeHost);
+                            if (!favicon) favicon = await loadFaviconForHost(safeHost, tile.url);
+                            if (favicon) {
+                                faviconEl.style.backgroundImage = `url('${favicon}')`;
+                                faviconEl.style.backgroundColor = 'transparent';
+                                faviconEl.innerHTML = '';
+                            }
+                        } catch {}
+                    })();
+                }
+            }
+
+            const nameEl = document.createElement('span');
+            nameEl.className = 'timeline-sidebar-tile-name';
+            nameEl.textContent = tile.name || tile.url;
+            nameEl.title = tile.name || tile.url;
+
+            row.appendChild(faviconEl);
+            row.appendChild(nameEl);
+            row.addEventListener('click', () => window.open(tile.url, '_blank'));
+            tilesListEl.appendChild(row);
+        }
+
+        if (tiles.length === 0) {
+            tilesListEl.innerHTML = '<div class="timeline-sidebar-tiles-empty">No tiles</div>';
+        }
 
         // Highlight the selected date's bar/marker on the chart
         highlightTimelineBar(container, highlightDateId);
