@@ -2858,7 +2858,6 @@ window.__lifetilesRefresh = async () => {
                     <div class="timeline-detail-value timeline-detail-editable" data-field="projectName" contenteditable="true"></div>
                 </div>
                 <div class="timeline-detail-field">
-                    <label class="timeline-detail-label">Dates</label>
                     <div class="timeline-sidebar-dates" data-field="datesList"></div>
                 </div>
                 <div class="timeline-detail-field">
@@ -2932,6 +2931,10 @@ window.__lifetilesRefresh = async () => {
             row.dataset.dateId = dateItem.id;
             if (dateItem.id === highlightDateId) row.classList.add('highlighted');
 
+            const icon = document.createElement('span');
+            icon.className = 'timeline-sidebar-date-icon';
+            icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+
             const label = document.createElement('span');
             label.className = 'timeline-sidebar-date-label';
             label.textContent = dateItem.label || 'Untitled';
@@ -2945,6 +2948,7 @@ window.__lifetilesRefresh = async () => {
             deleteBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
             deleteBtn.title = 'Delete date';
 
+            row.appendChild(icon);
             row.appendChild(label);
             row.appendChild(range);
             row.appendChild(deleteBtn);

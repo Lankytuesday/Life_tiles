@@ -3140,11 +3140,25 @@ body.timeline-view #main {
     overflow: hidden;
 }
 
+body.timeline-view #projects-container {
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+body.timeline-view #projects-list {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 /* Container */
 .timeline-view-container {
     display: flex;
     flex-direction: row;
-    height: calc(100vh - var(--toolbar-h) - 20px);
+    height: 100%;
     overflow: hidden;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
@@ -3183,7 +3197,26 @@ body.timeline-view #main {
 /* Chart area (single scroll container for ticks + bars) */
 .timeline-chart {
     flex: 1;
+    min-width: 0;
     overflow: auto;
+}
+/* Make horizontal scrollbar always visible (overrides #main transparent scrollbar styles) */
+.timeline-chart::-webkit-scrollbar {
+    width: 6px;
+    height: 12px;
+}
+.timeline-chart::-webkit-scrollbar-track {
+    background: transparent;
+}
+.timeline-chart::-webkit-scrollbar-track:horizontal {
+    background: rgba(0, 0, 0, 0.03);
+}
+.timeline-chart::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+.timeline-chart::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.35);
 }
 
 .timeline-chart-inner {
@@ -3579,6 +3612,13 @@ body.timeline-view #main {
     background: rgba(55, 53, 47, 0.08);
     box-shadow: inset 3px 0 0 var(--color-accent, #4a90d9);
     border-radius: 0;
+}
+
+.timeline-sidebar-date-icon {
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
 }
 
 .timeline-sidebar-date-label {
