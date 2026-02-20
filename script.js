@@ -839,6 +839,7 @@ document.addEventListener("DOMContentLoaded", async function () {
                 } else {
                     await importDashboardsJSON();
                 }
+                showOnboardingStep();
             };
         }
     }
