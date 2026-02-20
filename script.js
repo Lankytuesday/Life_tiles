@@ -1979,12 +1979,38 @@ window.__lifetilesRefresh = async () => {
             }
         });
 
-        // Close on Escape key
+        // Keyboard navigation for search results
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 searchInput.value = '';
                 searchResults.classList.add('hidden');
                 searchInput.blur();
+                return;
+            }
+
+            const items = searchResults.querySelectorAll('.search-result-item[data-type]');
+            if (!items.length || searchResults.classList.contains('hidden')) return;
+
+            const active = searchResults.querySelector('.search-result-item.active');
+            let idx = Array.from(items).indexOf(active);
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (active) active.classList.remove('active');
+                idx = idx < items.length - 1 ? idx + 1 : 0;
+                items[idx].classList.add('active');
+                items[idx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (active) active.classList.remove('active');
+                idx = idx > 0 ? idx - 1 : items.length - 1;
+                items[idx].classList.add('active');
+                items[idx].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                if (active) {
+                    e.preventDefault();
+                    active.click();
+                }
             }
         });
     }
