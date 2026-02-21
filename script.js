@@ -2410,11 +2410,6 @@ window.__lifetilesRefresh = async () => {
             }
         }
 
-        // Add-date row at the bottom of chart content
-        labelsHtml += `<div class="timeline-add-row-label" style="height:${ROW_H}px">+ Add date</div>`;
-        barsHtml += `<div class="timeline-add-row-chart" style="top:${yPos}px;width:${totalWidth}px;height:${ROW_H}px"></div>`;
-        yPos += ROW_H;
-
         const totalHeight = yPos;
 
         // Today marker
@@ -2426,7 +2421,10 @@ window.__lifetilesRefresh = async () => {
         container.innerHTML = `
             <div class="timeline-label-side">
                 <div class="timeline-label-header">Project / Date</div>
-                <div class="timeline-label-col-body">${labelsHtml}</div>
+                <div class="timeline-label-col-body">
+                    <div class="timeline-label-col-inner">${labelsHtml}</div>
+                    <div class="timeline-add-row-label">+ Add date</div>
+                </div>
             </div>
             <div class="timeline-chart">
                 <div class="timeline-chart-inner" style="width:${totalWidth}px">
@@ -2437,6 +2435,7 @@ window.__lifetilesRefresh = async () => {
                     <div class="timeline-bars" style="width:${totalWidth}px;height:${totalHeight}px">
                         ${barsHtml}
                     </div>
+                    <div class="timeline-add-row-chart" style="width:${totalWidth}px"></div>
                 </div>
             </div>
         `;
