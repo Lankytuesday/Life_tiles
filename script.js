@@ -935,6 +935,9 @@ document.addEventListener("DOMContentLoaded", async function () {
         setTimeout(showOnboardingStep, 500);
     }
 
+    // Expose for use outside the IIFE (e.g. importGoogleBookmarks)
+    window.__showOnboardingStep = showOnboardingStep;
+
 // Track last known mouse position during drag
 let lastDragMouseX = 0;
 let lastDragMouseY = 0;
@@ -4542,10 +4545,9 @@ async function importGoogleBookmarks() {
 
                 showStatus('Bookmarks imported successfully!');
 
-                // Delay reload to allow status message to be seen
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
+                // Refresh dashboard in-place to show imported bookmarks
+                if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                if (window.__showOnboardingStep) window.__showOnboardingStep();
             } catch (error) {
                 console.error('Error importing bookmarks:', error);
                 showStatus('Error importing bookmarks');
@@ -5766,156 +5768,266 @@ function showUndoToast(message, undoCallback, duration = 7000) {
                 if (!tabIds.has(id)) selectedTabs.delete(id);
             }
 
-            // Render
-            listEl.innerHTML = '';
+            // Render — diff-based to avoid favicon flash on refresh
             if (allTabs.length === 0) {
-                listEl.innerHTML = '<div class="tabs-panel-empty">No open web tabs</div>';
+                if (!listEl.querySelector('.tabs-panel-empty')) {
+                    listEl.innerHTML = '<div class="tabs-panel-empty">No open web tabs</div>';
+                }
                 updateSelectAll();
                 updateSaveBar();
                 return;
             }
 
+            // Remove empty-state message if present
+            const emptyMsg = listEl.querySelector('.tabs-panel-empty');
+            if (emptyMsg) emptyMsg.remove();
+
+            // Build a map of existing window groups in the DOM
+            const existingGroups = new Map();
+            for (const g of listEl.querySelectorAll('.tabs-panel-window-group[data-window-id]')) {
+                existingGroups.set(Number(g.dataset.windowId), g);
+            }
+
+            // Remove groups for windows that no longer exist
+            const currentWindowIds = new Set(sortedWindowIds);
+            for (const [wid, groupEl] of existingGroups) {
+                if (!currentWindowIds.has(wid)) {
+                    groupEl.remove();
+                    existingGroups.delete(wid);
+                }
+            }
+
+            // Process each window group
             let windowIndex = 0;
+            let prevGroupEl = null;
             for (const windowId of sortedWindowIds) {
                 const tabs = windowGroups.get(windowId);
                 windowIndex++;
-
                 const isCurrentWindow = windowId === currentWindowId;
-                const groupDiv = document.createElement('div');
-                groupDiv.className = 'tabs-panel-window-group';
+                const windowLabel = isCurrentWindow ? 'Current Window' : `Window ${windowIndex}`;
 
-                // Determine collapsed state: respect user toggle, else default non-current to collapsed on first sight
-                let isCollapsed;
-                if (collapsedWindows.has(windowId)) {
-                    isCollapsed = true;
-                } else if (expandedWindows.has(windowId)) {
-                    isCollapsed = false;
+                let groupDiv = existingGroups.get(windowId);
+                if (groupDiv) {
+                    // Update existing group — header label and count badge
+                    const label = groupDiv.querySelector('.tabs-panel-window-header > span');
+                    if (label && label.textContent !== windowLabel) label.textContent = windowLabel;
+                    const countBadge = groupDiv.querySelector('.window-tab-count');
+                    if (countBadge && countBadge.textContent !== String(tabs.length)) countBadge.textContent = tabs.length;
+
+                    // Diff tabs within existing group
+                    diffTabItems(groupDiv, tabs, savedUrls);
                 } else {
-                    // First time seeing this window — default non-current to collapsed
-                    isCollapsed = !isCurrentWindow;
-                }
-                knownWindows.add(windowId);
-                if (isCollapsed) groupDiv.classList.add('collapsed');
+                    // Create new group from scratch
+                    groupDiv = document.createElement('div');
+                    groupDiv.className = 'tabs-panel-window-group';
+                    groupDiv.dataset.windowId = windowId;
 
-                // Window header
-                const header = document.createElement('div');
-                header.className = 'tabs-panel-window-header';
-                header.innerHTML = '<svg class="caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 2 8 6 4 10"/></svg>';
-
-                const label = document.createElement('span');
-                label.textContent = isCurrentWindow ? 'Current Window' : `Window ${windowIndex}`;
-                header.appendChild(label);
-
-                const countBadge = document.createElement('span');
-                countBadge.className = 'window-tab-count';
-                countBadge.textContent = tabs.length;
-                header.appendChild(countBadge);
-
-                header.addEventListener('click', () => {
-                    groupDiv.classList.toggle('collapsed');
-                    if (groupDiv.classList.contains('collapsed')) {
-                        collapsedWindows.add(windowId);
-                        expandedWindows.delete(windowId);
+                    let isCollapsed;
+                    if (collapsedWindows.has(windowId)) {
+                        isCollapsed = true;
+                    } else if (expandedWindows.has(windowId)) {
+                        isCollapsed = false;
                     } else {
-                        expandedWindows.add(windowId);
-                        collapsedWindows.delete(windowId);
+                        isCollapsed = !isCurrentWindow;
                     }
-                });
+                    knownWindows.add(windowId);
+                    if (isCollapsed) groupDiv.classList.add('collapsed');
 
-                groupDiv.appendChild(header);
+                    const header = document.createElement('div');
+                    header.className = 'tabs-panel-window-header';
+                    header.innerHTML = '<svg class="caret" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 2 8 6 4 10"/></svg>';
 
-                // Render tabs within group
-                for (const tab of tabs) {
-                    const isSaved = savedUrls.has(tab.url);
-                    const item = document.createElement('div');
-                    item.className = 'tabs-panel-item' + (isSaved ? ' saved' : '');
-                    item.dataset.tabId = tab.id;
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = windowLabel;
+                    header.appendChild(labelSpan);
 
-                    const cb = document.createElement('input');
-                    cb.type = 'checkbox';
-                    cb.checked = selectedTabs.has(tab.id);
-                    cb.addEventListener('change', () => {
-                        if (cb.checked) {
-                            selectedTabs.set(tab.id, tab);
+                    const countBadge = document.createElement('span');
+                    countBadge.className = 'window-tab-count';
+                    countBadge.textContent = tabs.length;
+                    header.appendChild(countBadge);
+
+                    header.addEventListener('click', () => {
+                        groupDiv.classList.toggle('collapsed');
+                        if (groupDiv.classList.contains('collapsed')) {
+                            collapsedWindows.add(windowId);
+                            expandedWindows.delete(windowId);
                         } else {
-                            selectedTabs.delete(tab.id);
+                            expandedWindows.add(windowId);
+                            collapsedWindows.delete(windowId);
                         }
-                        updateSelectAll();
-                        updateSaveBar();
                     });
 
-                    const favicon = document.createElement('img');
-                    favicon.className = 'tabs-panel-item-favicon';
-                    favicon.src = tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
-                    favicon.alt = '';
-                    favicon.loading = 'lazy';
-                    favicon.onerror = function() {
-                        this.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
-                    };
+                    groupDiv.appendChild(header);
 
-                    const title = document.createElement('span');
-                    title.className = 'tabs-panel-item-title';
-                    title.textContent = tab.title || tab.url;
-                    title.title = tab.url;
-
-                    item.appendChild(cb);
-                    item.appendChild(favicon);
-                    item.appendChild(title);
-
-                    if (isSaved) {
-                        const badge = document.createElement('span');
-                        badge.className = 'tabs-panel-saved-badge';
-                        badge.textContent = 'saved';
-                        item.appendChild(badge);
+                    for (const tab of tabs) {
+                        groupDiv.appendChild(createTabItem(tab, savedUrls.has(tab.url)));
                     }
-
-                    // Click on item row toggles checkbox
-                    item.addEventListener('click', (e) => {
-                        if (e.target === cb) return; // checkbox handles itself
-                        cb.checked = !cb.checked;
-                        cb.dispatchEvent(new Event('change'));
-                    });
-
-                    // Drag support
-                    item.draggable = true;
-                    item.addEventListener('dragstart', (e) => {
-                        // If this tab is selected, drag all selected tabs; otherwise just this one
-                        if (selectedTabs.has(tab.id) && selectedTabs.size > 1) {
-                            draggedTabs = Array.from(selectedTabs.values());
-                        } else {
-                            draggedTabs = [tab];
-                        }
-                        item.classList.add('dragging');
-                        document.body.classList.add('dragging', 'dragging-panel-tab');
-                        e.dataTransfer.effectAllowed = 'copy';
-                        e.dataTransfer.setData('application/x-linktiles', '1');
-
-                        // Custom drag image showing count when multi-dragging
-                        if (draggedTabs.length > 1) {
-                            const ghost = document.createElement('div');
-                            ghost.className = 'tabs-drag-ghost';
-                            ghost.textContent = `${draggedTabs.length} tabs`;
-                            document.body.appendChild(ghost);
-                            e.dataTransfer.setDragImage(ghost, 40, 16);
-                            requestAnimationFrame(() => ghost.remove());
-                        }
-                    });
-                    item.addEventListener('dragend', () => {
-                        item.classList.remove('dragging');
-                        document.body.classList.remove('dragging', 'dragging-panel-tab');
-                        draggedTabs = [];
-                        // Clean up any lingering drop highlights
-                        document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
-                    });
-
-                    groupDiv.appendChild(item);
                 }
 
-                listEl.appendChild(groupDiv);
+                // Ensure correct DOM order: insert after previous group (or at start)
+                if (prevGroupEl) {
+                    if (groupDiv.previousElementSibling !== prevGroupEl) {
+                        prevGroupEl.after(groupDiv);
+                    }
+                } else {
+                    if (listEl.firstChild !== groupDiv) {
+                        listEl.prepend(groupDiv);
+                    }
+                }
+                prevGroupEl = groupDiv;
             }
 
             updateSelectAll();
             updateSaveBar();
+        }
+
+        const FALLBACK_FAVICON = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="2" fill="%23ddd"/></svg>';
+
+        function createTabItem(tab, isSaved) {
+            const item = document.createElement('div');
+            item.className = 'tabs-panel-item' + (isSaved ? ' saved' : '');
+            item.dataset.tabId = tab.id;
+            item._tab = tab; // Live reference, updated by diffTabItems
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = selectedTabs.has(tab.id);
+            cb.addEventListener('change', () => {
+                if (cb.checked) {
+                    selectedTabs.set(item._tab.id, item._tab);
+                } else {
+                    selectedTabs.delete(item._tab.id);
+                }
+                updateSelectAll();
+                updateSaveBar();
+            });
+
+            const favicon = document.createElement('img');
+            favicon.className = 'tabs-panel-item-favicon';
+            favicon.src = tab.favIconUrl || FALLBACK_FAVICON;
+            favicon.alt = '';
+            favicon.loading = 'lazy';
+            favicon.onerror = function() { this.src = FALLBACK_FAVICON; };
+
+            const title = document.createElement('span');
+            title.className = 'tabs-panel-item-title';
+            title.textContent = tab.title || tab.url;
+            title.title = tab.url;
+
+            item.appendChild(cb);
+            item.appendChild(favicon);
+            item.appendChild(title);
+
+            if (isSaved) {
+                const badge = document.createElement('span');
+                badge.className = 'tabs-panel-saved-badge';
+                badge.textContent = 'saved';
+                item.appendChild(badge);
+            }
+
+            item.addEventListener('click', (e) => {
+                if (e.target === cb) return;
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event('change'));
+            });
+
+            item.draggable = true;
+            item.addEventListener('dragstart', (e) => {
+                if (selectedTabs.has(item._tab.id) && selectedTabs.size > 1) {
+                    draggedTabs = Array.from(selectedTabs.values());
+                } else {
+                    draggedTabs = [item._tab];
+                }
+                item.classList.add('dragging');
+                document.body.classList.add('dragging', 'dragging-panel-tab');
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('application/x-linktiles', '1');
+
+                if (draggedTabs.length > 1) {
+                    const ghost = document.createElement('div');
+                    ghost.className = 'tabs-drag-ghost';
+                    ghost.textContent = `${draggedTabs.length} tabs`;
+                    document.body.appendChild(ghost);
+                    e.dataTransfer.setDragImage(ghost, 40, 16);
+                    requestAnimationFrame(() => ghost.remove());
+                }
+            });
+            item.addEventListener('dragend', () => {
+                item.classList.remove('dragging');
+                document.body.classList.remove('dragging', 'dragging-panel-tab');
+                draggedTabs = [];
+                document.querySelectorAll('.tab-drop-target').forEach(el => el.classList.remove('tab-drop-target'));
+            });
+
+            return item;
+        }
+
+        function diffTabItems(groupDiv, tabs, savedUrls) {
+            // Build map of existing tab items in this group
+            const existingItems = new Map();
+            for (const el of groupDiv.querySelectorAll('.tabs-panel-item[data-tab-id]')) {
+                existingItems.set(Number(el.dataset.tabId), el);
+            }
+
+            const newTabIds = new Set(tabs.map(t => t.id));
+
+            // Remove tabs no longer present
+            for (const [tabId, el] of existingItems) {
+                if (!newTabIds.has(tabId)) {
+                    el.remove();
+                    existingItems.delete(tabId);
+                }
+            }
+
+            // Update or create each tab item in order
+            let prevItem = groupDiv.querySelector('.tabs-panel-window-header');
+            for (const tab of tabs) {
+                const isSaved = savedUrls.has(tab.url);
+                let item = existingItems.get(tab.id);
+
+                if (item) {
+                    // Update live tab reference so drag/checkbox handlers use fresh data
+                    item._tab = tab;
+
+                    // Update existing item in-place
+                    const titleEl = item.querySelector('.tabs-panel-item-title');
+                    const newTitle = tab.title || tab.url;
+                    if (titleEl.textContent !== newTitle) titleEl.textContent = newTitle;
+                    if (titleEl.title !== tab.url) titleEl.title = tab.url;
+
+                    const faviconEl = item.querySelector('.tabs-panel-item-favicon');
+                    const newSrc = tab.favIconUrl || FALLBACK_FAVICON;
+                    if (faviconEl.src !== newSrc) faviconEl.src = newSrc;
+
+                    // Sync saved class and badge
+                    const hasSavedClass = item.classList.contains('saved');
+                    if (isSaved && !hasSavedClass) {
+                        item.classList.add('saved');
+                        const badge = document.createElement('span');
+                        badge.className = 'tabs-panel-saved-badge';
+                        badge.textContent = 'saved';
+                        item.appendChild(badge);
+                    } else if (!isSaved && hasSavedClass) {
+                        item.classList.remove('saved');
+                        const badge = item.querySelector('.tabs-panel-saved-badge');
+                        if (badge) badge.remove();
+                    }
+
+                    // Sync checkbox and refresh selectedTabs value if checked
+                    const cb = item.querySelector('input[type="checkbox"]');
+                    if (cb) cb.checked = selectedTabs.has(tab.id);
+                    if (selectedTabs.has(tab.id)) selectedTabs.set(tab.id, tab);
+                } else {
+                    // Create new tab item
+                    item = createTabItem(tab, isSaved);
+                }
+
+                // Ensure correct order: item should be right after prevItem
+                if (item.previousElementSibling !== prevItem) {
+                    prevItem.after(item);
+                }
+                prevItem = item;
+            }
         }
 
         function syncCheckboxes() {
@@ -5941,9 +6053,16 @@ function showUndoToast(message, undoCallback, duration = 7000) {
         }
 
         function updateSaveBar() {
+            const wasHidden = saveBar.classList.contains('hidden');
             if (selectedTabs.size > 0) {
                 saveBar.classList.remove('hidden');
                 selCountEl.textContent = `${selectedTabs.size} selected`;
+                // When save bar first appears, scroll the last-checked item into view
+                // so it isn't hidden behind the bar
+                if (wasHidden) {
+                    const checked = listEl.querySelector('.tabs-panel-item input[type="checkbox"]:checked');
+                    if (checked) checked.closest('.tabs-panel-item').scrollIntoView({ block: 'nearest' });
+                }
             } else {
                 saveBar.classList.add('hidden');
             }
