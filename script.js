@@ -842,8 +842,8 @@ document.addEventListener("DOMContentLoaded", async function () {
                     await importGoogleBookmarks();
                 } else {
                     await importDashboardsJSON();
+                    showOnboardingStep();
                 }
-                showOnboardingStep();
             };
         }
     }
@@ -938,6 +938,9 @@ document.addEventListener("DOMContentLoaded", async function () {
     if (localStorage.getItem('linktiles_onboarding_step')) {
         setTimeout(showOnboardingStep, 500);
     }
+
+    // Expose for use outside the IIFE (e.g. importGoogleBookmarks)
+    window.__showOnboardingStep = showOnboardingStep;
 
 // Track last known mouse position during drag
 let lastDragMouseX = 0;
@@ -2447,6 +2450,19 @@ window.__lifetilesRefresh = async () => {
             const projectId = target.dataset.projectId;
             const dateId = target.dataset.dateId || null;
             if (projectId) openTimelineDetail(projectId, dateId, container);
+
+            // Scroll the chart to reveal the clicked project's bar/marker
+            const selector = dateId
+                ? `.timeline-bar[data-date-id="${dateId}"], .timeline-marker[data-date-id="${dateId}"]`
+                : `.timeline-bar[data-project-id="${projectId}"], .timeline-marker[data-project-id="${projectId}"]`;
+            const barEl = container.querySelector(selector);
+            if (barEl && chart) {
+                const barLeft = barEl.offsetLeft;
+                const barWidth = barEl.offsetWidth || 0;
+                const viewWidth = chart.clientWidth;
+                const barCenter = barLeft + barWidth / 2;
+                chart.scrollTo({ left: Math.max(0, barCenter - viewWidth / 3), behavior: 'smooth' });
+            }
         });
 
         // Auto-scroll to make today visible
@@ -5798,10 +5814,9 @@ async function importGoogleBookmarks() {
 
                 showStatus('Bookmarks imported successfully!');
 
-                // Delay reload to allow status message to be seen
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
+                // Refresh dashboard to show imported bookmarks
+                if (window.__lifetilesRefresh) await window.__lifetilesRefresh();
+                if (window.__showOnboardingStep) window.__showOnboardingStep();
             } catch (error) {
                 console.error('Error importing bookmarks:', error);
                 showStatus('Error importing bookmarks');
