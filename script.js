@@ -2355,7 +2355,8 @@ window.__lifetilesRefresh = async () => {
             const dow = tickDate.getUTCDay();
             const isMonday = dow === 1;
             const isWeekend = dow === 0 || dow === 6;
-            const cls = 'timeline-day-tick' + (isMonday ? ' monday' : '') + (isWeekend ? ' weekend' : '');
+            const isToday = tickMs === todayUTC;
+            const cls = 'timeline-day-tick' + (isMonday ? ' monday' : '') + (isWeekend ? ' weekend' : '') + (isToday ? ' today' : '');
             ticksHtml += `<div class="${cls}" style="left:${off * DAY_W}px;width:${DAY_W}px">${tickDate.getUTCDate()}</div>`;
             tickMs += MS_PER_DAY;
         }
@@ -2414,7 +2415,7 @@ window.__lifetilesRefresh = async () => {
 
         // Today marker
         const todayOff = Math.floor((todayUTC - minDate) / MS_PER_DAY);
-        barsHtml += `<div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight}px"><span class="timeline-today-label">Today</span></div>`;
+        barsHtml += `<div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight}px"></div>`;
 
         const container = document.createElement('div');
         container.className = 'timeline-view-container';

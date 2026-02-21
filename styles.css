@@ -3307,6 +3307,13 @@ body.timeline-view #projects-list {
     background: rgba(0, 0, 0, 0.02);
 }
 
+.timeline-day-tick.today {
+    background: var(--color-danger, #e74c3c);
+    color: white;
+    font-weight: 700;
+    border-radius: 4px;
+}
+
 /* Project heading row */
 .timeline-heading-row {
     display: flex;
@@ -3367,6 +3374,7 @@ body.timeline-view #projects-list {
 
 .timeline-bars {
     position: relative;
+    z-index: 0;
 }
 
 /* Add-date label row (left column, sticky bottom) */
@@ -3381,14 +3389,14 @@ body.timeline-view #projects-list {
     border-top: 1px solid var(--color-border);
     font-size: 12px;
     font-weight: 500;
-    color: var(--color-text-muted);
+    color: var(--color-accent, #4a90d9);
     cursor: pointer;
-    background: var(--color-bg-light, #f8f9fa);
-    z-index: 2;
+    background: #f0f4ff;
+    z-index: 11;
 }
 .timeline-add-row-label:hover {
     color: var(--color-accent, #4a90d9);
-    background: #f0f4ff;
+    background: #e5edfa;
 }
 
 /* Add-date chart row (right side, sticky bottom) */
@@ -3398,11 +3406,11 @@ body.timeline-view #projects-list {
     height: 36px;
     border-top: 1px solid var(--color-border);
     cursor: crosshair;
-    background: var(--color-bg-light, #f8f9fa);
-    z-index: 2;
+    background: #f0f4ff;
+    z-index: 11;
 }
 .timeline-add-row-chart:hover {
-    background: #f0f4ff;
+    background: #e5edfa;
 }
 
 /* Day highlight column on hover */
@@ -3454,16 +3462,6 @@ body.timeline-view #projects-list {
     pointer-events: none;
 }
 
-.timeline-today-label {
-    position: absolute;
-    top: -18px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--color-danger);
-    white-space: nowrap;
-}
 
 /* Bars */
 .timeline-bar {
