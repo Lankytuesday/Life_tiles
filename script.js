@@ -1964,7 +1964,11 @@ window.__lifetilesRefresh = async () => {
                     }
                 }, 100);
             } else if (type === 'tile') {
-                await switchDashboard(dashboardId);
+                if (projectId === GLOBAL_UNASSIGNED_ID || !dashboardId) {
+                    await switchToGlobalUnassigned();
+                } else {
+                    await switchDashboard(dashboardId);
+                }
                 setTimeout(() => {
                     const tileEl = document.querySelector(`.tile[data-tile-id="${id}"]`);
                     if (tileEl) {
