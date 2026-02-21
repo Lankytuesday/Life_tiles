@@ -2275,7 +2275,11 @@ window.__lifetilesRefresh = async () => {
 
         // Sort dates within each project by start date
         const groups = Object.values(grouped);
-        groups.sort((a, b) => a.projectName.localeCompare(b.projectName));
+        groups.sort((a, b) => {
+            const aMin = a.dates.reduce((m, d) => d.start && d.start < m ? d.start : m, '\uffff');
+            const bMin = b.dates.reduce((m, d) => d.start && d.start < m ? d.start : m, '\uffff');
+            return aMin.localeCompare(bMin) || a.projectName.localeCompare(b.projectName);
+        });
         for (const g of groups) {
             g.dates.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
         }
@@ -2406,6 +2410,11 @@ window.__lifetilesRefresh = async () => {
             }
         }
 
+        // Add-date row at the bottom of chart content
+        labelsHtml += `<div class="timeline-add-row-label" style="height:${ROW_H}px">+ Add date</div>`;
+        barsHtml += `<div class="timeline-add-row-chart" style="top:${yPos}px;width:${totalWidth}px;height:${ROW_H}px"></div>`;
+        yPos += ROW_H;
+
         const totalHeight = yPos;
 
         // Today marker
@@ -2464,6 +2473,71 @@ window.__lifetilesRefresh = async () => {
                 chart.scrollTo({ left: Math.max(0, barCenter - viewWidth / 3), behavior: 'smooth' });
             }
         });
+
+        // Add-date flow helper
+        function addDateFlow(initialDate) {
+            window.__showTreeTargetModal('Add Date to Project', async (targetProject) => {
+                openCalendarDatePickerModal({
+                    initialStart: initialDate,
+                    showLabel: true,
+                    onSave: async ({ start, end, label }) => {
+                        await db.projectDates.add({
+                            id: Date.now().toString(36) + Math.random().toString(36).substr(2, 9),
+                            projectId: targetProject.id,
+                            label: label,
+                            start: start,
+                            end: end || null,
+                            createdAt: Date.now()
+                        });
+                        await refreshTimeline();
+                    }
+                });
+            });
+        }
+
+        // Label-side "+ Add date" click — defaults to today
+        const addRowLabel = container.querySelector('.timeline-add-row-label');
+        if (addRowLabel) {
+            addRowLabel.addEventListener('click', () => {
+                const now = new Date();
+                addDateFlow(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
+            });
+        }
+
+        // Chart-side add row — crosshair with day highlight + date tooltip
+        const addRowChart = container.querySelector('.timeline-add-row-chart');
+        if (addRowChart) {
+            const dayHighlight = document.createElement('div');
+            dayHighlight.className = 'timeline-add-day-highlight';
+            addRowChart.appendChild(dayHighlight);
+
+            const dayTooltip = document.createElement('div');
+            dayTooltip.className = 'timeline-add-day-tooltip';
+            addRowChart.appendChild(dayTooltip);
+
+            addRowChart.addEventListener('mousemove', (e) => {
+                const dayIndex = Math.floor(e.offsetX / DAY_W);
+                dayHighlight.style.left = (dayIndex * DAY_W) + 'px';
+                dayHighlight.style.display = 'block';
+                const ms = minDate + dayIndex * MS_PER_DAY;
+                const d = new Date(ms);
+                dayTooltip.textContent = d.toLocaleDateString('default', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+                dayTooltip.style.left = (dayIndex * DAY_W + DAY_W / 2) + 'px';
+                dayTooltip.style.display = 'block';
+            });
+
+            addRowChart.addEventListener('mouseleave', () => {
+                dayHighlight.style.display = 'none';
+                dayTooltip.style.display = 'none';
+            });
+
+            addRowChart.addEventListener('click', (e) => {
+                const dayIndex = Math.floor(e.offsetX / DAY_W);
+                const clickedMs = minDate + dayIndex * MS_PER_DAY;
+                const dt = new Date(clickedMs);
+                addDateFlow(`${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`);
+            });
+        }
 
         // Auto-scroll to make today visible
         const todayLeft = todayOff * DAY_W;
@@ -6485,6 +6559,8 @@ function showUndoToast(message, undoCallback, duration = 7000) {
     }
 
     // Helper: Show tree modal for selecting a project (across all dashboards)
+    // Exposed via window.__ so timeline code (outside this IIFE) can use it
+    window.__showTreeTargetModal = showTreeTargetModal;
     async function showTreeTargetModal(title, onConfirm) {
         const modal = document.getElementById('bulk-tile-target-modal');
         const titleEl = document.getElementById('bulk-tile-target-title');

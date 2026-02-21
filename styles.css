@@ -3369,6 +3369,61 @@ body.timeline-view #projects-list {
     position: relative;
 }
 
+/* Add-date label row (left column) */
+.timeline-add-row-label {
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-top: 1px solid var(--color-border);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+.timeline-add-row-label:hover {
+    color: var(--color-accent, #4a90d9);
+    background: #f0f4ff;
+}
+
+/* Add-date chart row (right side, absolutely positioned like row stripes) */
+.timeline-add-row-chart {
+    position: absolute;
+    left: 0;
+    border-top: 1px solid var(--color-border);
+    cursor: crosshair;
+}
+.timeline-add-row-chart:hover {
+    background: #f0f4ff;
+}
+
+/* Day highlight column on hover */
+.timeline-add-day-highlight {
+    position: absolute;
+    top: 0;
+    width: 42px;
+    height: 100%;
+    background: rgba(74, 144, 217, 0.18);
+    pointer-events: none;
+    display: none;
+}
+
+/* Date tooltip on hover */
+.timeline-add-day-tooltip {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-accent, #4a90d9);
+    background: white;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    display: none;
+}
+
 /* Row stripes */
 .timeline-row-stripe {
     position: absolute;
