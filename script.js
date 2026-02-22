@@ -2361,28 +2361,23 @@ window.__lifetilesRefresh = async () => {
             tickMs += MS_PER_DAY;
         }
 
-        // Build label rows and bar rows, grouped by project
-        let labelsHtml = '';
-        let barsHtml = '';
-        let yPos = 0; // current pixel offset
+        // Build unified rows (labels + bars in same row) grouped by project
+        let rowsHtml = '';
         let eventIdx = 0; // for alternating stripes
 
         for (const group of groups) {
-            // Project heading row
-            const colorDot = `<span class="timeline-heading-dot" style="background:${group.color}"></span>`;
-            labelsHtml += `<div class="timeline-heading-row" data-project-id="${group.projectId}" style="height:${HEADER_H}px">${colorDot}<span class="timeline-heading-name" title="${escapeHtml(group.spaceName + ' / ' + group.projectName)}">${escapeHtml(group.projectName)}</span></div>`;
-            barsHtml += `<div class="timeline-heading-stripe" style="top:${yPos}px;height:${HEADER_H}px;width:${totalWidth}px"></div>`;
-            yPos += HEADER_H;
+            // Project heading row — label is sticky-left
+            rowsHtml += `<div class="timeline-heading" style="height:${HEADER_H}px" data-project-id="${group.projectId}">
+                <div class="timeline-heading-label">
+                    <span class="timeline-heading-dot" style="background:${group.color}"></span>
+                    <span class="timeline-heading-name" title="${escapeHtml(group.spaceName + ' / ' + group.projectName)}">${escapeHtml(group.projectName)}</span>
+                </div>
+            </div>`;
 
             // Event rows
             for (const d of group.dates) {
                 const alt = eventIdx % 2 === 1 ? ' alt' : '';
-
-                labelsHtml += `<div class="timeline-label-row${alt}" data-project-id="${group.projectId}" data-date-id="${d.dateId}">
-                    <div class="timeline-label-name" title="${escapeHtml(d.label)}">${escapeHtml(d.label)}</div>
-                </div>`;
-
-                barsHtml += `<div class="timeline-row-stripe${alt}" style="top:${yPos}px;width:${totalWidth}px"></div>`;
+                let barHtml = '';
 
                 if (d.start) {
                     const startOff = dayOffset(d.start);
@@ -2391,52 +2386,50 @@ window.__lifetilesRefresh = async () => {
                     const tipText = escapeHtml(d.label + ': ' + dateDisplay);
 
                     if (isSingle) {
-                        // Dot marker + label text beside it
-                        const dotTop = yPos + ROW_H / 2;
                         const dotLeft = startOff * DAY_W + DAY_W / 2;
-                        barsHtml += `<div class="timeline-marker" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
-                        barsHtml += `<span class="timeline-marker-label" style="left:${dotLeft + 12}px;top:${yPos}px;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
+                        const dotTop = ROW_H / 2;
+                        barHtml += `<div class="timeline-marker" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${dotLeft}px;top:${dotTop}px;background-color:${group.color}" title="${tipText}"></div>`;
+                        barHtml += `<span class="timeline-marker-label" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${dotLeft + 12}px;top:0;height:${ROW_H}px" title="${tipText}">${escapeHtml(d.label)}</span>`;
                     } else {
                         const endOff = dayOffset(d.end);
                         const barLeft = startOff * DAY_W;
                         const barWidth = (endOff - startOff + 1) * DAY_W;
-                        const barTop = yPos + (ROW_H - BAR_H) / 2;
-                        const textLabel = `<span class="timeline-bar-text">${escapeHtml(d.label)}</span>`;
-                        barsHtml += `<div class="timeline-bar" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${barLeft}px;top:${barTop}px;width:${barWidth}px;background-color:${group.color}" title="${tipText}">${textLabel}</div>`;
+                        const barTop = (ROW_H - BAR_H) / 2;
+                        barHtml += `<div class="timeline-bar" data-project-id="${group.projectId}" data-date-id="${d.dateId}" style="left:${barLeft}px;top:${barTop}px;width:${barWidth}px;background-color:${group.color}" title="${tipText}"><span class="timeline-bar-text">${escapeHtml(d.label)}</span></div>`;
                     }
                 }
 
-                yPos += ROW_H;
+                rowsHtml += `<div class="timeline-row${alt}" data-project-id="${group.projectId}" data-date-id="${d.dateId}">
+                    <div class="timeline-row-label" title="${escapeHtml(d.label)}">${escapeHtml(d.label)}</div>
+                    ${barHtml}
+                </div>`;
                 eventIdx++;
             }
         }
 
-        const totalHeight = yPos;
+        const totalHeight = groups.reduce((h, g) => h + HEADER_H + g.dates.length * ROW_H, 0);
 
         // Today marker
         const todayOff = Math.floor((todayUTC - minDate) / MS_PER_DAY);
-        barsHtml += `<div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight}px"></div>`;
 
         const container = document.createElement('div');
         container.className = 'timeline-view-container';
         container.innerHTML = `
-            <div class="timeline-label-side">
-                <div class="timeline-label-header">Project / Date</div>
-                <div class="timeline-label-col-body">
-                    <div class="timeline-label-col-inner">${labelsHtml}</div>
-                    <div class="timeline-add-row-label">+ Add date</div>
-                </div>
-            </div>
-            <div class="timeline-chart">
-                <div class="timeline-chart-inner" style="width:${totalWidth}px">
-                    <div class="timeline-chart-header">
+            <div class="timeline-scroll">
+                <div class="timeline-inner" style="width:${totalWidth}px">
+                    <div class="timeline-header">
+                        <div class="timeline-header-label">Project / Date</div>
                         <div class="timeline-months">${monthsHtml}</div>
                         <div class="timeline-days">${ticksHtml}</div>
                     </div>
-                    <div class="timeline-bars" style="width:${totalWidth}px;height:${totalHeight}px">
-                        ${barsHtml}
+                    <div class="timeline-body">
+                        <div class="timeline-today-marker" style="left:${todayOff * DAY_W + DAY_W / 2}px;height:${totalHeight + 36}px"></div>
+                        <div class="timeline-label-cover" style="height:${totalHeight + 36}px;margin-bottom:-${totalHeight + 36}px"></div>
+                        <div class="timeline-add-row">
+                            <div class="timeline-add-row-label">+ Add date</div>
+                        </div>
+                        ${rowsHtml}
                     </div>
-                    <div class="timeline-add-row-chart" style="width:${totalWidth}px"></div>
                 </div>
             </div>
         `;
@@ -2444,33 +2437,31 @@ window.__lifetilesRefresh = async () => {
         projectsList.innerHTML = '';
         projectsList.appendChild(container);
 
-        // Scroll sync: only vertical (label column tracks chart scroll)
-        const chart = container.querySelector('.timeline-chart');
-        const labelColBody = container.querySelector('.timeline-label-col-body');
-
-        chart.addEventListener('scroll', () => {
-            labelColBody.scrollTop = chart.scrollTop;
-        });
+        const scroll = container.querySelector('.timeline-scroll');
 
         // Click handlers for bars, markers, label rows, and project headings
         container.addEventListener('click', (e) => {
             const target = e.target.closest('[data-project-id]');
             if (!target) return;
+            // Ignore clicks on the add-row area (handled separately)
+            if (target.closest('.timeline-add-row')) return;
             const projectId = target.dataset.projectId;
             const dateId = target.dataset.dateId || null;
             if (projectId) openTimelineDetail(projectId, dateId, container);
 
-            // Scroll the chart to reveal the clicked project's bar/marker
-            const selector = dateId
-                ? `.timeline-bar[data-date-id="${dateId}"], .timeline-marker[data-date-id="${dateId}"]`
-                : `.timeline-bar[data-project-id="${projectId}"], .timeline-marker[data-project-id="${projectId}"]`;
-            const barEl = container.querySelector(selector);
-            if (barEl && chart) {
-                const barLeft = barEl.offsetLeft;
-                const barWidth = barEl.offsetWidth || 0;
-                const viewWidth = chart.clientWidth;
-                const barCenter = barLeft + barWidth / 2;
-                chart.scrollTo({ left: Math.max(0, barCenter - viewWidth / 3), behavior: 'smooth' });
+            // Scroll to reveal bar/marker only when clicking a row label
+            if (e.target.closest('.timeline-row-label, .timeline-heading-label')) {
+                const selector = dateId
+                    ? `.timeline-bar[data-date-id="${dateId}"], .timeline-marker[data-date-id="${dateId}"]`
+                    : `.timeline-bar[data-project-id="${projectId}"], .timeline-marker[data-project-id="${projectId}"]`;
+                const barEl = container.querySelector(selector);
+                if (barEl && scroll) {
+                    const barLeft = barEl.offsetLeft;
+                    const barWidth = barEl.offsetWidth || 0;
+                    const viewWidth = scroll.clientWidth;
+                    const barCenter = barLeft + barWidth / 2;
+                    scroll.scrollTo({ left: Math.max(0, barCenter - viewWidth / 3), behavior: 'smooth' });
+                }
             }
         });
 
@@ -2495,28 +2486,36 @@ window.__lifetilesRefresh = async () => {
             });
         }
 
-        // Label-side "+ Add date" click — defaults to today
+        // "+ Add date" label click — defaults to today
         const addRowLabel = container.querySelector('.timeline-add-row-label');
         if (addRowLabel) {
-            addRowLabel.addEventListener('click', () => {
+            addRowLabel.addEventListener('click', (e) => {
+                e.stopPropagation();
                 const now = new Date();
                 addDateFlow(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`);
             });
         }
 
-        // Chart-side add row — crosshair with day highlight + date tooltip
-        const addRowChart = container.querySelector('.timeline-add-row-chart');
-        if (addRowChart) {
+        // Add row crosshair area — day highlight + date tooltip + click
+        const addRow = container.querySelector('.timeline-add-row');
+        if (addRow) {
             const dayHighlight = document.createElement('div');
             dayHighlight.className = 'timeline-add-day-highlight';
-            addRowChart.appendChild(dayHighlight);
+            addRow.appendChild(dayHighlight);
 
             const dayTooltip = document.createElement('div');
             dayTooltip.className = 'timeline-add-day-tooltip';
-            addRowChart.appendChild(dayTooltip);
+            addRow.appendChild(dayTooltip);
 
-            addRowChart.addEventListener('mousemove', (e) => {
-                const dayIndex = Math.floor(e.offsetX / DAY_W);
+            addRow.addEventListener('mousemove', (e) => {
+                if (e.target.closest('.timeline-add-row-label')) {
+                    dayHighlight.style.display = 'none';
+                    dayTooltip.style.display = 'none';
+                    return;
+                }
+                const rect = addRow.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const dayIndex = Math.floor(x / DAY_W);
                 dayHighlight.style.left = (dayIndex * DAY_W) + 'px';
                 dayHighlight.style.display = 'block';
                 const ms = minDate + dayIndex * MS_PER_DAY;
@@ -2526,13 +2525,16 @@ window.__lifetilesRefresh = async () => {
                 dayTooltip.style.display = 'block';
             });
 
-            addRowChart.addEventListener('mouseleave', () => {
+            addRow.addEventListener('mouseleave', () => {
                 dayHighlight.style.display = 'none';
                 dayTooltip.style.display = 'none';
             });
 
-            addRowChart.addEventListener('click', (e) => {
-                const dayIndex = Math.floor(e.offsetX / DAY_W);
+            addRow.addEventListener('click', (e) => {
+                if (e.target.closest('.timeline-add-row-label')) return;
+                const rect = addRow.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const dayIndex = Math.floor(x / DAY_W);
                 const clickedMs = minDate + dayIndex * MS_PER_DAY;
                 const dt = new Date(clickedMs);
                 addDateFlow(`${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`);
@@ -2541,8 +2543,8 @@ window.__lifetilesRefresh = async () => {
 
         // Auto-scroll to make today visible
         const todayLeft = todayOff * DAY_W;
-        const viewWidth = chart.clientWidth;
-        chart.scrollLeft = Math.max(0, todayLeft - viewWidth / 3);
+        const viewWidth = scroll.clientWidth;
+        scroll.scrollLeft = Math.max(0, todayLeft - viewWidth / 3);
     }
 
     // Track active project/date for re-opening sidebar after chart re-render
@@ -2570,9 +2572,9 @@ window.__lifetilesRefresh = async () => {
 
         // Preserve scroll position and sidebar before re-rendering
         const oldContainer = projectsList.querySelector('.timeline-view-container');
-        const oldChart = oldContainer ? oldContainer.querySelector('.timeline-chart') : null;
-        const savedScrollLeft = oldChart ? oldChart.scrollLeft : null;
-        const savedScrollTop = oldChart ? oldChart.scrollTop : null;
+        const oldScroll = oldContainer ? oldContainer.querySelector('.timeline-scroll') : null;
+        const savedScrollLeft = oldScroll ? oldScroll.scrollLeft : null;
+        const savedScrollTop = oldScroll ? oldScroll.scrollTop : null;
         const existingSidebar = oldContainer ? oldContainer.querySelector('.timeline-detail-sidebar') : null;
         if (existingSidebar) existingSidebar.remove();
 
@@ -2581,10 +2583,10 @@ window.__lifetilesRefresh = async () => {
         // Restore scroll position
         const newContainer = projectsList.querySelector('.timeline-view-container');
         if (savedScrollLeft !== null && newContainer) {
-            const newChart = newContainer.querySelector('.timeline-chart');
-            if (newChart) {
-                newChart.scrollLeft = savedScrollLeft;
-                newChart.scrollTop = savedScrollTop;
+            const newScroll = newContainer.querySelector('.timeline-scroll');
+            if (newScroll) {
+                newScroll.scrollLeft = savedScrollLeft;
+                newScroll.scrollTop = savedScrollTop;
             }
         }
         if (existingSidebar && newContainer) {
@@ -2974,11 +2976,11 @@ window.__lifetilesRefresh = async () => {
         container.appendChild(sidebar);
 
         sidebar.querySelector('.timeline-detail-collapse').onclick = () => {
-            closeTimelineDetail(container);
+            closeTimelineDetail(sidebar.closest('.timeline-view-container'));
         };
 
         sidebar._escHandler = (e) => {
-            if (e.key === 'Escape') closeTimelineDetail(container);
+            if (e.key === 'Escape') closeTimelineDetail(sidebar.closest('.timeline-view-container'));
         };
         document.addEventListener('keydown', sidebar._escHandler);
 
@@ -3280,9 +3282,14 @@ window.__lifetilesRefresh = async () => {
         sidebar.classList.remove('open');
         container.classList.remove('detail-open');
 
-        sidebar.addEventListener('transitionend', () => {
+        let removed = false;
+        const removeSidebar = () => {
+            if (removed) return;
+            removed = true;
             sidebar.remove();
-        }, { once: true });
+        };
+        sidebar.addEventListener('transitionend', removeSidebar, { once: true });
+        setTimeout(removeSidebar, 350);
     }
 
     /**
@@ -5569,7 +5576,9 @@ async function exportDashboardsJSON() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `linktiles-backup-${new Date().toISOString().split('T')[0]}.json`;
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    a.download = `linktiles-backup-${localDate}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

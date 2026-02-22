@@ -3189,77 +3189,64 @@ body.timeline-view #projects-list {
     flex-direction: row;
     height: 100%;
     overflow: hidden;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
     background: white;
-    margin: 0 4px;
 }
 
-/* Label side (fixed left column) */
-.timeline-label-side {
-    width: 220px;
-    min-width: 220px;
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--color-border);
-}
-
-.timeline-label-header {
-    height: 52px;
-    padding: 8px 12px;
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--color-text-muted);
-    display: flex;
-    align-items: flex-end;
-    border-bottom: 2px solid var(--color-border);
-    background: var(--color-bg-light);
-    box-sizing: border-box;
-    flex-shrink: 0;
-}
-
-.timeline-label-col-body {
+/* Single scroll container */
+.timeline-scroll {
     flex: 1;
-    overflow: hidden;
-}
-
-/* Chart area (single scroll container for ticks + bars) */
-.timeline-chart {
-    flex: 1;
-    min-width: 0;
     overflow: auto;
+    min-width: 0;
 }
-/* Make horizontal scrollbar always visible (overrides #main transparent scrollbar styles) */
-.timeline-chart::-webkit-scrollbar {
+.timeline-scroll::-webkit-scrollbar {
     width: 6px;
     height: 12px;
 }
-.timeline-chart::-webkit-scrollbar-track {
+.timeline-scroll::-webkit-scrollbar-track {
     background: transparent;
 }
-.timeline-chart::-webkit-scrollbar-track:horizontal {
+.timeline-scroll::-webkit-scrollbar-track:horizontal {
     background: rgba(0, 0, 0, 0.03);
 }
-.timeline-chart::-webkit-scrollbar-thumb {
+.timeline-scroll::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.2);
     border-radius: 4px;
 }
-.timeline-chart::-webkit-scrollbar-thumb:hover {
+.timeline-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.35);
 }
 
-.timeline-chart-inner {
+.timeline-inner {
     display: inline-block;
     min-width: 100%;
 }
 
-.timeline-chart-header {
+/* Header — sticky top, contains sticky-left label */
+.timeline-header {
     position: sticky;
     top: 0;
-    z-index: 5;
-    background: var(--color-bg-light);
+    z-index: 6;
     height: 52px;
+    background: var(--color-bg-light);
     border-bottom: 2px solid var(--color-border);
+}
+
+.timeline-header-label {
+    position: sticky;
+    left: 0;
+    width: 220px;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    padding: 8px 12px;
+    box-sizing: border-box;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--color-text-muted);
+    background: var(--color-bg-light);
+    border-right: 1px solid var(--color-border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+    z-index: 1;
 }
 
 .timeline-months {
@@ -3314,102 +3301,36 @@ body.timeline-view #projects-list {
     border-radius: 4px;
 }
 
-/* Project heading row */
-.timeline-heading-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 0 12px;
-    box-sizing: border-box;
-    background: #eef2f7;
-    border-bottom: 1px solid var(--color-border);
-    border-top: 1px solid var(--color-border);
-}
-
-.timeline-heading-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.timeline-heading-name {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.timeline-heading-stripe {
-    position: absolute;
-    left: 0;
-    border-bottom: 1px solid var(--color-border);
-}
-
-/* Event row */
-.timeline-label-row {
+/* Add row — sticky below header */
+.timeline-add-row {
     height: 36px;
-    display: flex;
-    align-items: center;
-    padding: 0 12px 0 24px;
-    box-sizing: border-box;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.timeline-label-row.alt {
-    background: #fafbfc;
-}
-
-.timeline-label-name {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--color-text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.3;
-}
-
-.timeline-bars {
     position: relative;
-    z-index: 0;
+    background: #f0f4ff;
+    cursor: crosshair;
+}
+.timeline-add-row:hover {
+    background: #e5edfa;
 }
 
-/* Add-date label row (left column, sticky bottom) */
 .timeline-add-row-label {
     position: sticky;
-    bottom: 0;
-    height: 36px;
+    left: 0;
+    width: 220px;
+    height: 100%;
     display: flex;
     align-items: center;
     padding: 0 12px;
     box-sizing: border-box;
-    border-top: 1px solid var(--color-border);
     font-size: 12px;
     font-weight: 500;
     color: var(--color-accent, #4a90d9);
     cursor: pointer;
     background: #f0f4ff;
-    z-index: 11;
+    border-right: 1px solid var(--color-border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+    z-index: 8;
 }
 .timeline-add-row-label:hover {
-    color: var(--color-accent, #4a90d9);
-    background: #e5edfa;
-}
-
-/* Add-date chart row (right side, sticky bottom) */
-.timeline-add-row-chart {
-    position: sticky;
-    bottom: 0;
-    height: 36px;
-    border-top: 1px solid var(--color-border);
-    cursor: crosshair;
-    background: #f0f4ff;
-    z-index: 11;
-}
-.timeline-add-row-chart:hover {
     background: #e5edfa;
 }
 
@@ -3440,28 +3361,105 @@ body.timeline-view #projects-list {
     display: none;
 }
 
-/* Row stripes */
-.timeline-row-stripe {
-    position: absolute;
-    height: 36px;
-    left: 0;
-    border-bottom: 1px solid #f0f0f0;
+/* Project heading row */
+.timeline-heading {
+    background: #eef2f7;
+    border-bottom: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
 }
 
-.timeline-row-stripe.alt {
+.timeline-heading-label {
+    position: sticky;
+    left: 0;
+    width: 220px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    background: #eef2f7;
+    border-right: 1px solid var(--color-border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+    z-index: 8;
+}
+
+.timeline-heading-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.timeline-heading-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Date row */
+.timeline-row {
+    height: 36px;
+    position: relative;
+    border-bottom: 1px solid #f0f0f0;
+}
+.timeline-row.alt {
     background: #fafbfc;
 }
 
-/* Today marker */
+.timeline-row-label {
+    position: sticky;
+    left: 0;
+    width: 220px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 12px 0 24px;
+    box-sizing: border-box;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-text);
+    background: white;
+    border-right: 1px solid var(--color-border);
+    box-shadow: 2px 0 4px rgba(0, 0, 0, 0.08);
+    z-index: 8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.timeline-row.alt .timeline-row-label {
+    background: #fafbfc;
+}
+
+/* Body — stacking context so sticky labels stay below header */
+.timeline-body {
+    position: relative;
+    z-index: 0;
+}
+
+/* Solid cover behind labels — hides today marker in the label column */
+.timeline-label-cover {
+    position: sticky;
+    left: 0;
+    width: 220px;
+    background: white;
+    z-index: 7;
+    pointer-events: none;
+}
+
+/* Today marker — one instance in .timeline-body, one in .timeline-add-row */
 .timeline-today-marker {
     position: absolute;
     top: 0;
     width: 2px;
+    height: 100%;
     background: var(--color-danger);
-    z-index: 10;
+    z-index: 7;
     pointer-events: none;
 }
-
 
 /* Bars */
 .timeline-bar {
@@ -3469,7 +3467,7 @@ body.timeline-view #projects-list {
     height: 28px;
     border-radius: 6px;
     opacity: 0.85;
-    cursor: default;
+    cursor: pointer;
     display: flex;
     align-items: center;
     padding: 0 8px;
@@ -3498,6 +3496,7 @@ body.timeline-view #projects-list {
     border-radius: 50%;
     transform: translate(-50%, -50%);
     z-index: 3;
+    cursor: pointer;
     box-shadow: 0 0 0 2px white;
 }
 
@@ -3515,7 +3514,7 @@ body.timeline-view #projects-list {
     color: var(--color-text) !important;
     white-space: nowrap;
     z-index: 6;
-    pointer-events: none;
+    cursor: pointer;
 }
 
 /* Text inside bar */
@@ -3557,10 +3556,8 @@ body.timeline-view #projects-list {
     line-height: 1.5;
 }
 
-/* Clickable bars and markers */
-.timeline-bar,
-.timeline-marker,
-.timeline-label-row[data-date-id] {
+/* Clickable rows */
+.timeline-row[data-date-id] {
     cursor: pointer;
 }
 
@@ -3574,11 +3571,11 @@ body.timeline-view #projects-list {
     transform: translate(-50%, -50%);
 }
 
-.timeline-label-row[data-date-id]:hover {
+.timeline-row[data-date-id]:hover .timeline-row-label {
     background: #eef4fb;
 }
 
-.timeline-label-row[data-date-id].alt:hover {
+.timeline-row[data-date-id].alt:hover .timeline-row-label {
     background: #eef4fb;
 }
 
@@ -3683,7 +3680,7 @@ body.timeline-view #projects-list {
 
 .timeline-sidebar-date {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 6px;
     padding: 6px 8px;
     border-radius: var(--radius-sm);
