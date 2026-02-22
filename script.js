@@ -4246,7 +4246,9 @@ async function exportDashboardsJSON() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `linktiles-backup-${new Date().toISOString().split('T')[0]}.json`;
+    const now = new Date();
+    const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    a.download = `linktiles-backup-${localDate}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
